@@ -6,6 +6,9 @@ import { FindMechanicScreen } from '../screens/owner/FindMechanicScreen';
 import { FindShopScreen } from '../screens/owner/FindShopScreen';
 import { NeedHelpScreen } from '../screens/owner/NeedHelpScreen';
 import { MyVehiclesScreen } from '../screens/owner/MyVehiclesScreen';
+import { HelpCreditsScreen } from '../screens/owner/HelpCreditsScreen';
+import { HelpRequestDetailScreen } from '../screens/owner/HelpRequestDetailScreen';
+import { HelpRequestHistoryScreen } from '../screens/owner/HelpRequestHistoryScreen';
 import { OwnerHomeScreen } from '../screens/owner/OwnerHomeScreen';
 import type { OwnerStackParamList } from './types';
 
@@ -21,6 +24,9 @@ export function OwnerNavigator() {
       <Stack.Screen name="ActiveHelpRequest" component={ActiveHelpRequestScreen} options={{ title: 'Your request' }} />
       <Stack.Screen name="FindMechanic" component={FindMechanicScreen} options={{ title: 'Find mechanic' }} />
       <Stack.Screen name="FindShop" component={FindShopScreen} options={{ title: 'Find shop' }} />
+      <Stack.Screen name="HelpRequestHistory" component={HelpRequestHistoryScreen} options={{ title: 'My help history' }} />
+      <Stack.Screen name="HelpRequestDetail" component={HelpRequestDetailScreen} options={{ title: 'Request details' }} />
+      <Stack.Screen name="HelpCredits" component={HelpCreditsScreen} options={{ title: 'Help credits' }} />
     </Stack.Navigator>
   );
 }

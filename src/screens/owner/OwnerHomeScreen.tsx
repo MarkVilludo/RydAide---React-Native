@@ -1,29 +1,46 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { fetchEntitlements } from '../../api/auth';
 import { fetchVehicles, type Vehicle } from '../../api/vehicles';
 import type { Entitlements } from '../../api/types';
 import { useAuth } from '../../context/AuthContext';
+import { useAppConfig } from '../../hooks/useAppConfig';
 import type { OwnerStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'OwnerHome'>;
 
 export function OwnerHomeScreen({ navigation }: Props) {
   const { user, signOut } = useAuth();
+  const { config } = useAppConfig();
+  const emergencyOn = config?.features.emergency_assistance ?? false;
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [primaryVehicle, setPrimaryVehicle] = useState<Vehicle | null>(null);
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     fetchEntitlements().then(setEntitlements).catch(() => setEntitlements(null));
     fetchVehicles()
       .then((list) => setPrimaryVehicle(list[0] ?? null))
       .catch(() => setPrimaryVehicle(null));
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh]),
+  );
+
   return (
     <View style={styles.container}>
       <Text style={styles.greeting}>Hello, {user?.name}</Text>
+
+      {config?.rollout.area_label ? (
+        <Text style={styles.rollout}>
+          Growing network in {config.rollout.area_label}. Search any location — results show verified providers within
+          your radius only.
+        </Text>
+      ) : null}
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Current vehicle</Text>
@@ -48,18 +65,48 @@ export function OwnerHomeScreen({ navigation }: Props) {
         )}
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Plan</Text>
-        <Text>{entitlements?.plan_code ?? '…'}</Text>
-        <Text style={styles.muted}>
-          Vehicles:{' '}
-          {entitlements?.unlimited_vehicles ? 'Unlimited' : `${entitlements?.max_vehicles ?? 1} max`}
-        </Text>
-      </View>
+      {emergencyOn ? (
+        <>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Help requests</Text>
+            <Text style={styles.muted}>Plan: {entitlements?.plan_code ?? '…'}</Text>
+            {entitlements?.unlimited_help_requests || entitlements?.help_requests?.unlimited ? (
+              <Text style={styles.creditHighlight}>Unlimited</Text>
+            ) : (
+              <>
+                <Text style={styles.creditHighlight}>
+                  {entitlements?.help_requests_remaining ?? entitlements?.help_requests?.remaining ?? '…'} remaining
+                </Text>
+                <Text style={styles.muted}>
+                  {entitlements?.help_requests_used ?? entitlements?.help_requests?.used ?? 0} of{' '}
+                  {entitlements?.max_help_requests ?? entitlements?.help_requests?.limit ?? '…'} used
+                </Text>
+              </>
+            )}
+            <View style={styles.linkRow}>
+              <Pressable onPress={() => navigation.navigate('HelpRequestHistory')}>
+                <Text style={styles.linkText}>View help history</Text>
+              </Pressable>
+              <Text style={styles.linkSep}> · </Text>
+              <Pressable onPress={() => navigation.navigate('HelpCredits')}>
+                <Text style={styles.linkText}>Help credits</Text>
+              </Pressable>
+            </View>
+          </View>
 
-      <Pressable style={styles.helpButton} onPress={() => navigation.navigate('NeedHelp', { emergency: true })}>
-        <Text style={styles.helpText}>🆘 NEED HELP</Text>
-      </Pressable>
+          <Pressable style={styles.helpButton} onPress={() => navigation.navigate('NeedHelp', { emergency: true })}>
+            <Text style={styles.helpText}>🆘 NEED HELP</Text>
+          </Pressable>
+        </>
+      ) : (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Directory</Text>
+          <Text style={styles.muted}>
+            Browse verified mechanics and shops near you. Emergency dispatch opens once enough providers are active in
+            your area.
+          </Text>
+        </View>
+      )}
 
       <View style={styles.row}>
         <Pressable style={styles.rowBtn} onPress={() => navigation.navigate('FindMechanic')}>
@@ -83,6 +130,7 @@ export function OwnerHomeScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24, backgroundColor: '#f8fafc' },
   greeting: { fontSize: 22, fontWeight: '600', color: '#0f172a', marginBottom: 16 },
+  rollout: { color: '#475569', marginBottom: 16, lineHeight: 20 },
   muted: { color: '#64748b', marginTop: 4 },
   card: {
     backgroundColor: '#fff',
@@ -93,8 +141,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   cardTitle: { fontWeight: '600', marginBottom: 8 },
+  creditHighlight: { fontSize: 18, fontWeight: '700', color: '#0284c7' },
   vehicleName: { fontSize: 18, fontWeight: '600' },
   linkButton: { marginTop: 12 },
+  linkRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12, flexWrap: 'wrap' },
+  linkSep: { color: '#94a3b8' },
   linkText: { color: '#0284c7', fontWeight: '500' },
   addButton: {
     marginTop: 12,

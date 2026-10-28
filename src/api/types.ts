@@ -29,13 +29,24 @@ export interface AuthPayload {
   token_type: string;
 }
 
+export interface HelpRequestsEntitlement {
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+  unlimited: boolean;
+}
+
 export interface Entitlements {
   plan_code: string;
   max_vehicles?: number | null;
   unlimited_vehicles?: boolean;
   max_help_requests?: number | null;
-  max_emergency_requests?: number | null;
+  help_requests_used?: number;
+  help_requests_remaining?: number | null;
   unlimited_help_requests?: boolean;
+  help_requests?: HelpRequestsEntitlement;
   max_accepted_requests?: number | null;
+  accepted_requests_used?: number;
+  accepted_requests_remaining?: number | null;
   unlimited_accepted_requests?: boolean;
 }

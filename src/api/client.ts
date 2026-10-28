@@ -28,6 +28,23 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (__DEV__ && axios.isAxiosError(error) && !error.response) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[RydAid] Network error —',
+        error.config?.url ?? 'request',
+        '→',
+        API_URL,
+        '(phone must be on same Wi‑Fi; Laravel: serve --host=0.0.0.0 --port=8000)',
+      );
+    }
+    return Promise.reject(error);
+  },
+);
+
 export function getApiErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     if (!error.response) {

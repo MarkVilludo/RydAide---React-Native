@@ -7,24 +7,127 @@ export interface ProblemCategory {
   slug: string;
 }
 
+export interface HelpRequestOwner {
+  id: number;
+  name: string;
+  phone?: string | null;
+}
+
+export interface HelpRequestTracking {
+  request_location: {
+    latitude: number;
+    longitude: number;
+    address_text: string | null;
+  };
+  mechanic_location: {
+    latitude: number;
+    longitude: number;
+    updated_at: string | null;
+    is_live: boolean;
+  } | null;
+  distance_km: number | null;
+  eta: {
+    minutes_min: number;
+    minutes_max: number;
+    label: string;
+  } | null;
+  live_tracking_enabled: boolean;
+  mechanic_location_status?: {
+    availability: string;
+    label: string;
+    is_stale: boolean;
+    updated_seconds_ago: number | null;
+  };
+  eta_disclaimer?: string;
+  location_update?: {
+    interval_seconds: number;
+    min_distance_meters: number;
+  };
+}
+
+export interface ServiceJobPricing {
+  quoted_service_amount_php?: number | null;
+  quote_status?: string;
+  quote_description?: string | null;
+  quote_submitted_at?: string | null;
+  quote_accepted_at?: string | null;
+  final_service_amount_php?: number | null;
+  payment_status?: string;
+  payment_method?: string | null;
+  platform_assistance_fee_php?: number;
+  mechanic_commission_php?: number;
+  mechanic_net_earnings_php?: number;
+  preview?: {
+    fee_model?: string;
+    breakdown?: {
+      service_amount_php?: number;
+      assistance_fee_php?: number;
+      rider_total_php?: number;
+      platform_revenue_php?: number;
+      mechanic_net_earnings_php?: number;
+    };
+  } | null;
+  require_quote_before_work?: boolean;
+}
+
+export interface ServiceJob {
+  id: number;
+  status: string;
+  status_label?: string;
+  service_performed?: string | null;
+  mechanic_notes?: string | null;
+  completion_notes?: string | null;
+  parts_used?: unknown;
+  accepted_at?: string | null;
+  on_the_way_at?: string | null;
+  arrived_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  shop?: { id: number; name: string } | null;
+  pricing?: ServiceJobPricing | null;
+}
+
 export interface HelpRequest {
   id: number;
   request_type: string;
+  request_type_label?: string;
   status: string;
+  status_label?: string;
+  job_status?: string;
+  job_status_label?: string;
+  job?: ServiceJob | null;
   remarks: string;
   latitude: number;
   longitude: number;
   address_text: string | null;
   current_wave: number;
+  created_at?: string;
+  accepted_at?: string | null;
+  completed_at?: string | null;
+  cancelled_at?: string | null;
   problem_category?: ProblemCategory;
+  owner?: HelpRequestOwner;
   vehicle?: Vehicle;
   mechanic?: {
     id: number;
+    display_name?: string;
     business_name: string;
     phone: string | null;
     rating_average: number;
+    rating_count?: number;
     mechanic_name?: string;
+    is_verified?: boolean;
+    verification_status?: string;
+    avatar_url?: string | null;
+    vehicle_types?: Array<{ id: number; name: string }>;
   };
+  tracking?: HelpRequestTracking | null;
+  shop?: { id: number; name: string } | null;
+  distance_km?: number;
+  answers?: Array<{ question_id: number; answer: string; question: string | null }>;
+  media?: Array<{ id: number; media_type: string; url: string }>;
+  mechanic_dispatch?: { response: string; responded_at?: string | null };
+  review?: { rating: number; comment?: string | null; created_at?: string };
 }
 
 export async function fetchProblemCategories(): Promise<ProblemCategory[]> {
@@ -41,7 +144,7 @@ export async function fetchCategoryQuestions(categoryId: number) {
   }>;
 }
 
-export async function createHelpRequest(payload: {
+export type CreateHelpRequestPayload = {
   vehicle_id: number;
   problem_category_id: number;
   request_type: 'SERVICE' | 'EMERGENCY';
@@ -50,8 +153,35 @@ export async function createHelpRequest(payload: {
   longitude: number;
   address_text?: string;
   answers?: Array<{ question_id: number; answer: string }>;
-}): Promise<HelpRequest> {
-  const { data } = await api.post('/help-requests', payload);
+  photoUris?: string[];
+};
+
+export async function createHelpRequest(payload: CreateHelpRequestPayload): Promise<HelpRequest> {
+  const form = new FormData();
+  form.append('vehicle_id', String(payload.vehicle_id));
+  form.append('problem_category_id', String(payload.problem_category_id));
+  form.append('request_type', payload.request_type);
+  form.append('remarks', payload.remarks);
+  form.append('latitude', String(payload.latitude));
+  form.append('longitude', String(payload.longitude));
+  if (payload.address_text) {
+    form.append('address_text', payload.address_text);
+  }
+  payload.answers?.forEach((a, index) => {
+    form.append(`answers[${index}][question_id]`, String(a.question_id));
+    form.append(`answers[${index}][answer]`, a.answer);
+  });
+  payload.photoUris?.forEach((uri, index) => {
+    form.append('photos[]', {
+      uri,
+      name: `help-photo-${index}.jpg`,
+      type: 'image/jpeg',
+    } as unknown as Blob);
+  });
+
+  const { data } = await api.post('/help-requests', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return data.data.help_request;
 }
 
@@ -67,4 +197,12 @@ export async function fetchHelpRequest(id: number): Promise<HelpRequest> {
 
 export async function cancelHelpRequest(id: number): Promise<void> {
   await api.post(`/help-requests/${id}/cancel`);
+}
+
+export async function respondToHelpRequestQuote(
+  id: number,
+  response: 'accept' | 'reject',
+): Promise<HelpRequest> {
+  const { data } = await api.post(`/help-requests/${id}/quote/respond`, { response });
+  return data.data.help_request;
 }
