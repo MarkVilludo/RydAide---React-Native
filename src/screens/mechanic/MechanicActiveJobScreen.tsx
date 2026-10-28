@@ -15,14 +15,15 @@ import {
 } from 'react-native';
 import { getApiErrorMessage } from '../../api/client';
 import type { HelpRequest } from '../../api/helpRequests';
-import { fetchMechanicHelpRequest, submitServiceQuote, updateJobStatus } from '../../api/mechanicHelp';
-import { ServicePricingCard } from '../../components/ServicePricingCard';
+import { fetchMechanicHelpRequest, updateJobStatus } from '../../api/mechanicHelp';
 import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSummary';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { HelpRequestMapLegend } from '../../components/HelpRequestMapLegend';
 import { useDeviceLocation } from '../../hooks/useDeviceLocation';
+import { useMechanicDistanceOrigin } from '../../hooks/useMechanicDistanceOrigin';
 import { useMechanicLocationTracking } from '../../hooks/useMechanicLocationTracking';
+import { haversineDistanceKm, resolveMechanicToCustomerDistanceKm, resolveTrackingDistanceKm } from '../../utils/distanceKm';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { jobStatusLabelOf, jobStatusOf, vehicleTitle } from '../../utils/helpRequestUi';
 
@@ -48,12 +49,13 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
   const [acting, setActing] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
   const [servicePerformed, setServicePerformed] = useState('');
-  const [quoteAmount, setQuoteAmount] = useState('');
-  const [quoteDescription, setQuoteDescription] = useState('');
+  const [finalAmount, setFinalAmount] = useState('');
+
+  const { origin } = useMechanicDistanceOrigin('live');
 
   const load = useCallback(async () => {
     try {
-      const data = await fetchMechanicHelpRequest(helpRequestId);
+      const data = await fetchMechanicHelpRequest(helpRequestId, origin ?? undefined);
       setRequest(data);
       setConnectionLost(false);
     } catch {
@@ -61,7 +63,7 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [helpRequestId]);
+  }, [helpRequestId, origin?.latitude, origin?.longitude]);
 
   useFocusEffect(
     useCallback(() => {
@@ -94,7 +96,29 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
     return null;
   }, [deviceCoords, request?.tracking?.mechanic_location]);
 
-  const setStatus = async (status: string, extra?: { service_performed?: string }) => {
+  const displayDistanceKm = useMemo(() => {
+    if (!request) {
+      return null;
+    }
+    const fromTracking = resolveTrackingDistanceKm(request.tracking);
+    if (fromTracking != null) {
+      return fromTracking;
+    }
+    if (deviceCoords) {
+      return haversineDistanceKm(
+        deviceCoords.latitude,
+        deviceCoords.longitude,
+        request.latitude,
+        request.longitude,
+      );
+    }
+    return resolveMechanicToCustomerDistanceKm(request, origin);
+  }, [request, deviceCoords, origin]);
+
+  const setStatus = async (
+    status: string,
+    extra?: { service_performed?: string; final_service_amount_php?: number },
+  ) => {
     setActing(true);
     try {
       const updated = await updateJobStatus(helpRequestId, status, extra);
@@ -156,49 +180,6 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
       <HelpRequestPhotoGallery media={request.media} title="Customer photos" compact />
       <Text style={styles.status}>Status: {jobStatusLabelOf(request)}</Text>
 
-      <ServicePricingCard pricing={request.job?.pricing} viewerRole="mechanic" />
-
-      {(jobStatus === 'ACCEPTED' || jobStatus === 'ON_THE_WAY' || jobStatus === 'ARRIVED') &&
-        request.job?.pricing?.quote_status !== 'accepted' && (
-          <View style={styles.quoteBox}>
-            <Text style={styles.quoteTitle}>Propose service quote</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Amount (PHP)"
-              keyboardType="number-pad"
-              value={quoteAmount}
-              onChangeText={setQuoteAmount}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Description (optional)"
-              value={quoteDescription}
-              onChangeText={setQuoteDescription}
-            />
-            <Pressable
-              style={styles.primaryBtn}
-              disabled={acting || !quoteAmount.trim()}
-              onPress={async () => {
-                setActing(true);
-                try {
-                  const updated = await submitServiceQuote(
-                    helpRequestId,
-                    Number(quoteAmount),
-                    quoteDescription.trim() || undefined,
-                  );
-                  setRequest(updated);
-                } catch (e) {
-                  Alert.alert('Quote failed', getApiErrorMessage(e));
-                } finally {
-                  setActing(false);
-                }
-              }}
-            >
-              <Text style={styles.primaryBtnText}>SEND QUOTE TO RIDER</Text>
-            </Pressable>
-          </View>
-        )}
-
       <ActiveJobLocationSummary
         tracking={tracking}
         mechanicPermissionDenied={permissionDenied && onTheWay}
@@ -211,7 +192,7 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
         mechanic={mechanicMapPoint}
         height={280}
       />
-      <HelpRequestMapLegend distanceKm={tracking?.distance_km} />
+      <HelpRequestMapLegend distanceKm={displayDistanceKm} />
 
       {request.owner?.phone && (
         <Pressable onPress={() => Linking.openURL(`tel:${request.owner!.phone}`)}>
@@ -225,7 +206,7 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
             <Text style={styles.primaryBtnText}>START JOURNEY</Text>
           </Pressable>
         )}
-        {(jobStatus === 'ON_THE_WAY' || jobStatus === 'ARRIVED' || jobStatus === 'IN_PROGRESS') && (
+        {jobStatus === 'ON_THE_WAY' && (
           <Pressable style={styles.navBtn} onPress={startNavigation}>
             <Text style={styles.navBtnText}>START NAVIGATION</Text>
           </Pressable>
@@ -258,13 +239,20 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
               onChangeText={setServicePerformed}
               multiline
             />
+            <TextInput
+              style={styles.input}
+              placeholder="Final service amount (PHP, agreed with customer)"
+              keyboardType="number-pad"
+              value={finalAmount}
+              onChangeText={setFinalAmount}
+            />
             <Pressable
               style={styles.primaryBtn}
-              disabled={acting || !servicePerformed.trim()}
+              disabled={acting || !servicePerformed.trim() || !finalAmount.trim()}
               onPress={() =>
                 setStatus('COMPLETED', {
                   service_performed: servicePerformed.trim(),
-                  final_service_amount_php: request.job?.pricing?.quoted_service_amount_php ?? undefined,
+                  final_service_amount_php: Number(finalAmount),
                 })
               }
             >
@@ -303,13 +291,4 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
   input: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 12, minHeight: 80, marginBottom: 12 },
   cancel: { textAlign: 'center', marginTop: 12, color: '#64748b' },
-  quoteBox: {
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  quoteTitle: { fontWeight: '700', marginBottom: 8 },
 });

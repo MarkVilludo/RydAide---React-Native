@@ -33,6 +33,8 @@ export interface MechanicIdentityPayload {
 
 export type CreateMechanicProfilePayload = MechanicProfilePayload & MechanicIdentityPayload;
 
+export type MechanicProfileLocationSource = 'manual' | 'device';
+
 export async function fetchMyMechanicProfile(): Promise<MechanicResult | null> {
   const { data } = await api.get('/mechanic/profile');
   return data.data.mechanic ?? null;
@@ -94,6 +96,23 @@ export async function updateMechanicAvailability(
   return data.data.mechanic as MechanicResult;
 }
 
-export async function updateMechanicProfileLocation(latitude: number, longitude: number): Promise<void> {
-  await api.patch('/mechanic/profile/location', { latitude, longitude });
+export async function updateMechanicProfileLocation(
+  latitude: number,
+  longitude: number,
+  address?: string,
+  options?: {
+    source?: MechanicProfileLocationSource;
+    gps?: { latitude: number; longitude: number };
+  },
+): Promise<MechanicResult> {
+  const { data } = await api.patch('/mechanic/profile/location', {
+    latitude,
+    longitude,
+    ...(address != null && address.trim() !== '' ? { address: address.trim() } : {}),
+    ...(options?.source ? { source: options.source } : {}),
+    ...(options?.gps
+      ? { gps_latitude: options.gps.latitude, gps_longitude: options.gps.longitude }
+      : {}),
+  });
+  return data.data.mechanic as MechanicResult;
 }

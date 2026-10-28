@@ -15,7 +15,6 @@ import { getApiErrorMessage } from '../../api/client';
 import {
   cancelHelpRequest,
   fetchHelpRequest,
-  respondToHelpRequestQuote,
   submitHelpRequestReview,
   type HelpRequest,
 } from '../../api/helpRequests';
@@ -26,7 +25,6 @@ import { HelpJourneyTimeline } from '../../components/HelpJourneyTimeline';
 import { HelpRequestSearchingHero } from '../../components/HelpRequestSearchingHero';
 import { HelpSearchProgressCard } from '../../components/HelpSearchProgressCard';
 import { MapSearchOverlay } from '../../components/MapSearchOverlay';
-import { ServicePricingCard } from '../../components/ServicePricingCard';
 import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSummary';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import type { OwnerStackParamList } from '../../navigation/types';
@@ -45,7 +43,6 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
   const { helpRequestId } = route.params;
   const [request, setRequest] = useState<HelpRequest | null>(null);
   const [connectionLost, setConnectionLost] = useState(false);
-  const [quoteActing, setQuoteActing] = useState(false);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const cancelLock = useRef(false);
 
@@ -293,33 +290,6 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
                 </Pressable>
               )}
 
-              <ServicePricingCard
-                pricing={request.job?.pricing}
-                viewerRole="owner"
-                acting={quoteActing}
-                onAcceptQuote={async () => {
-                  setQuoteActing(true);
-                  try {
-                    const updated = await respondToHelpRequestQuote(helpRequestId, 'accept');
-                    setRequest(updated);
-                  } catch (e) {
-                    Alert.alert('Quote', getApiErrorMessage(e));
-                  } finally {
-                    setQuoteActing(false);
-                  }
-                }}
-                onRejectQuote={async () => {
-                  setQuoteActing(true);
-                  try {
-                    const updated = await respondToHelpRequestQuote(helpRequestId, 'reject');
-                    setRequest(updated);
-                  } catch (e) {
-                    Alert.alert('Quote', getApiErrorMessage(e));
-                  } finally {
-                    setQuoteActing(false);
-                  }
-                }}
-              />
             </View>
           )}
 

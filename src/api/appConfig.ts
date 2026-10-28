@@ -33,6 +33,10 @@ export interface AppConfig {
     pro_plan_code: string;
     pro_monthly_price_php: number;
   };
+  service_pin?: {
+    max_offset_meters: number;
+    max_offset_km: number;
+  };
 }
 
 export interface DirectorySearchMeta {

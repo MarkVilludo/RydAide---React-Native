@@ -1,50 +1,70 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fetchEntitlements } from '../../api/auth';
 import type { HelpRequest } from '../../api/helpRequests';
-import { fetchMyMechanicProfile, updateMechanicAvailability } from '../../api/mechanicProfile';
 import { fetchMechanicHelpQueues } from '../../api/mechanicHelp';
-import { useAppConfig } from '../../hooks/useAppConfig';
+import {
+  fetchMyMechanicProfile,
+  updateMechanicAvailability,
+  updateMechanicProfileLocation,
+} from '../../api/mechanicProfile';
+import {
+  MechanicDashboardLocationCard,
+  type SavedWorkLocation,
+} from '../../components/MechanicDashboardLocationCard';
 import type { Entitlements } from '../../api/types';
 import { useAuth } from '../../context/AuthContext';
+import { useMechanicLiveLocation } from '../../context/MechanicLocationContext';
+import { mechanicQueueFetchCoords, useServicePinMaxOffsetKm } from '../../hooks/useMechanicDistanceOrigin';
+import { useAppConfig } from '../../hooks/useAppConfig';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { jobStatusLabelOf, vehicleTitle } from '../../utils/helpRequestUi';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'MechanicHome'>;
+
+type RequestTab = 'incoming' | 'accepted_active' | 'in_progress' | 'completed';
 
 function pickPrimaryActiveJob(queues: Awaited<ReturnType<typeof fetchMechanicHelpQueues>>): HelpRequest | null {
   const active = [...queues.accepted_active, ...queues.in_progress];
   return active[0] ?? null;
 }
 
-function listingStatusMeta(status: string | null): { label: string; tone: string; hint: string } {
-  switch (status) {
-    case 'verified':
-      return { label: 'Verified', tone: '#16a34a', hint: 'Visible in owner search when active.' };
-    case 'pending':
-      return { label: 'Pending review', tone: '#d97706', hint: 'We are reviewing your listing.' };
-    case 'rejected':
-      return { label: 'Needs updates', tone: '#dc2626', hint: 'Update your listing and resubmit.' };
-    default:
-      return { label: 'Not set up', tone: '#64748b', hint: 'Complete your profile to appear in the directory.' };
-  }
+function firstName(fullName: string | undefined): string {
+  if (!fullName?.trim()) return 'there';
+  return fullName.trim().split(/\s+/)[0] ?? 'there';
 }
 
-function StatTile({ label, value, accent }: { label: string; value: number; accent?: string }) {
+function PulseOnlineDot() {
+  const scale = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 1.3, duration: 800, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: 800, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [scale]);
   return (
-    <View style={styles.statTile}>
-      <Text style={[styles.statValue, accent ? { color: accent } : null]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <View style={styles.pulseWrap}>
+      <Animated.View style={[styles.pulseRing, { transform: [{ scale }] }]} />
+      <View style={[styles.dot, styles.dotOn]} />
     </View>
   );
 }
@@ -54,387 +74,442 @@ export function MechanicHomeScreen({ navigation }: Props) {
   const { config } = useAppConfig();
   const emergencyOn = config?.features.emergency_assistance ?? false;
   const subscriptionsOn = config?.features.mechanic_subscriptions ?? false;
-  const freeLimit = config?.mechanic_monetization?.free_emergency_accept_limit ?? 5;
   const proPrice = config?.mechanic_monetization?.pro_monthly_price_php ?? 99;
+
+  const pageOpacity = useRef(new Animated.Value(0)).current;
 
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [listingStatus, setListingStatus] = useState<string | null>(null);
   const [availability, setAvailability] = useState<'available' | 'offline' | 'busy'>('offline');
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
-  const [summary, setSummary] = useState<Awaited<ReturnType<typeof fetchMechanicHelpQueues>>['summary'] | null>(null);
+  const [summary, setSummary] = useState<Awaited<ReturnType<typeof fetchMechanicHelpQueues>>['summary'] | null>(
+    null,
+  );
   const [activeJob, setActiveJob] = useState<HelpRequest | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [workLocation, setWorkLocation] = useState<SavedWorkLocation | null>(null);
+  const [deviceSaveBusy, setDeviceSaveBusy] = useState(false);
   const resumePrompted = useRef(false);
+  const maxOffsetKm = useServicePinMaxOffsetKm();
+  const { coords, permissionDenied, servicePin, servicePinManual, applySavedMechanicLocation } =
+    useMechanicLiveLocation();
+  const { height: windowHeight } = useWindowDimensions();
+  const dashboardMapHeight = Math.round(Math.min(420, Math.max(260, windowHeight * 0.36)));
 
-  const load = useCallback(() => {
-    fetchEntitlements().then(setEntitlements).catch(() => setEntitlements(null));
-    fetchMyMechanicProfile()
-      .then((p) => {
-        setListingStatus(p?.verification_status ?? (p ? 'pending' : 'none'));
-        setAvailability(p?.availability_status ?? 'offline');
-      })
-      .catch(() => {
-        setListingStatus(null);
-        setAvailability('offline');
-      });
-    if (!emergencyOn) {
-      setSummary(null);
-      setActiveJob(null);
-      return;
-    }
-    fetchMechanicHelpQueues()
-      .then((q) => {
-        setSummary(q.summary);
-        setActiveJob(pickPrimaryActiveJob(q));
-      })
-      .catch(() => {
+  useFocusEffect(
+    useCallback(() => {
+      pageOpacity.setValue(0);
+      Animated.timing(pageOpacity, {
+        toValue: 1,
+        duration: 380,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }, [pageOpacity]),
+  );
+
+  const load = useCallback(async (showRefresh = false) => {
+    if (showRefresh) setRefreshing(true);
+    try {
+      await Promise.all([
+        fetchEntitlements().then(setEntitlements).catch(() => setEntitlements(null)),
+        fetchMyMechanicProfile()
+          .then((p) => {
+            setListingStatus(p?.verification_status ?? (p ? 'pending' : 'none'));
+            setAvailability(p?.availability_status ?? 'offline');
+            const lat = p?.latitude != null ? Number(p.latitude) : NaN;
+            const lng = p?.longitude != null ? Number(p.longitude) : NaN;
+            if (Number.isFinite(lat) && Number.isFinite(lng)) {
+              setWorkLocation({ latitude: lat, longitude: lng, address: p?.address ?? null });
+            } else {
+              setWorkLocation(null);
+            }
+          })
+          .catch(() => {
+            setListingStatus(null);
+            setAvailability('offline');
+            setWorkLocation(null);
+          }),
+      ]);
+
+      if (!emergencyOn) {
         setSummary(null);
         setActiveJob(null);
-      });
-  }, [emergencyOn]);
+        return;
+      }
+      const q = await fetchMechanicHelpQueues(
+        mechanicQueueFetchCoords({ servicePin, servicePinManual, coords, maxOffsetKm }),
+      );
+      setSummary(q.summary);
+      setActiveJob(pickPrimaryActiveJob(q));
+    } catch {
+      setSummary(null);
+      setActiveJob(null);
+    } finally {
+      if (showRefresh) setRefreshing(false);
+    }
+  }, [
+    emergencyOn,
+    coords?.latitude,
+    coords?.longitude,
+    servicePin?.latitude,
+    servicePin?.longitude,
+    servicePinManual,
+  ]);
 
-  useFocusEffect(useCallback(() => load(), [load]));
+  useFocusEffect(useCallback(() => void load(), [load]));
 
   useEffect(() => {
     if (!emergencyOn || !activeJob || resumePrompted.current) return;
     resumePrompted.current = true;
-    Alert.alert(
-      'Active job',
-      'You have a help request in progress. Resume now?',
-      [
-        { text: 'Later', style: 'cancel' },
-        {
-          text: 'Resume',
-          onPress: () =>
-            navigation.navigate('ActiveJob', {
-              helpRequestId: activeJob.id,
-              initialRequest: activeJob,
-            }),
-        },
-      ],
-    );
+    Alert.alert('Active job', 'You have a help request in progress. Resume now?', [
+      { text: 'Later', style: 'cancel' },
+      {
+        text: 'Resume',
+        onPress: () =>
+          navigation.navigate('ActiveJob', { helpRequestId: activeJob.id, initialRequest: activeJob }),
+      },
+    ]);
   }, [activeJob, emergencyOn, navigation]);
 
-  const listing = listingStatusMeta(listingStatus === 'none' ? null : listingStatus);
-  const tracking = activeJob?.tracking;
-
-  const acceptedUsed =
-    entitlements?.accepted_requests?.used ?? entitlements?.accepted_requests_used ?? 0;
-  const acceptedLimit =
-    entitlements?.accepted_requests?.limit ?? entitlements?.max_accepted_requests ?? freeLimit;
+  const verified = listingStatus === 'verified';
+  const needsProfile = listingStatus === 'none' || listingStatus === null;
   const acceptedRemaining =
     entitlements?.accepted_requests?.remaining ?? entitlements?.accepted_requests_remaining;
   const unlimitedAccepts =
     entitlements?.accepted_requests?.unlimited ?? entitlements?.unlimited_accepted_requests ?? false;
   const isPro = entitlements?.plan_code === 'MECHANIC_PRO';
   const atFreeLimit =
-    subscriptionsOn && !unlimitedAccepts && acceptedRemaining !== null && acceptedRemaining !== undefined && acceptedRemaining <= 0;
+    subscriptionsOn &&
+    !unlimitedAccepts &&
+    acceptedRemaining != null &&
+    acceptedRemaining <= 0;
 
-  const progress =
-    unlimitedAccepts || acceptedLimit == null || acceptedLimit <= 0
-      ? 1
-      : Math.min(1, acceptedUsed / acceptedLimit);
+  const isOnline = availability === 'available';
+  const isBusy = availability === 'busy';
+  const incomingCount = summary?.incoming ?? 0;
+
+  const toggleOnline = async () => {
+    if (!verified) {
+      Alert.alert(
+        'Verification required',
+        needsProfile
+          ? 'Complete your mechanic profile before going online.'
+          : 'Your profile is still under review.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          needsProfile
+            ? { text: 'Profile', onPress: () => navigation.navigate('MechanicOnboarding') }
+            : { text: 'OK' },
+        ],
+      );
+      return;
+    }
+    if (isBusy) {
+      Alert.alert('Busy', 'Finish your active job first.');
+      return;
+    }
+    const next = isOnline ? 'offline' : 'available';
+    setAvailabilityBusy(true);
+    try {
+      const updated = await updateMechanicAvailability(next);
+      setAvailability(updated.availability_status ?? next);
+    } catch {
+      Alert.alert('Could not update', 'Try again.');
+    } finally {
+      setAvailabilityBusy(false);
+    }
+  };
+
+  const openRequests = (tab: RequestTab) => navigation.navigate('MechanicRequests', { tab });
+
+  const saveDeviceLocation = async () => {
+    if (!coords) {
+      Alert.alert('Location unavailable', 'Enable GPS and try again.');
+      return;
+    }
+    setDeviceSaveBusy(true);
+    try {
+      const updated = await updateMechanicProfileLocation(coords.latitude, coords.longitude, undefined, {
+        source: 'device',
+      });
+      applySavedMechanicLocation(
+        updated.latitude ?? coords.latitude,
+        updated.longitude ?? coords.longitude,
+        false,
+      );
+      setWorkLocation({
+        latitude: updated.latitude ?? coords.latitude,
+        longitude: updated.longitude ?? coords.longitude,
+        address: updated.address ?? workLocation?.address ?? null,
+      });
+    } catch {
+      Alert.alert('Could not save', 'Use Map to set your pin.');
+    } finally {
+      setDeviceSaveBusy(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <View style={styles.topBar}>
-        <View>
-          <Text style={styles.topTitle}>Dashboard</Text>
-          <Text style={styles.topSub}>{user?.name}</Text>
-        </View>
-        <Pressable onPress={signOut} style={styles.signOutBtn} accessibilityRole="button">
-          <Text style={styles.signOutText}>Sign out</Text>
-        </Pressable>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.directoryCard}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.sectionTitle}>Directory listing</Text>
-            <View style={styles.freePill}>
-              <Text style={styles.freePillText}>FREE</Text>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} />}
+      >
+        <Animated.View style={[styles.page, { opacity: pageOpacity }]}>
+          <View style={styles.topRow}>
+            <View>
+              <Text style={styles.hello}>Hi, {firstName(user?.name)}</Text>
+              <Text style={styles.tagline}>Mechanic dashboard</Text>
             </View>
+            <Pressable onPress={signOut} style={styles.signOut}>
+              <Text style={styles.signOutText}>Sign out</Text>
+            </Pressable>
           </View>
-          <Text style={[styles.statusBadge, { color: listing.tone }]}>{listing.label}</Text>
-          <Text style={styles.muted}>{listing.hint}</Text>
-          <Pressable style={styles.secondaryBtn} onPress={() => navigation.navigate('MechanicOnboarding')}>
-            <Text style={styles.secondaryBtnText}>
-              {listingStatus === 'none' || listingStatus === null ? 'Set up listing' : 'Edit listing'}
-            </Text>
-          </Pressable>
-        </View>
 
-        {emergencyOn ? (
-          <>
-            <View style={styles.emergencyCard}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.sectionTitle}>Emergency assistance</Text>
+          <View style={styles.sheet}>
+            {emergencyOn && !verified ? (
+              <Pressable
+                style={styles.verifyStrip}
+                onPress={() => needsProfile && navigation.navigate('MechanicOnboarding')}
+              >
+                <Text style={styles.verifyText}>
+                  {needsProfile ? 'Complete profile to go online →' : 'Verification pending…'}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {!emergencyOn ? (
+              <Text style={styles.offlineMsg}>Help dispatch is not live in your area yet.</Text>
+            ) : (
+              <>
                 <Pressable
-                  style={[
-                    styles.availabilityPill,
-                    availability === 'available' ? styles.availabilityOn : styles.availabilityOff,
-                  ]}
-                  disabled={availabilityBusy || availability === 'busy'}
-                  onPress={async () => {
-                    if (listingStatus !== 'verified') {
-                      Alert.alert(
-                        'Verification required',
-                        'Complete verification before going online for help requests.',
-                      );
-                      return;
-                    }
-                    const next = availability === 'available' ? 'offline' : 'available';
-                    setAvailabilityBusy(true);
-                    try {
-                      const updated = await updateMechanicAvailability(next);
-                      setAvailability(updated.availability_status ?? next);
-                    } catch {
-                      Alert.alert('Could not update', 'Try again in a moment.');
-                    } finally {
-                      setAvailabilityBusy(false);
-                    }
-                  }}
+                  style={[styles.onlineRow, isOnline && styles.onlineRowLive]}
+                  onPress={() => void toggleOnline()}
+                  disabled={availabilityBusy || isBusy}
                 >
-                  <Text
-                    style={[
-                      styles.availabilityText,
-                      availability === 'available' ? styles.availabilityTextOn : null,
-                    ]}
+                  {isOnline ? <PulseOnlineDot /> : <View style={[styles.dot, styles.dotOff]} />}
+                  <Text style={styles.onlineLabel}>
+                    {isBusy ? 'Busy on job' : isOnline ? 'Online for requests' : 'Offline — tap to go online'}
+                  </Text>
+                  {availabilityBusy ? (
+                    <ActivityIndicator size="small" />
+                  ) : (
+                    <View style={[styles.toggle, isOnline && styles.toggleOn]}>
+                      <View style={[styles.knob, isOnline && styles.knobOn]} />
+                    </View>
+                  )}
+                </Pressable>
+
+                {activeJob ? (
+                  <Pressable
+                    style={styles.activeRow}
+                    onPress={() =>
+                      navigation.navigate('ActiveJob', {
+                        helpRequestId: activeJob.id,
+                        initialRequest: activeJob,
+                      })
+                    }
                   >
-                    {availability === 'available'
-                      ? 'Online'
-                      : availability === 'busy'
-                        ? 'Busy on job'
-                        : 'Offline'}
-                  </Text>
-                </Pressable>
-              </View>
-              <Text style={styles.mutedSmall}>
-                {availability === 'available'
-                  ? 'You can receive incoming help offers.'
-                  : availability === 'busy'
-                    ? 'Finish your active job to go offline or receive new offers.'
-                    : 'Go online to receive roadside help requests.'}
-              </Text>
-              {isPro ? (
-                <Text style={styles.proActive}>Mechanic Pro active — unlimited job accepts.</Text>
-              ) : subscriptionsOn ? (
-                <>
-                  <Text style={styles.muted}>
-                    {freeLimit} free job accepts at launch, then ₱{proPrice}/month for unlimited accepts.
-                  </Text>
-                  <View style={styles.progressTrack}>
-                    <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-                  </View>
-                  <Text style={styles.usageLine}>
-                    {unlimitedAccepts
-                      ? 'Unlimited accepts'
-                      : `${acceptedUsed} of ${acceptedLimit ?? freeLimit} free accepts used`}
-                    {!unlimitedAccepts && acceptedRemaining != null ? ` · ${acceptedRemaining} left` : ''}
-                  </Text>
-                  {atFreeLimit ? (
-                    <Pressable
-                      style={styles.upgradeBtn}
-                      onPress={() => navigation.navigate('MechanicSubscription')}
-                    >
-                      <Text style={styles.upgradeBtnText}>Subscribe — ₱{proPrice}/mo</Text>
-                    </Pressable>
-                  ) : null}
-                </>
-              ) : (
-                <Text style={styles.muted}>Accept incoming help requests from nearby owners.</Text>
-              )}
-            </View>
-
-            {summary ? (
-              <View style={styles.statsRow}>
-                <StatTile label="Incoming" value={summary.incoming} accent="#0284c7" />
-                <StatTile label="Active" value={summary.accepted_active} />
-                <StatTile label="In progress" value={summary.in_progress} />
-                <StatTile label="Done" value={summary.completed} />
-              </View>
-            ) : null}
-
-            {activeJob ? (
-              <View style={styles.activeCard}>
-                <Text style={styles.activeLabel}>Active job</Text>
-                <Text style={styles.activeTitle}>{vehicleTitle(activeJob)}</Text>
-                <Text style={styles.muted}>{activeJob.problem_category?.name}</Text>
-                <Text style={styles.activeStatus}>{jobStatusLabelOf(activeJob)}</Text>
-                {tracking?.distance_km != null ? (
-                  <Text style={styles.muted}>{tracking.distance_km} km away</Text>
+                    <Text style={styles.activeLabel} numberOfLines={1}>
+                      Active · {vehicleTitle(activeJob)} · {jobStatusLabelOf(activeJob)}
+                    </Text>
+                    <Text style={styles.activeGo}>Open →</Text>
+                  </Pressable>
                 ) : null}
-                {tracking?.eta ? <Text style={styles.muted}>ETA: {tracking.eta.label}</Text> : null}
-                <Pressable
-                  style={styles.primaryBtn}
-                  onPress={() =>
-                    navigation.navigate('ActiveJob', {
-                      helpRequestId: activeJob.id,
-                      initialRequest: activeJob,
-                    })
-                  }
-                >
-                  <Text style={styles.primaryBtnText}>Continue job</Text>
-                </Pressable>
+
+                <View style={styles.actionRow}>
+                  <Pressable
+                    style={[styles.incomingBtn, atFreeLimit && styles.incomingBtnOff]}
+                    disabled={atFreeLimit}
+                    onPress={() => openRequests('incoming')}
+                  >
+                    <Text style={styles.incomingCount}>{incomingCount}</Text>
+                    <Text style={styles.incomingLabel}>Incoming</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.allBtn}
+                    onPress={() => navigation.navigate('MechanicRequests', { tab: 'accepted_active' })}
+                  >
+                    <Text style={styles.allBtnText}>All requests</Text>
+                  </Pressable>
+                </View>
+
+                {summary ? (
+                  <View style={styles.statsRow}>
+                    {(
+                      [
+                        ['In', summary.incoming, 'incoming'],
+                        ['Active', summary.accepted_active, 'accepted_active'],
+                        ['Work', summary.in_progress, 'in_progress'],
+                        ['Done', summary.completed, 'completed'],
+                      ] as const
+                    ).map(([label, value, tab]) => (
+                      <Pressable key={tab} style={styles.statCell} onPress={() => openRequests(tab)}>
+                        <Text style={styles.statNum}>{value}</Text>
+                        <Text style={styles.statLbl}>{label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+
+                {atFreeLimit && subscriptionsOn && !isPro ? (
+                  <Pressable style={styles.proLink} onPress={() => navigation.navigate('MechanicSubscription')}>
+                    <Text style={styles.proLinkText}>Upgrade · ₱{proPrice}/mo</Text>
+                  </Pressable>
+                ) : null}
+              </>
+            )}
+
+            {!needsProfile ? (
+              <View style={styles.mapSection}>
+                <MechanicDashboardLocationCard
+                  embedded
+                  mapHeight={dashboardMapHeight}
+                  saved={workLocation}
+                  deviceLatitude={coords?.latitude ?? null}
+                  deviceLongitude={coords?.longitude ?? null}
+                  permissionDenied={permissionDenied}
+                  onEditMap={() => navigation.navigate('MechanicWorkLocation')}
+                  onUseDeviceLocation={() => void saveDeviceLocation()}
+                  deviceSaveBusy={deviceSaveBusy}
+                />
               </View>
             ) : null}
-
-            <Pressable
-              style={[styles.incomingBtn, atFreeLimit && styles.incomingBtnDisabled]}
-              disabled={atFreeLimit}
-              onPress={() => navigation.navigate('MechanicRequests', { tab: 'incoming' })}
-            >
-              <Text style={styles.incomingBtnText}>
-                Incoming requests{summary ? ` (${summary.incoming})` : ''}
-              </Text>
-            </Pressable>
-            {atFreeLimit ? (
-              <Text style={styles.limitHint}>Subscribe to accept new emergency jobs. Directory stays free.</Text>
-            ) : null}
-
-            <Pressable style={styles.linkRow} onPress={() => navigation.navigate('MechanicRequests', {})}>
-              <Text style={styles.linkText}>View all requests</Text>
-            </Pressable>
-          </>
-        ) : (
-          <View style={styles.offCard}>
-            <Text style={styles.muted}>
-              Customer emergency dispatch is not live in your area yet. Your directory listing remains free.
-            </Text>
           </View>
-        )}
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f1f5f9' },
-  topBar: {
+  safe: { flex: 1, backgroundColor: '#e2e8f0' },
+  flex: { flex: 1 },
+  scroll: { flexGrow: 1, padding: 16, paddingBottom: 24 },
+  page: { flex: 1 },
+  topRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 8,
-  },
-  topTitle: { fontSize: 22, fontWeight: '800', color: '#0f172a' },
-  topSub: { fontSize: 14, color: '#64748b', marginTop: 2 },
-  signOutBtn: { paddingVertical: 8, paddingHorizontal: 4 },
-  signOutText: { color: '#64748b', fontWeight: '500', fontSize: 14 },
-  scroll: { padding: 20, paddingTop: 4, paddingBottom: 32 },
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionTitle: { fontSize: 17, fontWeight: '700', color: '#0f172a' },
-  directoryCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  freePill: {
-    backgroundColor: '#dcfce7',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  freePillText: { fontSize: 11, fontWeight: '800', color: '#166534', letterSpacing: 0.5 },
-  statusBadge: { fontSize: 15, fontWeight: '700', marginTop: 10 },
-  muted: { color: '#64748b', marginTop: 6, lineHeight: 20, fontSize: 14 },
-  secondaryBtn: {
-    marginTop: 14,
-    alignSelf: 'flex-start',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    backgroundColor: '#f1f5f9',
-  },
-  secondaryBtnText: { color: '#0284c7', fontWeight: '700', fontSize: 14 },
-  emergencyCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  proActive: { marginTop: 8, color: '#16a34a', fontWeight: '600', fontSize: 14 },
-  availabilityPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  availabilityOn: { backgroundColor: '#dcfce7', borderColor: '#16a34a' },
-  availabilityOff: { backgroundColor: '#f1f5f9', borderColor: '#cbd5e1' },
-  availabilityText: { fontWeight: '800', fontSize: 12, color: '#64748b' },
-  availabilityTextOn: { color: '#166534' },
-  mutedSmall: { color: '#64748b', marginTop: 8, fontSize: 13, lineHeight: 18 },
-  progressTrack: {
-    height: 8,
-    backgroundColor: '#e2e8f0',
-    borderRadius: 4,
-    marginTop: 14,
-    overflow: 'hidden',
-  },
-  progressFill: { height: '100%', backgroundColor: '#0284c7', borderRadius: 4 },
-  usageLine: { marginTop: 8, fontSize: 14, fontWeight: '600', color: '#334155' },
-  upgradeBtn: {
-    marginTop: 14,
-    backgroundColor: '#0f172a',
-    paddingVertical: 14,
-    borderRadius: 12,
     alignItems: 'center',
+    marginBottom: 12,
   },
-  upgradeBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  statsRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  statTile: {
+  hello: { fontSize: 22, fontWeight: '800', color: '#0f172a' },
+  tagline: { fontSize: 13, color: '#64748b', marginTop: 2 },
+  signOut: { paddingVertical: 6, paddingHorizontal: 10 },
+  signOutText: { fontSize: 13, fontWeight: '600', color: '#475569' },
+  sheet: {
     flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
+    borderRadius: 20,
+    padding: 16,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 4,
+  },
+  verifyStrip: {
+    backgroundColor: '#fffbeb',
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  verifyText: { color: '#b45309', fontWeight: '700', fontSize: 13 },
+  offlineMsg: { color: '#64748b', fontSize: 14, lineHeight: 20, marginBottom: 8 },
+  onlineRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    gap: 10,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+    marginBottom: 10,
   },
-  statValue: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
-  statLabel: { fontSize: 10, color: '#64748b', marginTop: 4, textAlign: 'center' },
-  activeCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
+  onlineRowLive: { backgroundColor: '#f0fdf4' },
+  pulseWrap: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
+  pulseRing: {
+    position: 'absolute',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(34, 197, 94, 0.35)',
   },
-  activeLabel: { fontSize: 11, fontWeight: '800', color: '#16a34a', letterSpacing: 0.6 },
-  activeTitle: { fontSize: 18, fontWeight: '700', marginTop: 6, color: '#0f172a' },
-  activeStatus: { fontWeight: '700', marginTop: 8, color: '#0284c7' },
-  primaryBtn: {
-    marginTop: 14,
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  dotOn: { backgroundColor: '#22c55e' },
+  dotOff: { backgroundColor: '#94a3b8' },
+  onlineLabel: { flex: 1, fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  toggle: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#cbd5e1',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleOn: { backgroundColor: '#22c55e' },
+  knob: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff' },
+  knobOn: { alignSelf: 'flex-end' },
+  activeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#16a34a',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    gap: 8,
   },
-  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  activeLabel: { flex: 1, color: '#fff', fontWeight: '600', fontSize: 13 },
+  activeGo: { color: '#dcfce7', fontWeight: '800', fontSize: 13 },
+  actionRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   incomingBtn: {
+    flex: 1,
     backgroundColor: '#0284c7',
-    paddingVertical: 16,
-    borderRadius: 14,
+    borderRadius: 12,
+    paddingVertical: 14,
     alignItems: 'center',
-    marginBottom: 8,
   },
-  incomingBtnDisabled: { backgroundColor: '#94a3b8' },
-  incomingBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
-  limitHint: { textAlign: 'center', color: '#b45309', fontSize: 13, marginBottom: 8 },
-  linkRow: { alignItems: 'center', paddingVertical: 8 },
-  linkText: { color: '#0284c7', fontWeight: '600', fontSize: 15 },
-  offCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 18,
+  incomingBtnOff: { backgroundColor: '#94a3b8' },
+  incomingCount: { color: '#fff', fontSize: 28, fontWeight: '800', lineHeight: 32 },
+  incomingLabel: { color: '#e0f2fe', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  allBtn: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
+  allBtnText: { color: '#334155', fontWeight: '700', fontSize: 14 },
+  statsRow: {
+    flexDirection: 'row',
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    marginBottom: 4,
+  },
+  statCell: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    backgroundColor: '#fafafa',
+    borderRightWidth: 1,
+    borderRightColor: '#f1f5f9',
+  },
+  statNum: { fontSize: 18, fontWeight: '800', color: '#0f172a' },
+  statLbl: { fontSize: 10, color: '#64748b', fontWeight: '600', marginTop: 2 },
+  proLink: { alignItems: 'center', paddingVertical: 8 },
+  proLinkText: { color: '#0f172a', fontWeight: '700', fontSize: 13 },
+  mapSection: {
+    flex: 1,
+    minHeight: 300,
+    marginTop: 8,
   },
 });

@@ -56,6 +56,7 @@ export function NeedHelpScreen({ navigation, route }: Props) {
   const [address, setAddress] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
+  const [mapRecenterKey, setMapRecenterKey] = useState(0);
 
   useEnsureNearbyProviders(lat, lng, config?.features.dynamic_nearby_seed === true);
 
@@ -99,6 +100,7 @@ export function NeedHelpScreen({ navigation, route }: Props) {
       setLat(pos.coords.latitude);
       setLng(pos.coords.longitude);
       await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+      setMapRecenterKey((k) => k + 1);
     } finally {
       setLocating(false);
     }
@@ -109,6 +111,22 @@ export function NeedHelpScreen({ navigation, route }: Props) {
       reverseGeocode(lat, lng);
     }
   }, [lat, lng]);
+
+  const autoLocated = useRef(false);
+  React.useEffect(() => {
+    if (autoLocated.current || (lat != null && lng != null)) {
+      return;
+    }
+    autoLocated.current = true;
+    void captureLocation();
+  }, []);
+
+  React.useEffect(() => {
+    if (step !== 'location') {
+      return;
+    }
+    void captureLocation();
+  }, [step]);
 
   const onCenterChange = (center: { latitude: number; longitude: number }) => {
     setLat(center.latitude);
@@ -183,14 +201,29 @@ export function NeedHelpScreen({ navigation, route }: Props) {
     submitLock.current = true;
     setSubmitting(true);
     try {
+      let submitLat = lat;
+      let submitLng = lng;
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          submitLat = pos.coords.latitude;
+          submitLng = pos.coords.longitude;
+        }
+      } catch {
+        /* use map pin */
+      }
+
       const addressText = [landmark.trim(), address].filter(Boolean).join(' · ') || address;
       const helpRequest = await createHelpRequest({
         vehicle_description: vehicleDescription.trim().slice(0, 255),
         problem_category_id: categoryId,
         request_type: emergency ? 'EMERGENCY' : 'SERVICE',
         remarks: remarks.trim(),
-        latitude: lat,
-        longitude: lng,
+        latitude: submitLat,
+        longitude: submitLng,
         address_text: addressText || undefined,
         answers: Object.entries(answers).map(([question_id, answer]) => ({
           question_id: Number(question_id),
@@ -279,7 +312,8 @@ export function NeedHelpScreen({ navigation, route }: Props) {
               onCenterChange={onCenterChange}
               onUseMyLocation={captureLocation}
               locating={locating}
-              height={240}
+              recenterKey={mapRecenterKey}
+              height={280}
             />
             <Text style={styles.label}>Landmark or directions (optional)</Text>
             <TextInput

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { HelpRequestTracking } from '../api/helpRequests';
+import { formatDistanceKm, resolveTrackingDistanceKm } from '../utils/distanceKm';
 
 type Props = {
   tracking?: HelpRequestTracking | null;
@@ -23,18 +24,19 @@ export function ActiveJobLocationSummary({
   viewerRole,
 }: Props) {
   const locStatus = tracking?.mechanic_location_status;
+  const distanceLabel = useMemo(() => formatDistanceKm(resolveTrackingDistanceKm(tracking)), [tracking]);
 
   return (
     <View style={styles.wrap}>
       {connectionLost && (
         <Text style={styles.connectionLost}>Connection lost — showing last known data</Text>
       )}
-      {tracking?.distance_km != null && (
+      {distanceLabel ? (
         <Text style={styles.row}>
           <Text style={styles.label}>Distance: </Text>
-          {tracking.distance_km} km
+          {distanceLabel}
         </Text>
-      )}
+      ) : null}
       {etaLine(tracking) && (
         <Text style={styles.row}>
           <Text style={styles.label}>ETA: </Text>

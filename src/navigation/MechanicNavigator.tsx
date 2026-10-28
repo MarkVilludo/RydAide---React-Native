@@ -8,6 +8,7 @@ import { MechanicIncomingScreen } from '../screens/mechanic/MechanicIncomingScre
 import { MechanicRequestDetailScreen } from '../screens/mechanic/MechanicRequestDetailScreen';
 import { MechanicRequestsScreen } from '../screens/mechanic/MechanicRequestsScreen';
 import { MechanicSubscriptionScreen } from '../screens/mechanic/MechanicSubscriptionScreen';
+import { MechanicWorkLocationScreen } from '../screens/mechanic/MechanicWorkLocationScreen';
 import { MechanicLocationProvider } from '../context/MechanicLocationContext';
 import type { MechanicStackParamList } from './types';
 
@@ -23,7 +24,7 @@ export function MechanicNavigator() {
         component={MechanicOnboardingScreen}
         options={{ title: 'Your listing' }}
       />
-      <Stack.Screen name="MechanicRequests" component={MechanicRequestsScreen} options={{ title: 'My requests' }} />
+      <Stack.Screen name="MechanicRequests" component={MechanicRequestsScreen} options={{ headerShown: false }} />
       <Stack.Screen name="IncomingRequests" component={MechanicIncomingScreen} options={{ title: 'Incoming requests' }} />
       <Stack.Screen
         name="IncomingRequestDetail"
@@ -40,6 +41,11 @@ export function MechanicNavigator() {
         name="MechanicSubscription"
         component={MechanicSubscriptionScreen}
         options={{ title: 'Mechanic Pro' }}
+      />
+      <Stack.Screen
+        name="MechanicWorkLocation"
+        component={MechanicWorkLocationScreen}
+        options={{ title: 'Service location' }}
       />
     </Stack.Navigator>
     </MechanicLocationProvider>

@@ -1,5 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,9 @@ import {
   fetchMechanicHelpRequest,
 } from '../../api/mechanicHelp';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
+import { MechanicCustomerDistance } from '../../components/MechanicCustomerDistance';
+import { useMechanicDistanceOrigin } from '../../hooks/useMechanicDistanceOrigin';
+import { resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { vehicleTitle } from '../../utils/helpRequestUi';
 
@@ -29,14 +32,20 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
   const [request, setRequest] = useState<HelpRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
+  const { origin, permissionDenied, servicePinManual } = useMechanicDistanceOrigin('service_pin');
+
+  const distanceKm = useMemo(
+    () => (request ? resolveMechanicToCustomerDistanceKm(request, origin) : null),
+    [request, origin],
+  );
 
   const load = useCallback(() => {
     setLoading(true);
-    fetchMechanicHelpRequest(helpRequestId)
+    fetchMechanicHelpRequest(helpRequestId, origin ?? undefined)
       .then(setRequest)
       .catch(() => setRequest(null))
       .finally(() => setLoading(false));
-  }, [helpRequestId]);
+  }, [helpRequestId, origin?.latitude, origin?.longitude]);
 
   useFocusEffect(
     useCallback(() => {
@@ -100,6 +109,12 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {isEmergency && <Text style={styles.emergency}>🚨 NEW EMERGENCY REQUEST</Text>}
 
+      <MechanicCustomerDistance
+        distanceKm={distanceKm}
+        fromServicePin={servicePinManual || origin != null}
+        locationUnavailable={permissionDenied && distanceKm == null}
+      />
+
       {request.owner?.name && (
         <Text style={styles.ownerName}>Vehicle owner: {request.owner.name}</Text>
       )}
@@ -133,9 +148,6 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Location</Text>
-        {request.distance_km != null && (
-          <Text style={styles.distance}>{request.distance_km} km away</Text>
-        )}
         <Text style={styles.address}>
           {request.address_text ?? `${request.latitude.toFixed(5)}, ${request.longitude.toFixed(5)}`}
         </Text>

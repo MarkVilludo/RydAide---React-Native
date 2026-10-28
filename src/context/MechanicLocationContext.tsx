@@ -1,16 +1,14 @@
-import React, { createContext, useContext, useEffect, useRef } from 'react';
-import { updateMechanicProfileLocation } from '../api/mechanicProfile';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { fetchMyMechanicProfile, updateMechanicProfileLocation } from '../api/mechanicProfile';
 import { useDeviceLocation, type DeviceCoords } from '../hooks/useDeviceLocation';
+import {
+  MechanicLocationContext,
+  type MechanicLocationContextValue,
+  type ServicePin,
+} from './mechanicLocationState';
 
-type MechanicLocationContextValue = {
-  coords: DeviceCoords | null;
-  permissionDenied: boolean;
-};
-
-const MechanicLocationContext = createContext<MechanicLocationContextValue>({
-  coords: null,
-  permissionDenied: false,
-});
+export type { ServicePin, MechanicLocationContextValue };
+export { useMechanicLiveLocation } from './useMechanicLiveLocation';
 
 function distanceMeters(a: DeviceCoords, b: DeviceCoords): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -24,13 +22,50 @@ function distanceMeters(a: DeviceCoords, b: DeviceCoords): number {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+function coordsFromProfile(profile: Awaited<ReturnType<typeof fetchMyMechanicProfile>>): ServicePin | null {
+  if (profile?.latitude == null || profile?.longitude == null) {
+    return null;
+  }
+  const latitude = Number(profile.latitude);
+  const longitude = Number(profile.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+  return { latitude, longitude };
+}
+
 export function MechanicLocationProvider({ children }: { children: React.ReactNode }) {
   const { coords, permissionDenied } = useDeviceLocation(true);
+  const [servicePin, setServicePin] = useState<ServicePin | null>(null);
+  const [servicePinManual, setServicePinManual] = useState(false);
   const lastSynced = useRef<DeviceCoords | null>(null);
   const lastSyncAt = useRef(0);
 
+  const reloadServicePin = useCallback(async () => {
+    try {
+      const profile = await fetchMyMechanicProfile();
+      setServicePin(coordsFromProfile(profile));
+      setServicePinManual(Boolean(profile?.service_pin_manual));
+    } catch {
+      setServicePin(null);
+      setServicePinManual(false);
+    }
+  }, []);
+
+  const applySavedMechanicLocation = useCallback(
+    (latitude: number, longitude: number, manual = true) => {
+      setServicePin({ latitude, longitude });
+      setServicePinManual(manual);
+    },
+    [],
+  );
+
   useEffect(() => {
-    if (!coords) {
+    void reloadServicePin();
+  }, [reloadServicePin]);
+
+  useEffect(() => {
+    if (!coords || servicePinManual) {
       return;
     }
 
@@ -45,16 +80,25 @@ export function MechanicLocationProvider({ children }: { children: React.ReactNo
 
     lastSynced.current = coords;
     lastSyncAt.current = now;
-    updateMechanicProfileLocation(coords.latitude, coords.longitude).catch(() => {});
-  }, [coords]);
+    updateMechanicProfileLocation(coords.latitude, coords.longitude, undefined, { source: 'device' })
+      .then((mechanic) => {
+        applySavedMechanicLocation(mechanic.latitude!, mechanic.longitude!, false);
+      })
+      .catch(() => {});
+  }, [coords, servicePinManual, applySavedMechanicLocation]);
 
   return (
-    <MechanicLocationContext.Provider value={{ coords, permissionDenied }}>
+    <MechanicLocationContext.Provider
+      value={{
+        coords,
+        permissionDenied,
+        servicePin,
+        servicePinManual,
+        reloadServicePin,
+        applySavedMechanicLocation,
+      }}
+    >
       {children}
     </MechanicLocationContext.Provider>
   );
-}
-
-export function useMechanicLiveLocation(): MechanicLocationContextValue {
-  return useContext(MechanicLocationContext);
 }

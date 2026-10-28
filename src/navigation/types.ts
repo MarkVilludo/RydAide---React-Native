@@ -32,6 +32,7 @@ export type MechanicStackParamList = {
   MechanicRequestDetail: { helpRequestId: number };
   ActiveJob: { helpRequestId: number; justAccepted?: boolean; initialRequest?: import('../api/helpRequests').HelpRequest };
   MechanicSubscription: undefined;
+  MechanicWorkLocation: undefined;
 };
 
 export type RootStackParamList = {

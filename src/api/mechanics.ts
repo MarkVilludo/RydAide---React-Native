@@ -7,6 +7,7 @@ export interface MechanicResult {
   address: string | null;
   latitude?: number;
   longitude?: number;
+  service_pin_manual?: boolean;
   distance_km: number | null;
   service_radius_km?: number;
   rating_average: number;

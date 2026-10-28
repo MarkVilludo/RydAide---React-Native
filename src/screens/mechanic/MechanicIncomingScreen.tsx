@@ -6,6 +6,8 @@ import type { MechanicStackParamList } from '../../navigation/types';
 import { getApiErrorMessage } from '../../api/client';
 import { acceptHelpRequest, declineHelpRequest, fetchMechanicHelpQueues } from '../../api/mechanicHelp';
 import type { HelpRequest } from '../../api/helpRequests';
+import { useMechanicLiveLocation } from '../../context/MechanicLocationContext';
+import { formatDistanceKm, resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
 import { vehicleTitle } from '../../utils/helpRequestUi';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'IncomingRequests'>;
@@ -17,16 +19,18 @@ export function MechanicIncomingScreen({ navigation }: Props) {
 
   const [incoming, setIncoming] = useState<HelpRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const { coords, servicePin } = useMechanicLiveLocation();
+  const distanceOrigin = servicePin ?? coords;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchMechanicHelpQueues();
+      const data = await fetchMechanicHelpQueues(distanceOrigin ?? undefined);
       setIncoming(data.incoming);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [distanceOrigin?.latitude, distanceOrigin?.longitude]);
 
   useFocusEffect(
     useCallback(() => {
@@ -73,6 +77,10 @@ export function MechanicIncomingScreen({ navigation }: Props) {
           {item.request_type === 'EMERGENCY' && <Text style={styles.emergency}>🚨 EMERGENCY</Text>}
           {item.owner?.name && <Text style={styles.ownerName}>Owner: {item.owner.name}</Text>}
           <Text style={styles.title}>{item.problem_category?.name}</Text>
+          {(() => {
+            const d = formatDistanceKm(resolveMechanicToCustomerDistanceKm(item, distanceOrigin ?? null));
+            return d ? <Text style={styles.distance}>{d}</Text> : null;
+          })()}
           <Text style={styles.vehicle}>{vehicleTitle(item)}</Text>
           <Text style={styles.remarks} numberOfLines={2}>{item.remarks}</Text>
           <Pressable
@@ -102,6 +110,7 @@ const styles = StyleSheet.create({
   emergency: { color: '#dc2626', fontWeight: '700', marginBottom: 6 },
   ownerName: { color: '#0f172a', fontWeight: '600', marginBottom: 4 },
   title: { fontSize: 17, fontWeight: '600' },
+  distance: { marginTop: 6, fontSize: 14, fontWeight: '700', color: '#0284c7' },
   vehicle: { color: '#64748b', marginTop: 4, fontSize: 14 },
   remarks: { color: '#475569', marginVertical: 8 },
   detailsBtn: { marginBottom: 10, paddingVertical: 8 },

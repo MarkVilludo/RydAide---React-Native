@@ -1,18 +1,20 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { formatDistanceKm } from '../utils/distanceKm';
 
 type Props = {
   distanceKm?: number | null;
 };
 
 export function HelpRequestMapLegend({ distanceKm }: Props) {
+  const label = formatDistanceKm(distanceKm);
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
         <Text style={styles.pin}>📍</Text>
         <Text style={styles.text}>You (mechanic)</Text>
       </View>
-      {distanceKm != null && <Text style={styles.distance}>{distanceKm} km</Text>}
+      {label ? <Text style={styles.distance}>{label}</Text> : null}
       <Text style={styles.arrow}>↓</Text>
       <View style={styles.row}>
         <Text style={styles.pin}>📍</Text>

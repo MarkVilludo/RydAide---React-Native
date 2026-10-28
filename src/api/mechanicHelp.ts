@@ -38,8 +38,15 @@ export async function fetchMechanicHelpQueues(coords?: {
   return data.data;
 }
 
-export async function fetchMechanicHelpRequest(id: number): Promise<HelpRequest> {
-  const { data } = await api.get(`/mechanic/help-requests/${id}`);
+export async function fetchMechanicHelpRequest(
+  id: number,
+  coords?: { latitude: number; longitude: number },
+): Promise<HelpRequest> {
+  const params =
+    coords != null
+      ? { latitude: coords.latitude, longitude: coords.longitude }
+      : undefined;
+  const { data } = await api.get(`/mechanic/help-requests/${id}`, { params });
   return data.data.help_request;
 }
 

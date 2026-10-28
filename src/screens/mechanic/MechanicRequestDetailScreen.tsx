@@ -1,5 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +21,9 @@ import {
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
+import { MechanicCustomerDistance } from '../../components/MechanicCustomerDistance';
+import { useMechanicDistanceOrigin } from '../../hooks/useMechanicDistanceOrigin';
+import { resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { formatRequestDate, isActiveJobStatus, jobStatusLabelOf, jobStatusOf, vehicleTitle } from '../../utils/helpRequestUi';
 
@@ -31,14 +34,20 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
   const [request, setRequest] = useState<HelpRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
+  const { origin, permissionDenied, servicePinManual } = useMechanicDistanceOrigin('service_pin');
+
+  const distanceKm = useMemo(
+    () => (request ? resolveMechanicToCustomerDistanceKm(request, origin) : null),
+    [request, origin],
+  );
 
   const load = useCallback(() => {
     setLoading(true);
-    fetchMechanicHelpRequest(helpRequestId)
+    fetchMechanicHelpRequest(helpRequestId, origin ?? undefined)
       .then(setRequest)
       .catch(() => setRequest(null))
       .finally(() => setLoading(false));
-  }, [helpRequestId]);
+  }, [helpRequestId, origin?.latitude, origin?.longitude]);
 
   useFocusEffect(useCallback(() => load(), [load]));
 
@@ -118,10 +127,12 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
             height={200}
           />
           <GrabStyleBottomSheet>
+            <MechanicCustomerDistance
+              distanceKm={distanceKm}
+              fromServicePin={servicePinManual || origin != null}
+              locationUnavailable={permissionDenied && distanceKm == null}
+            />
             <Text style={styles.incomingTitle}>{request.problem_category?.name}</Text>
-            {request.distance_km != null && (
-              <Text style={styles.distance}>{request.distance_km} km away</Text>
-            )}
             <Text style={styles.created}>Offer received {formatRequestDate(request.created_at)}</Text>
             <Text style={styles.remarks}>{request.remarks}</Text>
             <Text style={styles.bold}>{vehicleTitle(request)}</Text>
@@ -167,7 +178,12 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
           </Section>
 
           <Section title="Location">
-            {request.distance_km != null && <Text>{request.distance_km} km away</Text>}
+            <MechanicCustomerDistance
+              distanceKm={distanceKm}
+              compact
+              fromServicePin={servicePinManual || origin != null}
+              locationUnavailable={permissionDenied && distanceKm == null}
+            />
             <Text>{request.address_text ?? `${request.latitude}, ${request.longitude}`}</Text>
             <HelpRequestMap
               request={{ latitude: request.latitude, longitude: request.longitude, title: 'Customer' }}
