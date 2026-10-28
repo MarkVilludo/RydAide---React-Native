@@ -45,7 +45,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    bootstrap();
+    void bootstrap().catch(() => {
+      setIsLoading(false);
+    });
   }, [bootstrap]);
 
   const signIn = useCallback(async (email: string, password: string) => {

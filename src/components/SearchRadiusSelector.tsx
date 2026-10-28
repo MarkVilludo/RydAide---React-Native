@@ -10,6 +10,8 @@ type Props = {
   onChangeKm: (km: number) => void;
   minKm?: number;
   maxKm?: number;
+  /** From app-config; when set, slider snaps to these distances only. */
+  radiusOptionsKm?: number[];
 };
 
 function clampKm(value: number, min: number, max: number): number {
@@ -21,23 +23,43 @@ export function SearchRadiusSelector({
   onChangeKm,
   minKm = MIN_KM,
   maxKm = MAX_KM,
+  radiusOptionsKm,
 }: Props) {
-  const km = clampKm(valueKm, minKm, maxKm);
+  const ticks = useMemo(() => {
+    if (radiusOptionsKm?.length) {
+      return radiusOptionsKm.filter((t) => t >= minKm && t <= maxKm);
+    }
+    return Array.from({ length: maxKm - minKm + 1 }, (_, i) => minKm + i);
+  }, [maxKm, minKm, radiusOptionsKm]);
+
+  const km = useMemo(() => {
+    const clamped = clampKm(valueKm, minKm, maxKm);
+    if (ticks.includes(clamped)) {
+      return clamped;
+    }
+    const next = ticks.find((t) => t >= clamped);
+    return next ?? ticks[ticks.length - 1] ?? clamped;
+  }, [maxKm, minKm, ticks, valueKm]);
+
+  const tickIndex = Math.max(0, ticks.indexOf(km));
 
   const hint = useMemo(() => {
     if (km <= 2) return 'Very close — best for dense areas';
     if (km <= 5) return 'Good for neighborhood search';
-    if (km <= 8) return 'Wider area — more mechanics may appear';
+    if (km <= 8) return 'Wider area — more results may appear';
 
-    return 'Maximum range (10 km)';
-  }, [km]);
+    return `Up to ${maxKm} km`;
+  }, [km, maxKm]);
 
-  const setKm = (next: number) => onChangeKm(clampKm(next, minKm, maxKm));
+  const stepTick = (delta: number) => {
+    const nextIndex = Math.min(ticks.length - 1, Math.max(0, tickIndex + delta));
+    onChangeKm(ticks[nextIndex] ?? km);
+  };
 
   return (
     <View style={styles.card}>
       <View style={styles.topRow}>
-        <View>
+        <View style={styles.labelBlock}>
           <Text style={styles.label}>Search distance</Text>
           <Text style={styles.hint}>{hint}</Text>
         </View>
@@ -49,9 +71,9 @@ export function SearchRadiusSelector({
 
       <View style={styles.stepperRow}>
         <Pressable
-          style={[styles.stepBtn, km <= minKm && styles.stepBtnDisabled]}
-          onPress={() => setKm(km - 1)}
-          disabled={km <= minKm}
+          style={[styles.stepBtn, tickIndex <= 0 && styles.stepBtnDisabled]}
+          onPress={() => stepTick(-1)}
+          disabled={tickIndex <= 0}
           accessibilityLabel="Decrease search radius"
         >
           <Text style={styles.stepBtnText}>−</Text>
@@ -60,34 +82,31 @@ export function SearchRadiusSelector({
         <View style={styles.sliderWrap}>
           <Slider
             style={styles.slider}
-            minimumValue={minKm}
-            maximumValue={maxKm}
+            minimumValue={0}
+            maximumValue={Math.max(0, ticks.length - 1)}
             step={1}
-            value={km}
-            onValueChange={(v) => setKm(v)}
+            value={tickIndex}
+            onValueChange={(index) => onChangeKm(ticks[Math.round(index)] ?? km)}
             minimumTrackTintColor="#0284c7"
             maximumTrackTintColor="#e2e8f0"
             thumbTintColor="#0284c7"
           />
           <View style={styles.tickRow}>
-            {Array.from({ length: maxKm - minKm + 1 }, (_, i) => minKm + i).map((tick) => (
-              <Pressable
+            {ticks.map((tick) => (
+              <Text
                 key={tick}
-                style={styles.tickHit}
-                onPress={() => setKm(tick)}
-                accessibilityLabel={`${tick} kilometers`}
+                style={[styles.microLabel, tick === km && styles.microLabelActive]}
               >
-                <View style={[styles.tickDot, tick <= km && styles.tickDotActive]} />
-                <Text style={[styles.tickLabel, tick === km && styles.tickLabelActive]}>{tick}</Text>
-              </Pressable>
+                {tick}
+              </Text>
             ))}
           </View>
         </View>
 
         <Pressable
-          style={[styles.stepBtn, km >= maxKm && styles.stepBtnDisabled]}
-          onPress={() => setKm(km + 1)}
-          disabled={km >= maxKm}
+          style={[styles.stepBtn, tickIndex >= ticks.length - 1 && styles.stepBtnDisabled]}
+          onPress={() => stepTick(1)}
+          disabled={tickIndex >= ticks.length - 1}
           accessibilityLabel="Increase search radius"
         >
           <Text style={styles.stepBtnText}>+</Text>
@@ -113,10 +132,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: 12,
   },
+  labelBlock: { flex: 1, paddingRight: 12 },
   label: { fontSize: 16, fontWeight: '700', color: '#0f172a' },
-  hint: { fontSize: 13, color: '#64748b', marginTop: 4, maxWidth: 220 },
+  hint: { fontSize: 13, color: '#64748b', marginTop: 4 },
   valueBlock: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -129,7 +149,7 @@ const styles = StyleSheet.create({
   },
   valueNumber: { fontSize: 32, fontWeight: '800', color: '#0284c7', lineHeight: 36 },
   valueUnit: { fontSize: 15, fontWeight: '600', color: '#0369a1', marginLeft: 4 },
-  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   stepBtn: {
     width: 40,
     height: 40,
@@ -147,18 +167,9 @@ const styles = StyleSheet.create({
   tickRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: -4,
     paddingHorizontal: 4,
+    marginTop: -2,
   },
-  tickHit: { alignItems: 'center', minWidth: 22 },
-  tickDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#cbd5e1',
-    marginBottom: 2,
-  },
-  tickDotActive: { backgroundColor: '#0284c7' },
-  tickLabel: { fontSize: 10, color: '#94a3b8' },
-  tickLabelActive: { color: '#0284c7', fontWeight: '700' },
+  microLabel: { fontSize: 10, color: '#94a3b8', minWidth: 16, textAlign: 'center' },
+  microLabelActive: { color: '#0284c7', fontWeight: '700' },
 });

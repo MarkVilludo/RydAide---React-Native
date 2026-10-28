@@ -1,7 +1,7 @@
 import { GoogleMaps } from 'expo-maps';
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import type { MechanicResult } from '../api/mechanics';
+import type { MapDirectoryPin } from '../types/mapPins';
 import { zoomForRadiusKm } from '../utils/mapZoom';
 
 export type SearchCenter = {
@@ -12,7 +12,7 @@ export type SearchCenter = {
 type Props = {
   center: SearchCenter | null;
   radiusKm: number;
-  mechanics?: MechanicResult[];
+  pins?: MapDirectoryPin[];
   onCenterChange: (center: SearchCenter) => void;
   onUseMyLocation?: () => void;
   locating?: boolean;
@@ -22,7 +22,7 @@ type Props = {
 export function DirectoryRadiusMap({
   center,
   radiusKm,
-  mechanics = [],
+  pins = [],
   onCenterChange,
   onUseMyLocation,
   locating,
@@ -49,18 +49,17 @@ export function DirectoryRadiusMap({
       },
     ];
 
-    for (const m of mechanics) {
-      if (m.latitude == null || m.longitude == null) continue;
+    for (const pin of pins) {
       list.push({
-        id: `mechanic-${m.id}`,
-        coordinates: { latitude: m.latitude, longitude: m.longitude },
-        title: m.business_name,
-        snippet: m.distance_km != null ? `${m.distance_km} km away` : undefined,
+        id: `${pin.markerKeyPrefix ?? 'listing'}-${pin.id}`,
+        coordinates: { latitude: pin.latitude, longitude: pin.longitude },
+        title: pin.title,
+        snippet: pin.snippet,
       });
     }
 
     return list;
-  }, [mapCenter, mechanics, radiusKm]);
+  }, [mapCenter, pins, radiusKm]);
 
   const circles = useMemo((): GoogleMaps.Circle[] => {
     if (!center) return [];

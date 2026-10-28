@@ -1,4 +1,5 @@
 import { api } from './client';
+import type { DirectorySearchMeta } from './appConfig';
 
 export interface MechanicResult {
   id: number;
@@ -13,6 +14,7 @@ export interface MechanicResult {
   emergency_available: boolean;
   is_verified: boolean;
   verification_status?: string;
+  availability_status?: 'available' | 'busy' | 'offline';
   phone: string | null;
   mechanic_name?: string;
 }
@@ -23,7 +25,7 @@ export async function searchMechanics(params: {
   vehicle_type_id?: number;
   emergency?: boolean;
   radius_km?: number;
-}): Promise<MechanicResult[]> {
+}): Promise<{ mechanics: MechanicResult[]; search: DirectorySearchMeta }> {
   const { data } = await api.get('/mechanics', {
     params: {
       latitude: params.latitude,
@@ -33,5 +35,8 @@ export async function searchMechanics(params: {
       radius_km: params.radius_km,
     },
   });
-  return data.data.mechanics;
+  return {
+    mechanics: data.data.mechanics,
+    search: data.data.search,
+  };
 }

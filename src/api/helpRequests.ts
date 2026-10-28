@@ -1,5 +1,16 @@
 import { api } from './client';
-import type { Vehicle } from './vehicles';
+
+/** Legacy linked garage record — optional on help requests. */
+export interface HelpRequestVehicle {
+  id?: number;
+  nickname?: string | null;
+  year?: number | null;
+  current_mileage?: number;
+  make?: { id: number; name: string } | null;
+  model?: { id: number; name: string } | null;
+  variant?: { id: number; name: string } | null;
+  vehicle_type?: { id: number; name: string };
+}
 
 export interface ProblemCategory {
   id: number;
@@ -105,9 +116,10 @@ export interface HelpRequest {
   accepted_at?: string | null;
   completed_at?: string | null;
   cancelled_at?: string | null;
+  vehicle_description?: string | null;
   problem_category?: ProblemCategory;
   owner?: HelpRequestOwner;
-  vehicle?: Vehicle;
+  vehicle?: HelpRequestVehicle;
   mechanic?: {
     id: number;
     display_name?: string;
@@ -127,6 +139,17 @@ export interface HelpRequest {
   answers?: Array<{ question_id: number; answer: string; question: string | null }>;
   media?: Array<{ id: number; media_type: string; url: string }>;
   mechanic_dispatch?: { response: string; responded_at?: string | null };
+  search_progress?: {
+    current_wave: number;
+    total_waves: number;
+    search_radius_km_max: number;
+    mechanics_notified_total: number;
+    mechanics_notified_this_wave: number;
+    mechanics_awaiting_response: number;
+    mechanics_declined: number;
+    progress_percent: number;
+    message: string;
+  } | null;
   review?: { rating: number; comment?: string | null; created_at?: string };
 }
 
@@ -145,7 +168,8 @@ export async function fetchCategoryQuestions(categoryId: number) {
 }
 
 export type CreateHelpRequestPayload = {
-  vehicle_id: number;
+  vehicle_id?: number;
+  vehicle_description?: string;
   problem_category_id: number;
   request_type: 'SERVICE' | 'EMERGENCY';
   remarks: string;
@@ -158,7 +182,12 @@ export type CreateHelpRequestPayload = {
 
 export async function createHelpRequest(payload: CreateHelpRequestPayload): Promise<HelpRequest> {
   const form = new FormData();
-  form.append('vehicle_id', String(payload.vehicle_id));
+  if (payload.vehicle_id != null) {
+    form.append('vehicle_id', String(payload.vehicle_id));
+  }
+  if (payload.vehicle_description) {
+    form.append('vehicle_description', payload.vehicle_description);
+  }
   form.append('problem_category_id', String(payload.problem_category_id));
   form.append('request_type', payload.request_type);
   form.append('remarks', payload.remarks);
@@ -205,4 +234,12 @@ export async function respondToHelpRequestQuote(
 ): Promise<HelpRequest> {
   const { data } = await api.post(`/help-requests/${id}/quote/respond`, { response });
   return data.data.help_request;
+}
+
+export async function submitHelpRequestReview(
+  id: number,
+  rating: number,
+  comment?: string,
+): Promise<void> {
+  await api.post(`/help-requests/${id}/review`, { rating, comment: comment?.trim() || undefined });
 }

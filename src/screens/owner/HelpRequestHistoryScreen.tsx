@@ -4,6 +4,7 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { fetchHelpRequests, type HelpRequest } from '../../api/helpRequests';
 import type { OwnerStackParamList } from '../../navigation/types';
+import { isOwnerLiveHelpRequest } from '../../utils/helpRequestUi';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'HelpRequestHistory'>;
 
@@ -13,6 +14,9 @@ function formatDate(iso?: string | null) {
 }
 
 function vehicleLabel(item: HelpRequest) {
+  if (item.vehicle_description?.trim()) {
+    return item.vehicle_description.trim();
+  }
   const v = item.vehicle;
   if (!v) return '—';
   return [v.make?.name, v.model?.name, v.nickname].filter(Boolean).join(' ') || 'Vehicle';
@@ -31,6 +35,7 @@ export function HelpRequestHistoryScreen({ navigation }: Props) {
     setLoading(true);
     fetchHelpRequests()
       .then(setItems)
+      .catch(() => setItems([]))
       .finally(() => setLoading(false));
   }, []);
 
@@ -52,17 +57,20 @@ export function HelpRequestHistoryScreen({ navigation }: Props) {
       ListHeaderComponent={
         <View style={styles.header}>
           <Text style={styles.headerTitle}>My help history</Text>
-          <Text style={styles.headerHint}>Viewing history does not use help credits.</Text>
-          <Pressable onPress={() => navigation.navigate('HelpCredits')}>
-            <Text style={styles.creditsLink}>Help credits & usage</Text>
-          </Pressable>
+          <Text style={styles.headerHint}>Past emergency and service requests you submitted.</Text>
         </View>
       }
       ListEmptyComponent={<Text style={styles.empty}>No help requests yet.</Text>}
       renderItem={({ item }) => (
         <Pressable
           style={styles.card}
-          onPress={() => navigation.navigate('HelpRequestDetail', { helpRequestId: item.id })}
+          onPress={() => {
+            if (isOwnerLiveHelpRequest(item)) {
+              navigation.navigate('ActiveHelpRequest', { helpRequestId: item.id });
+            } else {
+              navigation.navigate('HelpRequestDetail', { helpRequestId: item.id });
+            }
+          }}
         >
           <Text style={styles.id}>Request #{item.id}</Text>
           <Text style={styles.type}>{item.request_type_label ?? item.request_type}</Text>
@@ -72,12 +80,22 @@ export function HelpRequestHistoryScreen({ navigation }: Props) {
           <Text style={styles.remarks} numberOfLines={2}>{item.remarks}</Text>
           <Text style={styles.meta}>Requested: {formatDate(item.created_at)}</Text>
           <Text style={styles.meta} numberOfLines={1}>Location: {locationLabel(item)}</Text>
-          {item.mechanic && <Text style={styles.meta}>Mechanic: {item.mechanic.business_name}</Text>}
+          {item.mechanic && item.status !== 'SEARCHING' && (
+            <Text style={styles.meta}>Mechanic: {item.mechanic.business_name}</Text>
+          )}
+          {item.status === 'SEARCHING' && item.search_progress && (
+            <Text style={styles.meta}>
+              Notified {item.search_progress.mechanics_notified_total} · waiting{' '}
+              {item.search_progress.mechanics_awaiting_response}
+            </Text>
+          )}
           {item.shop && <Text style={styles.meta}>Shop: {item.shop.name}</Text>}
           {item.accepted_at && <Text style={styles.meta}>Accepted: {formatDate(item.accepted_at)}</Text>}
           {item.completed_at && <Text style={styles.meta}>Completed: {formatDate(item.completed_at)}</Text>}
           {item.cancelled_at && <Text style={styles.meta}>Cancelled: {formatDate(item.cancelled_at)}</Text>}
-          <Text style={styles.tapHint}>Tap for full details</Text>
+          <Text style={styles.tapHint}>
+            {isOwnerLiveHelpRequest(item) ? 'Tap to track live' : 'Tap for full details'}
+          </Text>
         </Pressable>
       )}
     />
@@ -90,7 +108,6 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '700' },
   headerHint: { color: '#64748b', marginTop: 4, fontSize: 13 },
   empty: { textAlign: 'center', marginTop: 40, color: '#64748b' },
-  creditsLink: { color: '#0284c7', fontWeight: '600', marginTop: 12 },
   card: { marginHorizontal: 12, marginBottom: 12, padding: 16, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
   id: { fontWeight: '700', color: '#0f172a' },
   type: { color: '#475569', marginTop: 2, fontWeight: '500' },

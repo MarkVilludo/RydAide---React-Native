@@ -23,11 +23,12 @@ export function HelpRequestDetailScreen({ route }: Props) {
     return <ActivityIndicator style={{ marginTop: 40 }} />;
   }
 
-  const vehicleName = request.vehicle
-    ? [request.vehicle.make?.name, request.vehicle.model?.name, request.vehicle.nickname]
-        .filter(Boolean)
-        .join(' ')
-    : '—';
+  const vehicleName =
+    request.vehicle_description?.trim() ||
+    (request.vehicle
+      ? [request.vehicle.make?.name, request.vehicle.model?.name, request.vehicle.nickname].filter(Boolean).join(' ')
+      : '') ||
+    '—';
 
   const location =
     request.address_text ?? `${request.latitude.toFixed(5)}, ${request.longitude.toFixed(5)}`;
@@ -46,7 +47,9 @@ export function HelpRequestDetailScreen({ route }: Props) {
       <Row label="Accepted" value={formatDate(request.accepted_at)} />
       <Row label="Completed" value={formatDate(request.completed_at)} />
       {request.cancelled_at && <Row label="Cancelled" value={formatDate(request.cancelled_at)} />}
-      {request.mechanic && <Row label="Assigned mechanic" value={request.mechanic.business_name} />}
+      {request.mechanic && request.status !== 'SEARCHING' && (
+        <Row label="Assigned mechanic" value={request.mechanic.business_name} />
+      )}
       {request.shop && <Row label="Shop" value={request.shop.name} />}
 
       {request.answers && request.answers.length > 0 && (

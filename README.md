@@ -57,3 +57,19 @@ After any `.env` change, restart Expo: `npx expo start -c`.
 **Optional:** set `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` only if you want Google Maps SDK tiles; restrict the key to Maps SDK for Android/iOS and set a $0 budget alert (details in `docs/MAPS.md`).
 
 Admin CMS: http://localhost:8000/admin/login (default `admin@rydaid.test` / `password` after seeding).
+
+## E2E HELP flow (test data)
+
+Seed nearby mechanics on the API, then mock GPS to the anchor:
+
+```bash
+cd ../RydAid
+php artisan db:seed --class=E2EHelpFlowSeeder
+php artisan rydaid:e2e-info
+```
+
+Full steps (accounts, coordinates **14.4280, 120.9370**, queue worker):  
+[../RydAid/docs/E2E-HELP-MOBILE.md](../RydAid/docs/E2E-HELP-MOBILE.md)
+
+- Owner: `driver.test@rydaid.local` / `password`
+- Mechanic: `mechanic1.test@rydaid.local` / `password`

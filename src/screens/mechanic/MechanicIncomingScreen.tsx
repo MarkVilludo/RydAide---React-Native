@@ -6,10 +6,15 @@ import type { MechanicStackParamList } from '../../navigation/types';
 import { getApiErrorMessage } from '../../api/client';
 import { acceptHelpRequest, declineHelpRequest, fetchMechanicHelpQueues } from '../../api/mechanicHelp';
 import type { HelpRequest } from '../../api/helpRequests';
+import { vehicleTitle } from '../../utils/helpRequestUi';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'IncomingRequests'>;
 
 export function MechanicIncomingScreen({ navigation }: Props) {
+  React.useEffect(() => {
+    navigation.replace('MechanicRequests', { tab: 'incoming' });
+  }, [navigation]);
+
   const [incoming, setIncoming] = useState<HelpRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -68,12 +73,7 @@ export function MechanicIncomingScreen({ navigation }: Props) {
           {item.request_type === 'EMERGENCY' && <Text style={styles.emergency}>🚨 EMERGENCY</Text>}
           {item.owner?.name && <Text style={styles.ownerName}>Owner: {item.owner.name}</Text>}
           <Text style={styles.title}>{item.problem_category?.name}</Text>
-          {item.vehicle && (
-            <Text style={styles.vehicle}>
-              {[item.vehicle.make?.name, item.vehicle.model?.name].filter(Boolean).join(' ')}
-              {item.vehicle.current_mileage != null ? ` · ${item.vehicle.current_mileage.toLocaleString()} km` : ''}
-            </Text>
-          )}
+          <Text style={styles.vehicle}>{vehicleTitle(item)}</Text>
           <Text style={styles.remarks} numberOfLines={2}>{item.remarks}</Text>
           <Pressable
             style={styles.detailsBtn}

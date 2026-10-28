@@ -86,3 +86,10 @@ export async function updateMechanicProfile(payload: MechanicProfilePayload) {
   const { data } = await api.put('/mechanic/profile', payload);
   return data.data.mechanic as MechanicResult;
 }
+
+export async function updateMechanicAvailability(
+  availability_status: 'available' | 'offline',
+): Promise<MechanicResult> {
+  const { data } = await api.patch('/mechanic/availability', { availability_status });
+  return data.data.mechanic as MechanicResult;
+}

@@ -20,14 +20,9 @@ import {
   fetchMechanicHelpRequest,
 } from '../../api/mechanicHelp';
 import type { MechanicStackParamList } from '../../navigation/types';
+import { vehicleTitle } from '../../utils/helpRequestUi';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'IncomingRequestDetail'>;
-
-function vehicleLabel(request: HelpRequest) {
-  const v = request.vehicle;
-  if (!v) return 'Vehicle';
-  return [v.make?.name, v.model?.name, v.variant?.name].filter(Boolean).join(' ') || v.nickname || 'Vehicle';
-}
 
 export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props) {
   const { helpRequestId } = route.params;
@@ -109,7 +104,7 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
         <Text style={styles.ownerName}>Vehicle owner: {request.owner.name}</Text>
       )}
 
-      <Text style={styles.vehicle}>{vehicleLabel(request)}</Text>
+      <Text style={styles.vehicle}>{vehicleTitle(request)}</Text>
       {request.vehicle?.current_mileage != null && (
         <Text style={styles.mileage}>{request.vehicle.current_mileage.toLocaleString()} km</Text>
       )}

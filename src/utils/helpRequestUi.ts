@@ -1,6 +1,9 @@
 import type { HelpRequest } from '../api/helpRequests';
 
 export function vehicleTitle(request: HelpRequest): string {
+  if (request.vehicle_description?.trim()) {
+    return request.vehicle_description.trim();
+  }
   const v = request.vehicle;
   if (!v) return 'Vehicle';
   const label = [v.make?.name, v.model?.name, v.variant?.name].filter(Boolean).join(' ');
@@ -33,4 +36,24 @@ export function isActiveJobStatus(status: string): boolean {
 
 export function canOpenActiveJobMap(request: HelpRequest): boolean {
   return isActiveJobStatus(jobStatusOf(request)) && !!request.job;
+}
+
+const OWNER_LIVE_STATUSES = new Set([
+  'SEARCHING',
+  'ACCEPTED',
+  'ON_THE_WAY',
+  'ARRIVED',
+  'IN_PROGRESS',
+]);
+
+export function isOwnerLiveHelpRequest(request: HelpRequest): boolean {
+  if (OWNER_LIVE_STATUSES.has(request.status)) {
+    return true;
+  }
+  const job = jobStatusOf(request);
+  return isActiveJobStatus(job);
+}
+
+export function isOwnerTerminalHelpRequest(request: HelpRequest): boolean {
+  return ['COMPLETED', 'CANCELLED', 'EXPIRED', 'NO_MECHANIC_FOUND'].includes(request.status);
 }

@@ -7,6 +7,7 @@ import { MechanicIncomingRequestDetailScreen } from '../screens/mechanic/Mechani
 import { MechanicIncomingScreen } from '../screens/mechanic/MechanicIncomingScreen';
 import { MechanicRequestDetailScreen } from '../screens/mechanic/MechanicRequestDetailScreen';
 import { MechanicRequestsScreen } from '../screens/mechanic/MechanicRequestsScreen';
+import { MechanicSubscriptionScreen } from '../screens/mechanic/MechanicSubscriptionScreen';
 import type { MechanicStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<MechanicStackParamList>();
@@ -14,7 +15,7 @@ const Stack = createNativeStackNavigator<MechanicStackParamList>();
 export function MechanicNavigator() {
   return (
     <Stack.Navigator>
-      <Stack.Screen name="MechanicHome" component={MechanicHomeScreen} options={{ title: 'Dashboard' }} />
+      <Stack.Screen name="MechanicHome" component={MechanicHomeScreen} options={{ headerShown: false }} />
       <Stack.Screen
         name="MechanicOnboarding"
         component={MechanicOnboardingScreen}
@@ -33,6 +34,11 @@ export function MechanicNavigator() {
         options={{ title: 'Request details' }}
       />
       <Stack.Screen name="ActiveJob" component={MechanicActiveJobScreen} options={{ title: 'Active job' }} />
+      <Stack.Screen
+        name="MechanicSubscription"
+        component={MechanicSubscriptionScreen}
+        options={{ title: 'Mechanic Pro' }}
+      />
     </Stack.Navigator>
   );
 }

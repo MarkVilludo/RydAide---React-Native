@@ -36,6 +36,13 @@ export interface HelpRequestsEntitlement {
   unlimited: boolean;
 }
 
+export interface AcceptedRequestsEntitlement {
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+  unlimited: boolean;
+}
+
 export interface Entitlements {
   plan_code: string;
   max_vehicles?: number | null;
@@ -45,8 +52,12 @@ export interface Entitlements {
   help_requests_remaining?: number | null;
   unlimited_help_requests?: boolean;
   help_requests?: HelpRequestsEntitlement;
+  directory_listing_free?: boolean;
   max_accepted_requests?: number | null;
   accepted_requests_used?: number;
   accepted_requests_remaining?: number | null;
   unlimited_accepted_requests?: boolean;
+  accepted_requests?: AcceptedRequestsEntitlement;
+  can_accept_help_requests?: boolean;
+  mechanic_pro_monthly_price_php?: number;
 }

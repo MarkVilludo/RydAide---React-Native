@@ -1,32 +1,27 @@
 import { api } from './client';
 
-export interface Vehicle {
+export interface OwnerVehicle {
   id: number;
-  nickname: string | null;
-  plate_number: string | null;
-  year: number | null;
-  current_mileage: number;
+  nickname?: string | null;
+  plate_number?: string | null;
+  year?: number | null;
+  current_mileage?: number;
+  is_active?: boolean;
   vehicle_type?: { id: number; name: string };
-  make?: { id: number; name: string };
-  model?: { id: number; name: string };
+  make?: { id: number; name: string } | null;
+  model?: { id: number; name: string } | null;
   variant?: { id: number; name: string } | null;
 }
 
-export async function fetchVehicles(): Promise<Vehicle[]> {
-  const { data } = await api.get('/vehicles');
-  return data.data.vehicles;
+export function vehicleDisplayLabel(v: OwnerVehicle): string {
+  const main = [v.make?.name, v.model?.name, v.variant?.name].filter(Boolean).join(' ');
+  if (v.nickname?.trim()) {
+    return main ? `${main} (${v.nickname.trim()})` : v.nickname.trim();
+  }
+  return main || 'Vehicle';
 }
 
-export async function createVehicle(payload: {
-  vehicle_type_id: number;
-  vehicle_make_id: number;
-  vehicle_model_id: number;
-  vehicle_variant_id?: number;
-  year?: number;
-  current_mileage?: number;
-  plate_number?: string;
-  nickname?: string;
-}): Promise<Vehicle> {
-  const { data } = await api.post('/vehicles', payload);
-  return data.data.vehicle;
+export async function fetchOwnerVehicles(): Promise<OwnerVehicle[]> {
+  const { data } = await api.get('/vehicles');
+  return data.data.vehicles as OwnerVehicle[];
 }

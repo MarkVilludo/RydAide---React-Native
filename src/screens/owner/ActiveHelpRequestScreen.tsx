@@ -1,5 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,13 +16,20 @@ import {
   cancelHelpRequest,
   fetchHelpRequest,
   respondToHelpRequestQuote,
+  submitHelpRequestReview,
   type HelpRequest,
 } from '../../api/helpRequests';
+import { HelpRequestCompletionPanel } from '../../components/HelpRequestCompletionPanel';
+import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
+import { HelpJourneyTimeline } from '../../components/HelpJourneyTimeline';
+import { HelpSearchProgressCard } from '../../components/HelpSearchProgressCard';
+import { MapSearchOverlay } from '../../components/MapSearchOverlay';
 import { ServicePricingCard } from '../../components/ServicePricingCard';
 import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSummary';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import type { OwnerStackParamList } from '../../navigation/types';
-import { jobStatusLabelOf, jobStatusOf } from '../../utils/helpRequestUi';
+import { activeJourneyHeadline, buildHelpJourneySteps } from '../../utils/helpJourney';
+import { jobStatusLabelOf, jobStatusOf, vehicleTitle } from '../../utils/helpRequestUi';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'ActiveHelpRequest'>;
 
@@ -32,187 +39,351 @@ function mechanicDisplayName(request: HelpRequest) {
   return m.display_name || m.mechanic_name || m.business_name || 'Mechanic';
 }
 
-function etaText(tracking: HelpRequest['tracking']) {
-  if (!tracking?.eta) return null;
-  const { label, minutes_min, minutes_max } = tracking.eta;
-  if (label === 'Arrived' || label === 'Arriving') return label;
-  return `${minutes_min}–${minutes_max} minutes`;
-}
-
-export function ActiveHelpRequestScreen({ route }: Props) {
+export function ActiveHelpRequestScreen({ route, navigation }: Props) {
   const { helpRequestId } = route.params;
   const [request, setRequest] = useState<HelpRequest | null>(null);
   const [connectionLost, setConnectionLost] = useState(false);
   const [quoteActing, setQuoteActing] = useState(false);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const cancelLock = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
     const load = () =>
       fetchHelpRequest(helpRequestId)
         .then((data) => {
+          if (cancelled) return;
           setRequest(data);
           setConnectionLost(false);
+          const job = data.job_status ?? data.job?.status ?? data.status;
+          const terminal =
+            ['COMPLETED', 'CANCELLED', 'EXPIRED', 'NO_MECHANIC_FOUND'].includes(data.status) ||
+            job === 'COMPLETED';
+          if (terminal && timer) {
+            clearInterval(timer);
+            timer = undefined;
+          }
         })
-        .catch(() => setConnectionLost(true));
+        .catch(() => {
+          if (!cancelled) setConnectionLost(true);
+        });
     load();
-    const timer = setInterval(load, 5000);
-    return () => clearInterval(timer);
+    timer = setInterval(load, 4000);
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+    };
   }, [helpRequestId]);
+
+  const journeySteps = useMemo(() => (request ? buildHelpJourneySteps(request) : []), [request]);
 
   if (!request) {
     return (
-      <View style={{ marginTop: 40, alignItems: 'center' }}>
-        <ActivityIndicator />
-        {connectionLost && <Text style={{ marginTop: 12, color: '#dc2626' }}>Connection lost</Text>}
+      <View style={styles.loadingWrap}>
+        <ActivityIndicator size="large" color="#0284c7" />
+        <Text style={styles.loadingText}>Loading your request…</Text>
+        {connectionLost && <Text style={styles.connectionLost}>Connection lost</Text>}
       </View>
     );
   }
 
   const searching = request.status === 'SEARCHING';
+  const failedMatch = request.status === 'NO_MECHANIC_FOUND' || request.status === 'EXPIRED';
+  const cancelled = request.status === 'CANCELLED';
   const jobStatus = jobStatusOf(request);
+  const completed = jobStatus === 'COMPLETED' || request.status === 'COMPLETED';
   const accepted =
-    request.status === 'ACCEPTED' || ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'IN_PROGRESS'].includes(jobStatus);
+    !completed &&
+    !failedMatch &&
+    !cancelled &&
+    (request.status === 'ACCEPTED' ||
+      ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'IN_PROGRESS'].includes(jobStatus));
   const tracking = request.tracking;
   const mechanicLoc = tracking?.mechanic_location;
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>
-        {searching
-          ? 'SEARCHING FOR A MECHANIC'
-          : accepted
-            ? `${mechanicDisplayName(request)} accepted your request`
-            : request.status_label ?? request.status}
-      </Text>
-      <Text style={styles.problem}>{request.problem_category?.name}</Text>
-      <Text style={styles.remarks}>{request.remarks}</Text>
-      <Text style={styles.meta}>Status: {accepted ? jobStatusLabelOf(request) : request.status_label ?? request.status}</Text>
-
-      {accepted && request.mechanic && (
-        <View style={styles.card}>
-          <View style={styles.mechanicRow}>
-            {request.mechanic.avatar_url ? (
-              <Image source={{ uri: request.mechanic.avatar_url }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder} />
-            )}
-            <View style={styles.mechanicInfo}>
-              <Text style={styles.shop}>{mechanicDisplayName(request)}</Text>
-              <Text>★ {request.mechanic.rating_average.toFixed(1)}</Text>
-              {request.mechanic.verification_status && (
-                <Text style={styles.verified}>
-                  {request.mechanic.is_verified ? 'Verified mechanic' : 'Verification pending'}
-                </Text>
-              )}
-              {request.mechanic.vehicle_types && request.mechanic.vehicle_types.length > 0 && (
-                <Text style={styles.specialty}>
-                  {request.mechanic.vehicle_types.map((t) => t.name).join(', ')}
-                </Text>
-              )}
-            </View>
-          </View>
-
-          <ActiveJobLocationSummary
-            tracking={tracking}
-            connectionLost={connectionLost}
-            viewerRole="owner"
-          />
-
-          {request.mechanic.phone && (
-            <Pressable onPress={() => Linking.openURL(`tel:${request.mechanic!.phone}`)}>
-              <Text style={styles.call}>Call mechanic</Text>
-            </Pressable>
-          )}
-
-          <ServicePricingCard
-            pricing={request.job?.pricing}
-            viewerRole="owner"
-            acting={quoteActing}
-            onAcceptQuote={async () => {
-              setQuoteActing(true);
-              try {
-                const updated = await respondToHelpRequestQuote(helpRequestId, 'accept');
-                setRequest(updated);
-              } catch (e) {
-                Alert.alert('Quote', getApiErrorMessage(e));
-              } finally {
-                setQuoteActing(false);
-              }
-            }}
-            onRejectQuote={async () => {
-              setQuoteActing(true);
-              try {
-                const updated = await respondToHelpRequestQuote(helpRequestId, 'reject');
-                setRequest(updated);
-              } catch (e) {
-                Alert.alert('Quote', getApiErrorMessage(e));
-              } finally {
-                setQuoteActing(false);
-              }
-            }}
-          />
-        </View>
-      )}
-
-      {accepted && (
-        <HelpRequestMap
-          request={{
-            latitude: request.latitude,
-            longitude: request.longitude,
-            title: 'Your location',
-          }}
-          mechanic={
-            mechanicLoc
-              ? {
-                  latitude: mechanicLoc.latitude,
-                  longitude: mechanicLoc.longitude,
-                  title: mechanicDisplayName(request),
-                }
-              : null
-          }
-          height={240}
-        />
-      )}
-
-      {tracking?.eta_disclaimer && <Text style={styles.disclaimer}>{tracking.eta_disclaimer}</Text>}
-
-      {searching && (
-        <Pressable
-          style={styles.cancel}
-          onPress={async () => {
+  const confirmCancel = () => {
+    Alert.alert(
+      'Cancel request?',
+      searching
+        ? 'Stop searching for a mechanic?'
+        : 'Cancel while the mechanic is assigned? They will be notified.',
+      [
+        { text: 'Keep request', style: 'cancel' },
+        {
+          text: 'Cancel request',
+          style: 'destructive',
+          onPress: async () => {
+            if (cancelLock.current) return;
+            cancelLock.current = true;
             try {
               await cancelHelpRequest(helpRequestId);
+              const updated = await fetchHelpRequest(helpRequestId);
+              setRequest(updated);
             } catch (e) {
+              cancelLock.current = false;
               Alert.alert('Cancel failed', getApiErrorMessage(e));
             }
-          }}
-        >
-          <Text style={styles.cancelText}>Cancel request</Text>
-        </Pressable>
-      )}
-    </ScrollView>
+          },
+        },
+      ],
+    );
+  };
+
+  return (
+    <View style={styles.root}>
+      <View style={styles.mapWrap}>
+        {accepted ? (
+          <HelpRequestMap
+            request={{
+              latitude: request.latitude,
+              longitude: request.longitude,
+              title: 'You',
+            }}
+            mechanic={
+              mechanicLoc
+                ? {
+                    latitude: mechanicLoc.latitude,
+                    longitude: mechanicLoc.longitude,
+                    title: mechanicDisplayName(request),
+                  }
+                : null
+            }
+            height={280}
+          />
+        ) : (
+          <View style={styles.mapPlaceholder}>
+            <HelpRequestMap
+              request={{
+                latitude: request.latitude,
+                longitude: request.longitude,
+                title: 'You',
+              }}
+              height={280}
+            />
+            {searching && (
+              <MapSearchOverlay
+                visible
+                message="Finding a mechanic"
+                submessage={
+                  request.search_progress
+                    ? `${request.search_progress.mechanics_notified_total} notified · ${request.search_progress.mechanics_awaiting_response} waiting`
+                    : 'Contacting providers near you'
+                }
+              />
+            )}
+          </View>
+        )}
+      </View>
+
+      <ScrollView style={styles.sheetScroll} contentContainerStyle={styles.sheetScrollContent}>
+        <GrabStyleBottomSheet>
+          <Text style={styles.headline}>{activeJourneyHeadline(request)}</Text>
+          <Text style={styles.problem}>{request.problem_category?.name}</Text>
+
+          <HelpJourneyTimeline steps={journeySteps} compact />
+
+          {searching && request.search_progress && (
+            <HelpSearchProgressCard progress={request.search_progress} />
+          )}
+
+          {(failedMatch || cancelled) && (
+            <View style={styles.terminalCard}>
+              <Text style={styles.terminalTitle}>{request.status_label ?? request.status}</Text>
+              <Text style={styles.terminalBody}>
+                {failedMatch
+                  ? 'No mechanic accepted in time. You can try again from Find Mechanic.'
+                  : 'This request was cancelled.'}
+              </Text>
+              {failedMatch && (
+                <Pressable
+                  style={styles.retryBtn}
+                  onPress={() => navigation.replace('NeedHelp', { emergency: true })}
+                >
+                  <Text style={styles.retryBtnText}>Try again</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+
+          {completed && (
+            <HelpRequestCompletionPanel
+              request={request}
+              submitting={reviewSubmitting}
+              onSubmitReview={async (rating, comment) => {
+                setReviewSubmitting(true);
+                try {
+                  await submitHelpRequestReview(helpRequestId, rating, comment);
+                  const updated = await fetchHelpRequest(helpRequestId);
+                  setRequest(updated);
+                } catch (e) {
+                  Alert.alert('Review', getApiErrorMessage(e));
+                } finally {
+                  setReviewSubmitting(false);
+                }
+              }}
+            />
+          )}
+
+          <View style={styles.summaryStrip}>
+            <Text style={styles.summaryText}>{vehicleTitle(request)}</Text>
+            <Text style={styles.summarySub} numberOfLines={2}>
+              {request.problem_category?.name} · {request.remarks}
+            </Text>
+          </View>
+
+          {accepted && request.mechanic && (
+            <View style={styles.card}>
+              <View style={styles.mechanicRow}>
+                {request.mechanic.avatar_url ? (
+                  <Image source={{ uri: request.mechanic.avatar_url }} style={styles.avatar} />
+                ) : (
+                  <View style={styles.avatarPlaceholder} />
+                )}
+                <View style={styles.mechanicInfo}>
+                  <Text style={styles.shop}>{mechanicDisplayName(request)}</Text>
+                  <Text style={styles.rating}>★ {request.mechanic.rating_average.toFixed(1)}</Text>
+                  {request.mechanic.is_verified && (
+                    <Text style={styles.verified}>Verified mechanic</Text>
+                  )}
+                  {request.mechanic.rating_count != null && request.mechanic.rating_count > 0 && (
+                    <Text style={styles.jobCount}>
+                      {request.mechanic.rating_count} completed jobs
+                    </Text>
+                  )}
+                </View>
+              </View>
+
+              <Text style={styles.statusLine}>{jobStatusLabelOf(request)}</Text>
+
+              <ActiveJobLocationSummary
+                tracking={tracking}
+                connectionLost={connectionLost}
+                viewerRole="owner"
+              />
+
+              {request.mechanic.phone && (
+                <Pressable
+                  style={styles.callBtn}
+                  onPress={() => Linking.openURL(`tel:${request.mechanic!.phone}`)}
+                >
+                  <Text style={styles.callBtnText}>Call mechanic</Text>
+                </Pressable>
+              )}
+
+              <ServicePricingCard
+                pricing={request.job?.pricing}
+                viewerRole="owner"
+                acting={quoteActing}
+                onAcceptQuote={async () => {
+                  setQuoteActing(true);
+                  try {
+                    const updated = await respondToHelpRequestQuote(helpRequestId, 'accept');
+                    setRequest(updated);
+                  } catch (e) {
+                    Alert.alert('Quote', getApiErrorMessage(e));
+                  } finally {
+                    setQuoteActing(false);
+                  }
+                }}
+                onRejectQuote={async () => {
+                  setQuoteActing(true);
+                  try {
+                    const updated = await respondToHelpRequestQuote(helpRequestId, 'reject');
+                    setRequest(updated);
+                  } catch (e) {
+                    Alert.alert('Quote', getApiErrorMessage(e));
+                  } finally {
+                    setQuoteActing(false);
+                  }
+                }}
+              />
+            </View>
+          )}
+
+          {!searching && !accepted && (
+            <Text style={styles.remarks}>{request.remarks}</Text>
+          )}
+
+          {tracking?.eta_disclaimer && (
+            <Text style={styles.disclaimer}>{tracking.eta_disclaimer}</Text>
+          )}
+
+          {(searching || (accepted && request.status === 'ACCEPTED')) && (
+            <Pressable style={styles.cancelBtn} onPress={confirmCancel}>
+              <Text style={styles.cancelBtnText}>Cancel request</Text>
+            </Pressable>
+          )}
+        </GrabStyleBottomSheet>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  content: { padding: 20, paddingBottom: 32 },
-  title: { fontSize: 22, fontWeight: '700' },
-  problem: { fontSize: 18, marginTop: 12 },
-  remarks: { color: '#475569', marginTop: 8 },
-  meta: { marginTop: 12, color: '#64748b' },
-  card: { marginTop: 20, backgroundColor: '#fff', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  root: { flex: 1, backgroundColor: '#e2e8f0' },
+  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  loadingText: { color: '#64748b' },
+  connectionLost: { color: '#dc2626' },
+  mapWrap: { height: 280, backgroundColor: '#cbd5e1' },
+  mapPlaceholder: { flex: 1, position: 'relative' },
+  sheetScroll: { flex: 1 },
+  sheetScrollContent: { flexGrow: 1 },
+  headline: { fontSize: 22, fontWeight: '800', color: '#0f172a' },
+  problem: { fontSize: 16, color: '#475569', marginTop: 4, marginBottom: 8 },
+  card: {
+    marginTop: 16,
+    backgroundColor: '#f8fafc',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
   mechanicRow: { flexDirection: 'row', gap: 12 },
   avatar: { width: 56, height: 56, borderRadius: 28 },
   avatarPlaceholder: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#e2e8f0' },
   mechanicInfo: { flex: 1 },
-  shop: { fontSize: 17, fontWeight: '600' },
-  verified: { color: '#16a34a', marginTop: 4, fontSize: 13 },
-  specialty: { color: '#64748b', marginTop: 4, fontSize: 13 },
-  tracking: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
-  trackingLine: { fontSize: 16, fontWeight: '600', marginTop: 4 },
-  live: { fontSize: 12, color: '#0284c7', marginTop: 6 },
-  call: { color: '#0284c7', marginTop: 12, fontWeight: '600' },
+  shop: { fontSize: 17, fontWeight: '700' },
+  rating: { marginTop: 4, color: '#64748b' },
+  jobCount: { marginTop: 2, color: '#64748b', fontSize: 13 },
+  verified: { color: '#16a34a', marginTop: 4, fontSize: 13, fontWeight: '600' },
+  statusLine: { marginTop: 12, fontSize: 15, fontWeight: '600', color: '#0284c7' },
+  callBtn: {
+    marginTop: 12,
+    backgroundColor: '#0284c7',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  callBtnText: { color: '#fff', fontWeight: '700' },
+  remarks: { marginTop: 12, color: '#475569', lineHeight: 20 },
   disclaimer: { marginTop: 12, fontSize: 12, color: '#94a3b8', textAlign: 'center' },
-  cancel: { marginTop: 24, alignItems: 'center' },
-  cancelText: { color: '#b91c1c' },
+  cancelBtn: { marginTop: 20, paddingVertical: 14, alignItems: 'center' },
+  cancelBtnText: { color: '#b91c1c', fontWeight: '600', fontSize: 16 },
+  terminalCard: {
+    marginTop: 12,
+    padding: 14,
+    backgroundColor: '#fef2f2',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  terminalTitle: { fontWeight: '800', color: '#b91c1c', fontSize: 17 },
+  terminalBody: { color: '#475569', marginTop: 6, lineHeight: 20 },
+  retryBtn: {
+    marginTop: 14,
+    backgroundColor: '#0284c7',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  retryBtnText: { color: '#fff', fontWeight: '700' },
+  summaryStrip: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+  },
+  summaryText: { fontWeight: '700', color: '#0f172a' },
+  summarySub: { color: '#64748b', marginTop: 4, fontSize: 13 },
 });

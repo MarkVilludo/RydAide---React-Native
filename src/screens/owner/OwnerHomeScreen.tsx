@@ -1,171 +1,347 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { fetchEntitlements } from '../../api/auth';
-import { fetchVehicles, type Vehicle } from '../../api/vehicles';
-import type { Entitlements } from '../../api/types';
-import { useAuth } from '../../context/AuthContext';
+import { DrawerActions } from '@react-navigation/native';
+import React, { useEffect, useRef } from 'react';
+import {
+  Animated,
+  Easing,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import type { OwnerStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'OwnerHome'>;
 
-export function OwnerHomeScreen({ navigation }: Props) {
-  const { user, signOut } = useAuth();
-  const { config } = useAppConfig();
-  const emergencyOn = config?.features.emergency_assistance ?? false;
-  const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
-  const [primaryVehicle, setPrimaryVehicle] = useState<Vehicle | null>(null);
+function PulseRadar() {
+  const rings = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
 
-  const refresh = useCallback(() => {
-    fetchEntitlements().then(setEntitlements).catch(() => setEntitlements(null));
-    fetchVehicles()
-      .then((list) => setPrimaryVehicle(list[0] ?? null))
-      .catch(() => setPrimaryVehicle(null));
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      refresh();
-    }, [refresh]),
-  );
+  useEffect(() => {
+    const animations = rings.map((value, index) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(index * 700),
+          Animated.timing(value, {
+            toValue: 1,
+            duration: 2400,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ]),
+      ),
+    );
+    animations.forEach((a) => a.start());
+    return () => animations.forEach((a) => a.stop());
+  }, [rings]);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.greeting}>Hello, {user?.name}</Text>
-
-      {config?.rollout.area_label ? (
-        <Text style={styles.rollout}>
-          Growing network in {config.rollout.area_label}. Search any location — results show verified providers within
-          your radius only.
-        </Text>
-      ) : null}
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Current vehicle</Text>
-        {primaryVehicle ? (
-          <>
-            <Text style={styles.vehicleName}>{primaryVehicle.nickname ?? 'My vehicle'}</Text>
-            <Text style={styles.muted}>
-              {[primaryVehicle.make?.name, primaryVehicle.model?.name].filter(Boolean).join(' ')}
-            </Text>
-            <Text style={styles.muted}>{primaryVehicle.current_mileage.toLocaleString()} km</Text>
-          </>
-        ) : (
-          <Text style={styles.muted}>No vehicle yet — add one (free plan: 1 vehicle).</Text>
-        )}
-        <Pressable style={styles.linkButton} onPress={() => navigation.navigate('MyVehicles')}>
-          <Text style={styles.linkText}>Manage vehicles</Text>
-        </Pressable>
-        {!primaryVehicle && (
-          <Pressable style={styles.addButton} onPress={() => navigation.navigate('AddVehicle')}>
-            <Text style={styles.addButtonText}>Add vehicle</Text>
-          </Pressable>
-        )}
+    <View style={radarStyles.wrap} pointerEvents="none">
+      {rings.map((value, i) => {
+        const scale = value.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1.35] });
+        const opacity = value.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0, 0.55, 0] });
+        return (
+          <Animated.View
+            key={i}
+            style={[radarStyles.ring, { transform: [{ scale }], opacity }]}
+          />
+        );
+      })}
+      <View style={radarStyles.dotOuter}>
+        <View style={radarStyles.dotInner} />
       </View>
-
-      {emergencyOn ? (
-        <>
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Help requests</Text>
-            <Text style={styles.muted}>Plan: {entitlements?.plan_code ?? '…'}</Text>
-            {entitlements?.unlimited_help_requests || entitlements?.help_requests?.unlimited ? (
-              <Text style={styles.creditHighlight}>Unlimited</Text>
-            ) : (
-              <>
-                <Text style={styles.creditHighlight}>
-                  {entitlements?.help_requests_remaining ?? entitlements?.help_requests?.remaining ?? '…'} remaining
-                </Text>
-                <Text style={styles.muted}>
-                  {entitlements?.help_requests_used ?? entitlements?.help_requests?.used ?? 0} of{' '}
-                  {entitlements?.max_help_requests ?? entitlements?.help_requests?.limit ?? '…'} used
-                </Text>
-              </>
-            )}
-            <View style={styles.linkRow}>
-              <Pressable onPress={() => navigation.navigate('HelpRequestHistory')}>
-                <Text style={styles.linkText}>View help history</Text>
-              </Pressable>
-              <Text style={styles.linkSep}> · </Text>
-              <Pressable onPress={() => navigation.navigate('HelpCredits')}>
-                <Text style={styles.linkText}>Help credits</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <Pressable style={styles.helpButton} onPress={() => navigation.navigate('NeedHelp', { emergency: true })}>
-            <Text style={styles.helpText}>🆘 NEED HELP</Text>
-          </Pressable>
-        </>
-      ) : (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Directory</Text>
-          <Text style={styles.muted}>
-            Browse verified mechanics and shops near you. Emergency dispatch opens once enough providers are active in
-            your area.
-          </Text>
-        </View>
-      )}
-
-      <View style={styles.row}>
-        <Pressable style={styles.rowBtn} onPress={() => navigation.navigate('FindMechanic')}>
-          <Text style={styles.rowBtnText}>Find mechanic</Text>
-        </Pressable>
-        <Pressable style={styles.rowBtn} onPress={() => navigation.navigate('FindShop')}>
-          <Text style={styles.rowBtnText}>Find shop</Text>
-        </Pressable>
-      </View>
-      <Pressable style={styles.rowBtnSingle} onPress={() => navigation.navigate('MyVehicles')}>
-        <Text style={styles.rowBtnText}>Maintenance</Text>
-      </Pressable>
-
-      <Pressable style={styles.secondary} onPress={signOut}>
-        <Text style={styles.secondaryText}>Sign out</Text>
-      </Pressable>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: '#f8fafc' },
-  greeting: { fontSize: 22, fontWeight: '600', color: '#0f172a', marginBottom: 16 },
-  rollout: { color: '#475569', marginBottom: 16, lineHeight: 20 },
-  muted: { color: '#64748b', marginTop: 4 },
+const radarStyles = StyleSheet.create({
+  wrap: { width: 120, height: 120, alignItems: 'center', justifyContent: 'center', marginVertical: 8 },
+  ring: {
+    position: 'absolute',
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    borderWidth: 2,
+    borderColor: '#38bdf8',
+  },
+  dotOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(56, 189, 248, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dotInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#38bdf8' },
+});
+
+function FeatureChip({ icon, label }: { icon: string; label: string }) {
+  return (
+    <View style={chipStyles.chip}>
+      <Text style={chipStyles.icon}>{icon}</Text>
+      <Text style={chipStyles.label}>{label}</Text>
+    </View>
+  );
+}
+
+const chipStyles = StyleSheet.create({
+  chip: {
+    flex: 1,
+    minWidth: 96,
+    backgroundColor: 'rgba(15, 23, 42, 0.06)',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+  },
+  icon: { fontSize: 18, marginBottom: 4 },
+  label: { fontSize: 11, fontWeight: '600', color: '#334155', textAlign: 'center', lineHeight: 14 },
+});
+
+function ActionCard({
+  title,
+  subtitle,
+  emoji,
+  accent,
+  onPress,
+  delay,
+}: {
+  title: string;
+  subtitle: string;
+  emoji: string;
+  accent: string;
+  onPress: () => void;
+  delay: number;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(16)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 450,
+        delay,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 450,
+        delay,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [delay, opacity, translateY]);
+
+  return (
+    <Animated.View style={{ flex: 1, opacity, transform: [{ translateY }] }}>
+      <Pressable
+        style={({ pressed }) => [actionStyles.card, { borderLeftColor: accent }, pressed && actionStyles.cardPressed]}
+        onPress={onPress}
+      >
+        <Text style={actionStyles.emoji}>{emoji}</Text>
+        <Text style={actionStyles.title}>{title}</Text>
+        <Text style={actionStyles.subtitle}>{subtitle}</Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+const actionStyles = StyleSheet.create({
   card: {
+    flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    marginBottom: 16,
+    borderLeftWidth: 4,
+    minHeight: 118,
   },
-  cardTitle: { fontWeight: '600', marginBottom: 8 },
-  creditHighlight: { fontSize: 18, fontWeight: '700', color: '#0284c7' },
-  vehicleName: { fontSize: 18, fontWeight: '600' },
-  linkButton: { marginTop: 12 },
-  linkRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12, flexWrap: 'wrap' },
-  linkSep: { color: '#94a3b8' },
-  linkText: { color: '#0284c7', fontWeight: '500' },
-  addButton: {
-    marginTop: 12,
-    backgroundColor: '#0284c7',
-    borderRadius: 8,
-    padding: 12,
+  cardPressed: { opacity: 0.92, transform: [{ scale: 0.98 }] },
+  emoji: { fontSize: 28, marginBottom: 8 },
+  title: { fontSize: 16, fontWeight: '700', color: '#0f172a', marginBottom: 4 },
+  subtitle: { fontSize: 13, color: '#64748b', lineHeight: 18 },
+});
+
+export function OwnerHomeScreen({ navigation }: Props) {
+  const { config } = useAppConfig();
+  const heroOpacity = useRef(new Animated.Value(0)).current;
+  const heroY = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    heroOpacity.setValue(0);
+    heroY.setValue(20);
+    Animated.parallel([
+      Animated.timing(heroOpacity, {
+        toValue: 1,
+        duration: 550,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(heroY, {
+        toValue: 0,
+        duration: 550,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [heroOpacity, heroY]);
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <View style={styles.topBar}>
+        <Pressable
+          style={styles.menuBtn}
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+          accessibilityRole="button"
+          accessibilityLabel="Open menu"
+        >
+          <Text style={styles.menuIcon}>☰</Text>
+        </Pressable>
+        <Text style={styles.topTitle}>RydAid</Text>
+        <View style={styles.menuBtnPlaceholder} />
+      </View>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View
+          style={[styles.hero, { opacity: heroOpacity, transform: [{ translateY: heroY }] }]}
+        >
+          <View style={styles.heroTopRow}>
+            <View style={styles.badge}>
+              <View style={styles.badgeDot} />
+              <Text style={styles.badgeText}>Roadside & emergency ready</Text>
+            </View>
+          </View>
+
+          <Text style={styles.heroTitle}>Help when you're stuck</Text>
+          <Text style={styles.heroSub}>
+            RydAid connects you to verified mechanics and repair shops near your location — for emergencies or when
+            you just need someone trusted nearby.
+          </Text>
+
+          <View style={styles.heroVisualRow}>
+            <PulseRadar />
+            <View style={styles.heroBullets}>
+              <Text style={styles.bullet}>• Share your location & vehicle details</Text>
+              <Text style={styles.bullet}>• Match with providers in your search radius</Text>
+              <Text style={styles.bullet}>• Or browse the directory anytime</Text>
+            </View>
+          </View>
+
+          <View style={styles.chipRow}>
+            <FeatureChip icon="📍" label="Near you" />
+            <FeatureChip icon="✓" label="Verified" />
+            <FeatureChip icon="⚡" label="Fast dispatch" />
+          </View>
+        </Animated.View>
+
+        {config?.rollout.area_label ? (
+          <View style={styles.rolloutBanner}>
+            <Text style={styles.rolloutTitle}>Growing in {config.rollout.area_label}</Text>
+            <Text style={styles.rolloutBody}>
+              Search any location — results show verified providers within your chosen radius only.
+            </Text>
+          </View>
+        ) : null}
+
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Find nearby</Text>
+          <View style={styles.actionRow}>
+            <ActionCard
+              emoji="🔧"
+              title="Mechanics"
+              subtitle="Mobile & on-call pros around you"
+              accent="#0284c7"
+              delay={280}
+              onPress={() => navigation.navigate('FindMechanic')}
+            />
+            <ActionCard
+              emoji="🏪"
+              title="Shops"
+              subtitle="Verified garages & service centers"
+              accent="#7c3aed"
+              delay={380}
+              onPress={() => navigation.navigate('FindShop')}
+            />
+          </View>
+        </View>
+
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: '#f1f5f9' },
+  topBar: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingBottom: 4,
   },
-  addButtonText: { color: '#fff', fontWeight: '600' },
-  helpButton: {
-    backgroundColor: '#dc2626',
+  menuBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  menuBtnPlaceholder: { width: 44 },
+  menuIcon: { fontSize: 24, color: '#0f172a' },
+  topTitle: { fontSize: 17, fontWeight: '700', color: '#0f172a' },
+  scroll: { flex: 1 },
+  scrollContent: { padding: 20, paddingTop: 8, paddingBottom: 32 },
+  hero: {
+    backgroundColor: '#0f172a',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  heroTopRow: { flexDirection: 'row', marginBottom: 12 },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    gap: 6,
+  },
+  badgeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e' },
+  badgeText: { color: '#e0f2fe', fontSize: 12, fontWeight: '600' },
+  heroTitle: { color: '#f8fafc', fontSize: 26, fontWeight: '800', letterSpacing: -0.5, marginBottom: 8 },
+  heroSub: { color: '#94a3b8', fontSize: 14, lineHeight: 21, marginBottom: 4 },
+  heroVisualRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  heroBullets: { flex: 1, paddingRight: 4 },
+  bullet: { color: '#cbd5e1', fontSize: 12, lineHeight: 18, marginBottom: 4 },
+  chipRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  rolloutBanner: {
+    backgroundColor: '#e0f2fe',
     borderRadius: 12,
-    padding: 18,
-    alignItems: 'center',
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
   },
-  helpText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  row: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  rowBtn: { flex: 1, padding: 14, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
-  rowBtnText: { color: '#0284c7', fontWeight: '600' },
-  rowBtnSingle: { marginTop: 8, padding: 14, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
-  secondary: { marginTop: 24, alignItems: 'center' },
-  secondaryText: { color: '#0284c7' },
+  rolloutTitle: { fontWeight: '700', color: '#0369a1', marginBottom: 4 },
+  rolloutBody: { color: '#0c4a6e', fontSize: 13, lineHeight: 19 },
+  section: { marginBottom: 20 },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  actionRow: { flexDirection: 'row', gap: 10 },
 });

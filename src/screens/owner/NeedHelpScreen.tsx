@@ -1,8 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,48 +20,133 @@ import {
   fetchProblemCategories,
   type ProblemCategory,
 } from '../../api/helpRequests';
-import { fetchOwnerHelpEntitlement } from '../../api/helpEntitlement';
-import { fetchVehicles, type Vehicle } from '../../api/vehicles';
-import type { OwnerHelpEntitlement } from '../../api/helpEntitlement';
+import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
+import { HelpRequestMap } from '../../components/HelpRequestMap';
+import { LocationPickMap } from '../../components/LocationPickMap';
+import { useAppConfig } from '../../hooks/useAppConfig';
+import { useEnsureNearbyProviders } from '../../hooks/useEnsureNearbyProviders';
 import type { OwnerStackParamList } from '../../navigation/types';
+import { NeedHelpVehicleStep } from './NeedHelpVehicleStep';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'NeedHelp'>;
 
+type Step = 'vehicle' | 'problem' | 'location' | 'review';
+
+const STEPS: Step[] = ['vehicle', 'problem', 'location', 'review'];
+
 export function NeedHelpScreen({ navigation, route }: Props) {
   const emergency = route.params?.emergency ?? true;
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const { config } = useAppConfig();
+  const submitLock = useRef(false);
+
+  const [step, setStep] = useState<Step>('vehicle');
+  const [vehicleDescription, setVehicleDescription] = useState('');
+
   const [categories, setCategories] = useState<ProblemCategory[]>([]);
-  const [vehicleId, setVehicleId] = useState<number | null>(null);
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [remarks, setRemarks] = useState('');
-  const [lat, setLat] = useState<number | null>(null);
-  const [lng, setLng] = useState<number | null>(null);
-  const [address, setAddress] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const [questions, setQuestions] = useState<Array<{ id: number; question_text: string }>>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [entitlement, setEntitlement] = useState<OwnerHelpEntitlement | null>(null);
   const [photoUris, setPhotoUris] = useState<string[]>([]);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchOwnerHelpEntitlement().then(setEntitlement).catch(() => setEntitlement(null));
-    }, []),
-  );
+  const [lat, setLat] = useState<number | null>(route.params?.latitude ?? null);
+  const [lng, setLng] = useState<number | null>(route.params?.longitude ?? null);
+  const [landmark, setLandmark] = useState('');
+  const [locating, setLocating] = useState(false);
+  const [address, setAddress] = useState('');
+
+  const [submitting, setSubmitting] = useState(false);
+
+  useEnsureNearbyProviders(lat, lng, config?.features.dynamic_nearby_seed === true);
 
   React.useEffect(() => {
-    fetchVehicles().then((v) => {
-      setVehicles(v);
-      if (v[0]) setVehicleId(v[0].id);
-    });
-    fetchProblemCategories().then(setCategories);
+    fetchProblemCategories()
+      .then(setCategories)
+      .catch(() => setCategories([]));
   }, []);
 
   React.useEffect(() => {
     if (!categoryId) return;
-    fetchCategoryQuestions(categoryId).then(setQuestions);
+    fetchCategoryQuestions(categoryId)
+      .then(setQuestions)
+      .catch(() => setQuestions([]));
     setAnswers({});
   }, [categoryId]);
+
+  const stepIndex = STEPS.indexOf(step);
+
+  const reverseGeocode = async (latitude: number, longitude: number) => {
+    try {
+      const rev = await Location.reverseGeocodeAsync({ latitude, longitude });
+      if (rev[0]) {
+        const line = [rev[0].street, rev[0].city, rev[0].region].filter(Boolean).join(', ');
+        setAddress(line);
+      }
+    } catch {
+      setAddress('');
+    }
+  };
+
+  const captureLocation = async () => {
+    setLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Location required', 'We need your location to dispatch nearby mechanics.');
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({});
+      setLat(pos.coords.latitude);
+      setLng(pos.coords.longitude);
+      await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (lat != null && lng != null && !address) {
+      reverseGeocode(lat, lng);
+    }
+  }, [lat, lng]);
+
+  const onCenterChange = (center: { latitude: number; longitude: number }) => {
+    setLat(center.latitude);
+    setLng(center.longitude);
+    reverseGeocode(center.latitude, center.longitude);
+  };
+
+  const vehicleValid = () => vehicleDescription.trim().length >= 2;
+
+  const problemValid = () => categoryId != null && remarks.trim().length >= 10;
+
+  const locationValid = () => lat != null && lng != null;
+
+  const goNext = () => {
+    if (step === 'vehicle' && !vehicleValid()) {
+      Alert.alert('Vehicle', 'Describe your vehicle (at least 2 characters).');
+      return;
+    }
+    if (step === 'problem' && !problemValid()) {
+      Alert.alert('Problem', 'Pick a category and describe what happened (10+ characters).');
+      return;
+    }
+    if (step === 'location' && !locationValid()) {
+      Alert.alert('Location', 'Confirm where you need help on the map.');
+      return;
+    }
+    const next = STEPS[stepIndex + 1];
+    if (next) setStep(next);
+  };
+
+  const goBack = () => {
+    if (stepIndex === 0) {
+      navigation.goBack();
+      return;
+    }
+    const prev = STEPS[stepIndex - 1];
+    if (prev) setStep(prev);
+  };
 
   const pickPhotos = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -86,40 +170,24 @@ export function NeedHelpScreen({ navigation, route }: Props) {
     }
   };
 
-  const captureLocation = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Location required', 'We need your location to dispatch nearby mechanics.');
-      return;
-    }
-    const pos = await Location.getCurrentPositionAsync({});
-    setLat(pos.coords.latitude);
-    setLng(pos.coords.longitude);
-    const rev = await Location.reverseGeocodeAsync({
-      latitude: pos.coords.latitude,
-      longitude: pos.coords.longitude,
-    });
-    if (rev[0]) {
-      const line = [rev[0].street, rev[0].city, rev[0].region].filter(Boolean).join(', ');
-      setAddress(line);
-    }
-  };
-
   const submit = async () => {
-    if (!vehicleId || !categoryId || remarks.length < 10 || lat === null || lng === null) {
-      Alert.alert('Incomplete', 'Select vehicle, problem, describe what happened (10+ chars), and confirm location.');
+    if (submitLock.current || submitting) return;
+    if (!vehicleValid() || !categoryId || !problemValid() || lat === null || lng === null) {
+      Alert.alert('Incomplete', 'Check all steps before submitting.');
       return;
     }
+    submitLock.current = true;
     setSubmitting(true);
     try {
+      const addressText = [landmark.trim(), address].filter(Boolean).join(' · ') || address;
       const helpRequest = await createHelpRequest({
-        vehicle_id: vehicleId,
+        vehicle_description: vehicleDescription.trim(),
         problem_category_id: categoryId,
         request_type: emergency ? 'EMERGENCY' : 'SERVICE',
-        remarks,
+        remarks: remarks.trim(),
         latitude: lat,
         longitude: lng,
-        address_text: address,
+        address_text: addressText || undefined,
         answers: Object.entries(answers).map(([question_id, answer]) => ({
           question_id: Number(question_id),
           answer,
@@ -128,156 +196,228 @@ export function NeedHelpScreen({ navigation, route }: Props) {
       });
       navigation.replace('ActiveHelpRequest', { helpRequestId: helpRequest.id });
     } catch (error) {
+      submitLock.current = false;
       Alert.alert('Could not submit', getApiErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const help = entitlement?.help_requests;
-  const noCreditsLeft = help && !help.unlimited && help.remaining === 0;
+  const selectedCategory = categories.find((c) => c.id === categoryId);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text style={styles.banner}>{emergency ? '🆘 EMERGENCY HELP' : 'Request service'}</Text>
-      {help && (
-        <View style={styles.creditCard}>
-          <Text style={styles.creditTitle}>Help credits ({entitlement?.plan_code ?? 'FREE'})</Text>
-          {help.unlimited ? (
-            <Text style={styles.creditBody}>Unlimited help requests</Text>
-          ) : (
-            <>
-              <Text style={styles.creditBody}>
-                {help.used} of {help.limit} used · {help.remaining} remaining
-              </Text>
-              <Pressable onPress={() => navigation.navigate('HelpCredits')}>
-                <Text style={styles.creditLink}>View usage history</Text>
-              </Pressable>
-            </>
-          )}
-        </View>
-      )}
-      {noCreditsLeft && (
-        <View style={styles.limitBox}>
-          <Text style={styles.limitWarning}>
-            You have used all {help?.limit} free help requests. Upgrade to Premium for unlimited help requests.
-          </Text>
-        </View>
-      )}
-      <Text style={styles.hint}>We will notify nearby qualified mechanics. You do not pick a mechanic manually.</Text>
-
-      <Text style={styles.label}>1. Vehicle</Text>
-      <View style={styles.chips}>
-        {vehicles.map((v) => (
-          <Pressable key={v.id} style={[styles.chip, vehicleId === v.id && styles.chipOn]} onPress={() => setVehicleId(v.id)}>
-            <Text style={vehicleId === v.id ? styles.chipOnText : undefined}>{v.nickname ?? 'Vehicle'}</Text>
-          </Pressable>
+    <View style={styles.root}>
+      <View style={styles.progressRow}>
+        {STEPS.map((s, i) => (
+          <View key={s} style={[styles.progressDot, i <= stepIndex && styles.progressDotOn]} />
         ))}
       </View>
 
-      <Text style={styles.label}>2. Problem</Text>
-      <View style={styles.chips}>
-        {categories.map((c) => (
-          <Pressable key={c.id} style={[styles.chip, categoryId === c.id && styles.chipOn]} onPress={() => setCategoryId(c.id)}>
-            <Text style={categoryId === c.id ? styles.chipOnText : undefined}>{c.name}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        {step === 'vehicle' && (
+          <NeedHelpVehicleStep value={vehicleDescription} onChange={setVehicleDescription} />
+        )}
 
-      {questions.map((q) => (
-        <View key={q.id} style={{ marginBottom: 8 }}>
-          <Text style={styles.subLabel}>{q.question_text}</Text>
-          <View style={styles.chips}>
-            {['yes', 'no', 'unsure'].map((opt) => (
-              <Pressable
-                key={opt}
-                style={[styles.chip, answers[q.id] === opt && styles.chipOn]}
-                onPress={() => setAnswers((prev) => ({ ...prev, [q.id]: opt }))}
-              >
-                <Text style={answers[q.id] === opt ? styles.chipOnText : undefined}>{opt}</Text>
-              </Pressable>
+        {step === 'problem' && (
+          <>
+            <Text style={styles.title}>What happened?</Text>
+            <View style={styles.chips}>
+              {categories.map((c) => (
+                <Pressable
+                  key={c.id}
+                  style={[styles.chip, categoryId === c.id && styles.chipOn]}
+                  onPress={() => setCategoryId(c.id)}
+                >
+                  <Text style={categoryId === c.id ? styles.chipOnText : undefined}>{c.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {questions.map((q) => (
+              <View key={q.id} style={{ marginTop: 12 }}>
+                <Text style={styles.subLabel}>{q.question_text}</Text>
+                <View style={styles.chips}>
+                  {['yes', 'no', 'unsure'].map((opt) => (
+                    <Pressable
+                      key={opt}
+                      style={[styles.chip, answers[q.id] === opt && styles.chipOn]}
+                      onPress={() => setAnswers((prev) => ({ ...prev, [q.id]: opt }))}
+                    >
+                      <Text style={answers[q.id] === opt ? styles.chipOnText : undefined}>{opt}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
             ))}
-          </View>
-        </View>
-      ))}
-
-      <Text style={styles.label}>3. Describe what happened</Text>
-      <TextInput
-        style={styles.input}
-        multiline
-        placeholder="Motor suddenly stopped while riding..."
-        value={remarks}
-        onChangeText={setRemarks}
-      />
-
-      <Text style={styles.label}>4. Location</Text>
-      <Pressable style={styles.secondaryBtn} onPress={captureLocation}>
-        <Text style={styles.secondaryBtnText}>{lat ? 'Update location' : 'Use my current location'}</Text>
-      </Pressable>
-      {lat !== null && <Text style={styles.meta}>{address || `${lat.toFixed(4)}, ${lng?.toFixed(4)}`}</Text>}
-
-      <Text style={styles.label}>5. Photos (optional, max 2)</Text>
-      <Pressable style={styles.secondaryBtn} onPress={pickPhotos}>
-        <Text style={styles.secondaryBtnText}>
-          {photoUris.length === 0 ? 'Add photos' : `Add photos (${photoUris.length}/2)`}
-        </Text>
-      </Pressable>
-      <View style={styles.photoRow}>
-        {photoUris.map((uri) => (
-          <View key={uri} style={styles.photoWrap}>
-            <Image source={{ uri }} style={styles.photoThumb} />
-            <Pressable
-              style={styles.photoRemove}
-              onPress={() => setPhotoUris((prev) => prev.filter((u) => u !== uri))}
-            >
-              <Text style={styles.photoRemoveText}>×</Text>
+            <Text style={styles.label}>Details</Text>
+            <TextInput
+              style={styles.input}
+              multiline
+              placeholder="Describe the problem (10+ characters)…"
+              value={remarks}
+              onChangeText={setRemarks}
+            />
+            <Pressable style={styles.secondaryBtn} onPress={pickPhotos}>
+              <Text style={styles.secondaryBtnText}>
+                {photoUris.length === 0 ? 'Add photos (optional)' : `Photos (${photoUris.length}/2)`}
+              </Text>
             </Pressable>
-          </View>
-        ))}
-      </View>
+            <View style={styles.photoRow}>
+              {photoUris.map((uri) => (
+                <View key={uri} style={styles.photoWrap}>
+                  <Image source={{ uri }} style={styles.photoThumb} />
+                </View>
+              ))}
+            </View>
+          </>
+        )}
 
-      <Pressable style={styles.primary} onPress={submit} disabled={submitting || noCreditsLeft}>
-        {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Submit — find mechanics</Text>}
-      </Pressable>
-    </ScrollView>
+        {step === 'location' && (
+          <>
+            <Text style={styles.title}>Where are you?</Text>
+            <LocationPickMap
+              center={lat != null && lng != null ? { latitude: lat, longitude: lng } : null}
+              onCenterChange={onCenterChange}
+              onUseMyLocation={captureLocation}
+              locating={locating}
+              height={240}
+            />
+            <Text style={styles.label}>Landmark or directions (optional)</Text>
+            <TextInput
+              style={styles.singleLineInput}
+              placeholder="e.g. beside 7-Eleven, northbound lane"
+              value={landmark}
+              onChangeText={setLandmark}
+            />
+            {address ? <Text style={styles.meta}>{address}</Text> : null}
+          </>
+        )}
+
+        {step === 'review' && lat != null && lng != null && (
+          <>
+            <Text style={styles.title}>Review & request</Text>
+            <GrabStyleBottomSheet>
+              <ReviewRow label="Vehicle" value={vehicleDescription.trim() || '—'} />
+              <ReviewRow label="Problem" value={selectedCategory?.name ?? '—'} />
+              <ReviewRow label="Details" value={remarks} />
+              <ReviewRow
+                label="Location"
+                value={[landmark, address].filter(Boolean).join(' · ') || `${lat.toFixed(4)}, ${lng.toFixed(4)}`}
+              />
+              <HelpRequestMap
+                request={{ latitude: lat, longitude: lng, title: 'You' }}
+                height={140}
+              />
+              <Text style={styles.reviewHint}>
+                {emergency
+                  ? 'We notify nearby verified mechanics. The first to accept comes to you.'
+                  : 'We will match you with an available mechanic.'}
+              </Text>
+            </GrabStyleBottomSheet>
+          </>
+        )}
+      </ScrollView>
+
+      <View style={styles.footer}>
+        <Pressable style={styles.backBtn} onPress={goBack} disabled={submitting}>
+          <Text style={styles.backBtnText}>{stepIndex === 0 ? 'Cancel' : 'Back'}</Text>
+        </Pressable>
+        {step !== 'review' ? (
+          <Pressable style={styles.primary} onPress={goNext}>
+            <Text style={styles.primaryText}>Continue</Text>
+          </Pressable>
+        ) : (
+          <Pressable style={styles.primary} onPress={submit} disabled={submitting}>
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.primaryText}>{emergency ? 'Request help now' : 'Submit request'}</Text>
+            )}
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function ReviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.reviewRow}>
+      <Text style={styles.reviewLabel}>{label}</Text>
+      <Text style={styles.reviewValue}>{value}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc', padding: 16 },
-  banner: { fontSize: 20, fontWeight: '700', color: '#b91c1c' },
-  hint: { color: '#64748b', marginVertical: 12 },
-  creditCard: { backgroundColor: '#fff', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 8 },
-  creditTitle: { fontWeight: '600', color: '#0f172a' },
-  creditBody: { color: '#475569', marginTop: 4 },
-  creditLink: { color: '#0284c7', marginTop: 8, fontWeight: '600' },
-  limitBox: { backgroundColor: '#fef2f2', padding: 12, borderRadius: 8, marginBottom: 8 },
-  limitWarning: { color: '#b91c1c', fontWeight: '500' },
+  root: { flex: 1, backgroundColor: '#f8fafc' },
+  progressRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingTop: 8 },
+  progressDot: { flex: 1, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0' },
+  progressDotOn: { backgroundColor: '#0284c7' },
+  scroll: { flex: 1 },
+  scrollContent: { padding: 16, paddingBottom: 24 },
+  title: { fontSize: 22, fontWeight: '800', color: '#0f172a', marginBottom: 16 },
   label: { fontWeight: '600', marginTop: 16, marginBottom: 8 },
   subLabel: { fontSize: 13, color: '#475569', marginBottom: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, backgroundColor: '#fff', borderWidth: 1, borderColor: '#cbd5e1' },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
   chipOn: { backgroundColor: '#0284c7', borderColor: '#0284c7' },
   chipOnText: { color: '#fff', fontWeight: '600' },
-  input: { minHeight: 100, backgroundColor: '#fff', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, padding: 12, textAlignVertical: 'top' },
-  secondaryBtn: { padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#0284c7', borderRadius: 10 },
+  input: {
+    minHeight: 100,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 10,
+    padding: 12,
+    textAlignVertical: 'top',
+  },
+  singleLineInput: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 10,
+    padding: 12,
+  },
+  secondaryBtn: {
+    marginTop: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#0284c7',
+    borderRadius: 10,
+  },
   secondaryBtnText: { color: '#0284c7', fontWeight: '600' },
   meta: { marginTop: 8, color: '#64748b' },
   photoRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
   photoWrap: { position: 'relative' },
-  photoThumb: { width: 88, height: 88, borderRadius: 8 },
-  photoRemove: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    backgroundColor: '#0f172a',
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
+  photoThumb: { width: 72, height: 72, borderRadius: 8 },
+  reviewRow: { marginBottom: 10 },
+  reviewLabel: { fontSize: 12, color: '#64748b', fontWeight: '600', textTransform: 'uppercase' },
+  reviewValue: { fontSize: 15, color: '#0f172a', marginTop: 2, lineHeight: 20 },
+  reviewHint: { marginTop: 12, color: '#64748b', fontSize: 13, lineHeight: 18 },
+  footer: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    backgroundColor: '#fff',
   },
-  photoRemoveText: { color: '#fff', fontWeight: '700', fontSize: 14, lineHeight: 16 },
-  primary: { marginTop: 24, backgroundColor: '#dc2626', padding: 16, borderRadius: 12, alignItems: 'center' },
+  backBtn: { paddingVertical: 14, paddingHorizontal: 16, justifyContent: 'center' },
+  backBtnText: { color: '#64748b', fontWeight: '600' },
+  primary: {
+    flex: 1,
+    backgroundColor: '#dc2626',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
   primaryText: { color: '#fff', fontWeight: '700' },
 });

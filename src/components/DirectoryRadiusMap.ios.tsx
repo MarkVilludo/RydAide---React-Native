@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Circle, Marker } from 'react-native-maps';
-import type { MechanicResult } from '../api/mechanics';
+import type { MapDirectoryPin } from '../types/mapPins';
 import { regionForRadiusKm } from '../utils/mapRegion';
 
 export type SearchCenter = {
@@ -12,7 +12,7 @@ export type SearchCenter = {
 type Props = {
   center: SearchCenter | null;
   radiusKm: number;
-  mechanics?: MechanicResult[];
+  pins?: MapDirectoryPin[];
   onCenterChange: (center: SearchCenter) => void;
   onUseMyLocation?: () => void;
   locating?: boolean;
@@ -22,7 +22,7 @@ type Props = {
 export function DirectoryRadiusMap({
   center,
   radiusKm,
-  mechanics = [],
+  pins = [],
   onCenterChange,
   onUseMyLocation,
   locating,
@@ -83,21 +83,15 @@ export function DirectoryRadiusMap({
             />
           </>
         ) : null}
-        {mechanics.map((m) => {
-          if (m.latitude == null || m.longitude == null) return null;
-
-          return (
-            <Marker
-              key={m.id}
-              coordinate={{ latitude: m.latitude, longitude: m.longitude }}
-              title={m.business_name}
-              description={
-                m.distance_km != null ? `${m.distance_km} km · ★ ${m.rating_average}` : undefined
-              }
-              pinColor="#16a34a"
-            />
-          );
-        })}
+        {pins.map((pin) => (
+          <Marker
+            key={`${pin.markerKeyPrefix ?? 'listing'}-${pin.id}`}
+            coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
+            title={pin.title}
+            description={pin.snippet}
+            pinColor="#16a34a"
+          />
+        ))}
       </MapView>
 
       <View style={styles.overlay}>

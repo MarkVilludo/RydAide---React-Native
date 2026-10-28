@@ -19,6 +19,7 @@ import {
   declineHelpRequest,
   fetchMechanicHelpRequest,
 } from '../../api/mechanicHelp';
+import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { formatRequestDate, isActiveJobStatus, jobStatusLabelOf, jobStatusOf, vehicleTitle } from '../../utils/helpRequestUi';
@@ -55,6 +56,7 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
   const canAccept =
     request?.status === 'SEARCHING' && request.mechanic_dispatch?.response !== 'declined';
   const isDeclined = request?.mechanic_dispatch?.response === 'declined';
+  const isIncomingOffer = canAccept;
 
   const onAccept = async () => {
     setActing(true);
@@ -109,44 +111,74 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {request.request_type === 'EMERGENCY' && <Text style={styles.emergency}>Emergency request</Text>}
-      <Text style={styles.status}>Status: {jobStatusLabelOf(request)}</Text>
-      <Text style={styles.created}>Created {formatRequestDate(request.created_at)}</Text>
+      {isIncomingOffer ? (
+        <>
+          <HelpRequestMap
+            request={{ latitude: request.latitude, longitude: request.longitude, title: 'Customer' }}
+            height={200}
+          />
+          <GrabStyleBottomSheet>
+            <Text style={styles.incomingTitle}>{request.problem_category?.name}</Text>
+            {request.distance_km != null && (
+              <Text style={styles.distance}>{request.distance_km} km away</Text>
+            )}
+            <Text style={styles.created}>Offer received {formatRequestDate(request.created_at)}</Text>
+            <Text style={styles.remarks}>{request.remarks}</Text>
+            <Text style={styles.bold}>{vehicleTitle(request)}</Text>
+            <Text style={styles.muted}>Customer details unlock after you accept.</Text>
+            {request.answers?.map((a) => (
+              <View key={a.question_id} style={styles.answer}>
+                <Text style={styles.muted}>{a.question}</Text>
+                <Text>{a.answer}</Text>
+              </View>
+            ))}
+          </GrabStyleBottomSheet>
+        </>
+      ) : (
+        <>
+          <Text style={styles.status}>Status: {jobStatusLabelOf(request)}</Text>
+          <Text style={styles.created}>Created {formatRequestDate(request.created_at)}</Text>
+          <Section title="Customer">
+            <Text style={styles.bold}>{request.owner?.name ?? '—'}</Text>
+            {request.owner?.phone && <Text>{request.owner.phone}</Text>}
+          </Section>
+        </>
+      )}
 
-      <Section title="Customer">
-        <Text style={styles.bold}>{request.owner?.name ?? '—'}</Text>
-        {request.owner?.phone && <Text>{request.owner.phone}</Text>}
-      </Section>
+      {!isIncomingOffer && (
+        <>
+          <Section title="Vehicle">
+            <Text style={styles.bold}>{vehicleTitle(request)}</Text>
+            {request.vehicle?.year != null && <Text>Year: {request.vehicle.year}</Text>}
+            {request.vehicle?.current_mileage != null && (
+              <Text>Mileage: {request.vehicle.current_mileage.toLocaleString()} km</Text>
+            )}
+          </Section>
 
-      <Section title="Vehicle">
-        <Text style={styles.bold}>{vehicleTitle(request)}</Text>
-        {request.vehicle?.year != null && <Text>Year: {request.vehicle.year}</Text>}
-        {request.vehicle?.current_mileage != null && (
-          <Text>Mileage: {request.vehicle.current_mileage.toLocaleString()} km</Text>
-        )}
-      </Section>
+          <Section title="Problem">
+            <Text style={styles.bold}>{request.problem_category?.name}</Text>
+            <Text style={styles.remarks}>{request.remarks}</Text>
+            {request.answers?.map((a) => (
+              <View key={a.question_id} style={styles.answer}>
+                <Text style={styles.muted}>{a.question}</Text>
+                <Text>{a.answer}</Text>
+              </View>
+            ))}
+          </Section>
 
-      <Section title="Problem">
-        <Text style={styles.bold}>{request.problem_category?.name}</Text>
-        <Text style={styles.remarks}>{request.remarks}</Text>
-        {request.answers?.map((a) => (
-          <View key={a.question_id} style={styles.answer}>
-            <Text style={styles.muted}>{a.question}</Text>
-            <Text>{a.answer}</Text>
-          </View>
-        ))}
-      </Section>
-
-      <Section title="Location">
-        {request.distance_km != null && <Text>{request.distance_km} km away</Text>}
-        <Text>{request.address_text ?? `${request.latitude}, ${request.longitude}`}</Text>
-        <HelpRequestMap
-          request={{ latitude: request.latitude, longitude: request.longitude, title: 'Customer' }}
-          height={180}
-        />
-        <Pressable onPress={openMaps}>
-          <Text style={styles.link}>Open in maps</Text>
-        </Pressable>
-      </Section>
+          <Section title="Location">
+            {request.distance_km != null && <Text>{request.distance_km} km away</Text>}
+            <Text>{request.address_text ?? `${request.latitude}, ${request.longitude}`}</Text>
+            <HelpRequestMap
+              request={{ latitude: request.latitude, longitude: request.longitude, title: 'Customer' }}
+              height={180}
+            />
+            <Pressable onPress={openMaps}>
+              <Text style={styles.link}>Open in maps</Text>
+            </Pressable>
+          </Section>
+        </>
+      )}
 
       {request.media && request.media.length > 0 && (
         <Section title="Photos">
@@ -184,10 +216,14 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
       {canAccept && (
         <View style={styles.actions}>
           <Pressable style={styles.accept} onPress={onAccept} disabled={acting}>
-            <Text style={styles.acceptText}>ACCEPT</Text>
+            {acting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.acceptText}>Accept job</Text>
+            )}
           </Pressable>
           <Pressable style={styles.decline} onPress={onDecline} disabled={acting}>
-            <Text style={styles.declineText}>DECLINE</Text>
+            <Text style={styles.declineText}>Decline</Text>
           </Pressable>
         </View>
       )}
@@ -237,4 +273,6 @@ const styles = StyleSheet.create({
   acceptText: { color: '#fff', fontWeight: '800' },
   decline: { flex: 1, backgroundColor: '#f1f5f9', padding: 14, borderRadius: 10, alignItems: 'center' },
   declineText: { fontWeight: '700' },
+  incomingTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
+  distance: { fontSize: 16, fontWeight: '700', color: '#0284c7', marginTop: 4 },
 });

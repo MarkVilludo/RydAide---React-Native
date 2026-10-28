@@ -20,6 +20,7 @@ import {
   updateMechanicProfile,
   type GovIdType,
 } from '../../api/mechanicProfile';
+import { useAppConfig } from '../../hooks/useAppConfig';
 import type { MechanicStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'MechanicOnboarding'>;
@@ -33,13 +34,15 @@ const GOV_ID_OPTIONS: { value: GovIdType; label: string }[] = [
 ];
 
 export function MechanicOnboardingScreen({ navigation }: Props) {
+  const { config } = useAppConfig();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [existingId, setExistingId] = useState<number | null>(null);
   const [businessName, setBusinessName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [serviceRadiusKm, setServiceRadiusKm] = useState('15');
+  const defaultServiceRadius = config?.directory.default_mechanic_service_radius_km ?? 15;
+  const [serviceRadiusKm, setServiceRadiusKm] = useState(String(defaultServiceRadius));
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [vehicleTypeIds, setVehicleTypeIds] = useState<number[]>([]);

@@ -1,3 +1,5 @@
+import type { NavigatorScreenParams } from '@react-navigation/native';
+
 export type AuthStackParamList = {
   Login: undefined;
   Register: undefined;
@@ -5,15 +7,20 @@ export type AuthStackParamList = {
 
 export type OwnerStackParamList = {
   OwnerHome: undefined;
-  MyVehicles: undefined;
-  AddVehicle: undefined;
   FindMechanic: undefined;
-  NeedHelp: { emergency?: boolean };
+  NeedHelp: {
+    emergency?: boolean;
+    latitude?: number;
+    longitude?: number;
+  };
   ActiveHelpRequest: { helpRequestId: number };
   HelpRequestHistory: undefined;
   HelpRequestDetail: { helpRequestId: number };
-  HelpCredits: undefined;
   FindShop: undefined;
+};
+
+export type OwnerDrawerParamList = {
+  OwnerMain: NavigatorScreenParams<OwnerStackParamList>;
 };
 
 export type MechanicStackParamList = {
@@ -24,6 +31,7 @@ export type MechanicStackParamList = {
   IncomingRequestDetail: { helpRequestId: number };
   MechanicRequestDetail: { helpRequestId: number };
   ActiveJob: { helpRequestId: number; justAccepted?: boolean; initialRequest?: import('../api/helpRequests').HelpRequest };
+  MechanicSubscription: undefined;
 };
 
 export type RootStackParamList = {
