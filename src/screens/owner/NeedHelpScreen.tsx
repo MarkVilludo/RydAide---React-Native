@@ -5,7 +5,6 @@ import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,6 +20,7 @@ import {
   type ProblemCategory,
 } from '../../api/helpRequests';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
+import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { LocationPickMap } from '../../components/LocationPickMap';
 import { useAppConfig } from '../../hooks/useAppConfig';
@@ -116,7 +116,11 @@ export function NeedHelpScreen({ navigation, route }: Props) {
     reverseGeocode(center.latitude, center.longitude);
   };
 
-  const vehicleValid = () => vehicleDescription.trim().length >= 2;
+  const vehicleValid = () => {
+    const line = vehicleDescription.trim();
+    const main = line.split(' · ')[0]?.trim() ?? line;
+    return main.length >= 2;
+  };
 
   const problemValid = () => categoryId != null && remarks.trim().length >= 10;
 
@@ -181,7 +185,7 @@ export function NeedHelpScreen({ navigation, route }: Props) {
     try {
       const addressText = [landmark.trim(), address].filter(Boolean).join(' · ') || address;
       const helpRequest = await createHelpRequest({
-        vehicle_description: vehicleDescription.trim(),
+        vehicle_description: vehicleDescription.trim().slice(0, 255),
         problem_category_id: categoryId,
         request_type: emergency ? 'EMERGENCY' : 'SERVICE',
         remarks: remarks.trim(),
@@ -261,13 +265,9 @@ export function NeedHelpScreen({ navigation, route }: Props) {
                 {photoUris.length === 0 ? 'Add photos (optional)' : `Photos (${photoUris.length}/2)`}
               </Text>
             </Pressable>
-            <View style={styles.photoRow}>
-              {photoUris.map((uri) => (
-                <View key={uri} style={styles.photoWrap}>
-                  <Image source={{ uri }} style={styles.photoThumb} />
-                </View>
-              ))}
-            </View>
+            {photoUris.length > 0 ? (
+              <HelpRequestPhotoGallery localUris={photoUris} title="Attached photos" compact />
+            ) : null}
           </>
         )}
 
@@ -395,9 +395,6 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { color: '#0284c7', fontWeight: '600' },
   meta: { marginTop: 8, color: '#64748b' },
-  photoRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  photoWrap: { position: 'relative' },
-  photoThumb: { width: 72, height: 72, borderRadius: 8 },
   reviewRow: { marginBottom: 10 },
   reviewLabel: { fontSize: 12, color: '#64748b', fontWeight: '600', textTransform: 'uppercase' },
   reviewValue: { fontSize: 15, color: '#0f172a', marginTop: 2, lineHeight: 20 },

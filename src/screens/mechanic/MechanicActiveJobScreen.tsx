@@ -19,6 +19,7 @@ import { fetchMechanicHelpRequest, submitServiceQuote, updateJobStatus } from '.
 import { ServicePricingCard } from '../../components/ServicePricingCard';
 import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSummary';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
+import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { HelpRequestMapLegend } from '../../components/HelpRequestMapLegend';
 import { useDeviceLocation } from '../../hooks/useDeviceLocation';
 import { useMechanicLocationTracking } from '../../hooks/useMechanicLocationTracking';
@@ -152,6 +153,7 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
       <Text style={styles.vehicle}>{vehicleTitle(request)}</Text>
       <Text style={styles.problem}>{request.problem_category?.name}</Text>
       <Text style={styles.remarks}>{request.remarks}</Text>
+      <HelpRequestPhotoGallery media={request.media} title="Customer photos" compact />
       <Text style={styles.status}>Status: {jobStatusLabelOf(request)}</Text>
 
       <ServicePricingCard pricing={request.job?.pricing} viewerRole="mechanic" />

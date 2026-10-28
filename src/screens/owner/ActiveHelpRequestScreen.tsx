@@ -20,8 +20,10 @@ import {
   type HelpRequest,
 } from '../../api/helpRequests';
 import { HelpRequestCompletionPanel } from '../../components/HelpRequestCompletionPanel';
+import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { HelpJourneyTimeline } from '../../components/HelpJourneyTimeline';
+import { HelpRequestSearchingHero } from '../../components/HelpRequestSearchingHero';
 import { HelpSearchProgressCard } from '../../components/HelpSearchProgressCard';
 import { MapSearchOverlay } from '../../components/MapSearchOverlay';
 import { ServicePricingCard } from '../../components/ServicePricingCard';
@@ -102,6 +104,9 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
   const tracking = request.tracking;
   const mechanicLoc = tracking?.mechanic_location;
 
+  const canCancel =
+    searching || (accepted && request.status === 'ACCEPTED');
+
   const confirmCancel = () => {
     Alert.alert(
       'Cancel request?',
@@ -181,11 +186,26 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
           <Text style={styles.headline}>{activeJourneyHeadline(request)}</Text>
           <Text style={styles.problem}>{request.problem_category?.name}</Text>
 
+          {canCancel ? (
+            <Pressable
+              style={({ pressed }) => [styles.cancelSheetBtn, pressed && styles.cancelSheetBtnPressed]}
+              onPress={confirmCancel}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel request"
+            >
+              <Text style={styles.cancelSheetBtnText}>Cancel request</Text>
+            </Pressable>
+          ) : null}
+
           <HelpJourneyTimeline steps={journeySteps} compact />
 
-          {searching && request.search_progress && (
+          {searching ? (
+            <HelpRequestSearchingHero startedAt={request.created_at ?? new Date().toISOString()} />
+          ) : null}
+
+          {searching && request.search_progress ? (
             <HelpSearchProgressCard progress={request.search_progress} />
-          )}
+          ) : null}
 
           {(failedMatch || cancelled) && (
             <View style={styles.terminalCard}>
@@ -231,6 +251,8 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
               {request.problem_category?.name} · {request.remarks}
             </Text>
           </View>
+
+          <HelpRequestPhotoGallery media={request.media} title="Problem photos" compact />
 
           {accepted && request.mechanic && (
             <View style={styles.card}>
@@ -308,12 +330,6 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
           {tracking?.eta_disclaimer && (
             <Text style={styles.disclaimer}>{tracking.eta_disclaimer}</Text>
           )}
-
-          {(searching || (accepted && request.status === 'ACCEPTED')) && (
-            <Pressable style={styles.cancelBtn} onPress={confirmCancel}>
-              <Text style={styles.cancelBtnText}>Cancel request</Text>
-            </Pressable>
-          )}
         </GrabStyleBottomSheet>
       </ScrollView>
     </View>
@@ -327,6 +343,19 @@ const styles = StyleSheet.create({
   connectionLost: { color: '#dc2626' },
   mapWrap: { height: 280, backgroundColor: '#cbd5e1' },
   mapPlaceholder: { flex: 1, position: 'relative' },
+  cancelSheetBtn: {
+    marginTop: 12,
+    marginBottom: 4,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#dc2626',
+    backgroundColor: '#fef2f2',
+    alignItems: 'center',
+  },
+  cancelSheetBtnPressed: { opacity: 0.88, backgroundColor: '#fee2e2' },
+  cancelSheetBtnText: { color: '#dc2626', fontWeight: '800', fontSize: 16 },
   sheetScroll: { flex: 1 },
   sheetScrollContent: { flexGrow: 1 },
   headline: { fontSize: 22, fontWeight: '800', color: '#0f172a' },
@@ -358,8 +387,6 @@ const styles = StyleSheet.create({
   callBtnText: { color: '#fff', fontWeight: '700' },
   remarks: { marginTop: 12, color: '#475569', lineHeight: 20 },
   disclaimer: { marginTop: 12, fontSize: 12, color: '#94a3b8', textAlign: 'center' },
-  cancelBtn: { marginTop: 20, paddingVertical: 14, alignItems: 'center' },
-  cancelBtnText: { color: '#b91c1c', fontWeight: '600', fontSize: 16 },
   terminalCard: {
     marginTop: 12,
     padding: 14,

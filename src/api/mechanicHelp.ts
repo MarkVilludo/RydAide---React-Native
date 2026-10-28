@@ -26,8 +26,15 @@ export async function fetchActiveJob(): Promise<HelpRequest | null> {
   return data.data.help_request ?? null;
 }
 
-export async function fetchMechanicHelpQueues(): Promise<MechanicHelpQueues> {
-  const { data } = await api.get('/mechanic/help-requests');
+export async function fetchMechanicHelpQueues(coords?: {
+  latitude: number;
+  longitude: number;
+}): Promise<MechanicHelpQueues> {
+  const params =
+    coords != null
+      ? { latitude: coords.latitude, longitude: coords.longitude }
+      : undefined;
+  const { data } = await api.get('/mechanic/help-requests', { params });
   return data.data;
 }
 

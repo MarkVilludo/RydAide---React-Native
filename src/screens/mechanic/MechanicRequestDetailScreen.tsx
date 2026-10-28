@@ -3,7 +3,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Linking,
   Pressable,
   ScrollView,
@@ -21,6 +20,7 @@ import {
 } from '../../api/mechanicHelp';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
+import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { formatRequestDate, isActiveJobStatus, jobStatusLabelOf, jobStatusOf, vehicleTitle } from '../../utils/helpRequestUi';
 
@@ -180,15 +180,11 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
         </>
       )}
 
-      {request.media && request.media.length > 0 && (
+      {request.media && request.media.length > 0 ? (
         <Section title="Photos">
-          <ScrollView horizontal>
-            {request.media.map((m) => (
-              <Image key={m.id} source={{ uri: m.url }} style={styles.photo} />
-            ))}
-          </ScrollView>
+          <HelpRequestPhotoGallery media={request.media} title="Customer photos" />
         </Section>
-      )}
+      ) : null}
 
       {job && (
         <Section title="Job timeline">
@@ -266,7 +262,6 @@ const styles = StyleSheet.create({
   remarks: { marginTop: 6, color: '#334155' },
   answer: { marginTop: 8 },
   link: { color: '#0284c7', fontWeight: '600', marginTop: 8 },
-  photo: { width: 100, height: 100, borderRadius: 8, marginRight: 8 },
   timeline: { marginTop: 4, color: '#334155' },
   actions: { flexDirection: 'row', gap: 10, marginTop: 20 },
   accept: { flex: 1, backgroundColor: '#16a34a', padding: 14, borderRadius: 10, alignItems: 'center' },

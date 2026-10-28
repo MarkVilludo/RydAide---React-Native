@@ -3,7 +3,6 @@ import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Linking,
   Pressable,
   ScrollView,
@@ -19,6 +18,7 @@ import {
   declineHelpRequest,
   fetchMechanicHelpRequest,
 } from '../../api/mechanicHelp';
+import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { vehicleTitle } from '../../utils/helpRequestUi';
 
@@ -144,18 +144,11 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
         </Pressable>
       </View>
 
-      {request.media && request.media.length > 0 && (
+      {request.media && request.media.length > 0 ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Photos</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {request.media
-              .filter((m) => m.media_type === 'photo')
-              .map((m) => (
-                <Image key={m.id} source={{ uri: m.url }} style={styles.photo} />
-              ))}
-          </ScrollView>
+          <HelpRequestPhotoGallery media={request.media} title="Customer photos" />
         </View>
-      )}
+      ) : null}
 
       <View style={styles.actions}>
         <Pressable style={styles.accept} onPress={onAccept} disabled={acting}>

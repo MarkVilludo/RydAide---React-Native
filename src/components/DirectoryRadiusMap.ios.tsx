@@ -55,7 +55,7 @@ export function DirectoryRadiusMap({
         mapType="standard"
         initialRegion={region}
         showsUserLocation
-        showsMyLocationButton={false}
+        showsMyLocationButton
         onPress={(event) => {
           const { latitude, longitude } = event.nativeEvent.coordinate;
           onCenterChange({ latitude, longitude });

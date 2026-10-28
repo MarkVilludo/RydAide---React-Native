@@ -93,3 +93,7 @@ export async function updateMechanicAvailability(
   const { data } = await api.patch('/mechanic/availability', { availability_status });
   return data.data.mechanic as MechanicResult;
 }
+
+export async function updateMechanicProfileLocation(latitude: number, longitude: number): Promise<void> {
+  await api.patch('/mechanic/profile/location', { latitude, longitude });
+}

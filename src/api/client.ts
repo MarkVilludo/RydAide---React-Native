@@ -25,6 +25,12 @@ api.interceptors.request.use((config) => {
   if (base.includes('ngrok')) {
     config.headers['ngrok-skip-browser-warning'] = 'true';
   }
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    // Let the runtime set multipart boundary (default application/json breaks file uploads).
+    if (config.headers) {
+      delete config.headers['Content-Type'];
+    }
+  }
   return config;
 });
 

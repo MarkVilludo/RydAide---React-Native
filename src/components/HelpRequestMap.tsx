@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
-import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 export type MapPoint = {
   latitude: number;
@@ -12,9 +12,16 @@ type Props = {
   request: MapPoint;
   mechanic?: MapPoint | null;
   height?: number;
+  /** Blue dot + Google/Apple “my location” control on the map. */
+  showMyLocation?: boolean;
 };
 
-export function HelpRequestMap({ request, mechanic, height = 220 }: Props) {
+export function HelpRequestMap({
+  request,
+  mechanic,
+  height = 220,
+  showMyLocation = true,
+}: Props) {
   const region = useMemo(() => {
     const points = [request, mechanic].filter(Boolean) as MapPoint[];
     if (points.length === 0) {
@@ -46,13 +53,19 @@ export function HelpRequestMap({ request, mechanic, height = 220 }: Props) {
     <View style={[styles.wrap, { height }]}>
       <MapView
         style={StyleSheet.absoluteFill}
-        provider={Platform.OS === 'android' ? PROVIDER_DEFAULT : undefined}
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
         region={region}
-        showsUserLocation={false}
-        showsMyLocationButton={false}
+        showsUserLocation={showMyLocation}
+        showsMyLocationButton={showMyLocation}
+        mapType="standard"
       >
-        <Marker coordinate={request} title={request.title ?? 'Request location'} pinColor="#dc2626" />
+        <Marker
+          coordinate={request}
+          title={request.title ?? 'Your help location'}
+          description="Where you need assistance"
+          pinColor="#dc2626"
+        />
         {mechanic && (
           <Marker coordinate={mechanic} title={mechanic.title ?? 'Mechanic'} pinColor="#0284c7" />
         )}

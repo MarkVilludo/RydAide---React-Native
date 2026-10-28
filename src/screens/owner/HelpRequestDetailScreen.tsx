@@ -1,7 +1,8 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { fetchHelpRequest, type HelpRequest } from '../../api/helpRequests';
+import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import type { OwnerStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'HelpRequestDetail'>;
@@ -63,16 +64,7 @@ export function HelpRequestDetailScreen({ route }: Props) {
         </>
       )}
 
-      {request.media && request.media.length > 0 && (
-        <>
-          <Text style={styles.section}>Photos</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {request.media.map((m) => (
-              <Image key={m.id} source={{ uri: m.url }} style={styles.photo} />
-            ))}
-          </ScrollView>
-        </>
-      )}
+      <HelpRequestPhotoGallery media={request.media} title="Problem photos" />
     </ScrollView>
   );
 }
@@ -93,7 +85,6 @@ const styles = StyleSheet.create({
   section: { fontWeight: '600', marginTop: 16, marginBottom: 6 },
   body: { color: '#475569', lineHeight: 22 },
   answer: { color: '#475569', marginBottom: 4 },
-  photo: { width: 120, height: 120, borderRadius: 8, marginRight: 8 },
   row: { marginTop: 10 },
   label: { color: '#64748b', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.3 },
   value: { color: '#0f172a', marginTop: 2, fontSize: 15 },

@@ -87,7 +87,7 @@ export function DirectoryRadiusMap({
           isMyLocationEnabled: true,
         }}
         uiSettings={{
-          myLocationButtonEnabled: false,
+          myLocationButtonEnabled: true,
           zoomControlsEnabled: false,
         }}
         onMapClick={({ coordinates }) => {

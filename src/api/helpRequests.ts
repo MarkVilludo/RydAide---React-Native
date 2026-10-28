@@ -201,16 +201,14 @@ export async function createHelpRequest(payload: CreateHelpRequestPayload): Prom
     form.append(`answers[${index}][answer]`, a.answer);
   });
   payload.photoUris?.forEach((uri, index) => {
-    form.append('photos[]', {
+    form.append(`photos[${index}]`, {
       uri,
       name: `help-photo-${index}.jpg`,
       type: 'image/jpeg',
     } as unknown as Blob);
   });
 
-  const { data } = await api.post('/help-requests', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  const { data } = await api.post('/help-requests', form);
   return data.data.help_request;
 }
 

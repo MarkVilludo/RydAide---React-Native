@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 export type PickLocation = {
   latitude: number;
@@ -43,9 +43,12 @@ export function LocationPickMap({
     <View style={[styles.wrap, { height }]}>
       <MapView
         style={StyleSheet.absoluteFill}
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
         region={center ? region : undefined}
         showsUserLocation
+        showsMyLocationButton
+        mapType="standard"
         onPress={(event) => {
           const { latitude, longitude } = event.nativeEvent.coordinate;
           onCenterChange({ latitude, longitude });
@@ -56,7 +59,8 @@ export function LocationPickMap({
             coordinate={center}
             draggable
             pinColor="#dc2626"
-            title="Help location"
+            title="Your help location"
+            description="Drag to adjust"
             onDragEnd={(event) => {
               const { latitude, longitude } = event.nativeEvent.coordinate;
               onCenterChange({ latitude, longitude });
@@ -66,12 +70,14 @@ export function LocationPickMap({
       </MapView>
       {onUseMyLocation ? (
         <Pressable style={styles.gpsBtn} onPress={onUseMyLocation} disabled={locating}>
-          <Text style={styles.gpsBtnText}>{locating ? 'Locating…' : 'Use my GPS'}</Text>
+          <Text style={styles.gpsBtnText}>{locating ? 'Locating…' : 'Pin my location'}</Text>
         </Pressable>
       ) : null}
       {!center ? (
         <View style={styles.hintOverlay} pointerEvents="none">
-          <Text style={styles.hintText}>Tap the map or use GPS to set your location</Text>
+          <Text style={styles.hintText}>
+            Tap the map, use Pin my location, or the Google Maps location button
+          </Text>
         </View>
       ) : null}
     </View>

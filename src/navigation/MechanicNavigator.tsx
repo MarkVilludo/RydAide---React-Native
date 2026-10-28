@@ -8,12 +8,14 @@ import { MechanicIncomingScreen } from '../screens/mechanic/MechanicIncomingScre
 import { MechanicRequestDetailScreen } from '../screens/mechanic/MechanicRequestDetailScreen';
 import { MechanicRequestsScreen } from '../screens/mechanic/MechanicRequestsScreen';
 import { MechanicSubscriptionScreen } from '../screens/mechanic/MechanicSubscriptionScreen';
+import { MechanicLocationProvider } from '../context/MechanicLocationContext';
 import type { MechanicStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<MechanicStackParamList>();
 
 export function MechanicNavigator() {
   return (
+    <MechanicLocationProvider>
     <Stack.Navigator>
       <Stack.Screen name="MechanicHome" component={MechanicHomeScreen} options={{ headerShown: false }} />
       <Stack.Screen
@@ -40,5 +42,6 @@ export function MechanicNavigator() {
         options={{ title: 'Mechanic Pro' }}
       />
     </Stack.Navigator>
+    </MechanicLocationProvider>
   );
 }

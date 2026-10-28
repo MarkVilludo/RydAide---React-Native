@@ -30,3 +30,10 @@ export async function fetchYears(vehicleVariantId: number): Promise<number[]> {
   const { data } = await api.get('/catalog/years', { params: { vehicle_variant_id: vehicleVariantId } });
   return data.data.years;
 }
+
+export async function fetchVehicleLabelSuggestions(query: string, limit = 15): Promise<string[]> {
+  const { data } = await api.get('/catalog/vehicle-labels', {
+    params: { q: query.trim() || undefined, limit },
+  });
+  return (data.data.labels ?? []) as string[];
+}
