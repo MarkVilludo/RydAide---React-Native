@@ -37,7 +37,17 @@ export interface AppConfig {
     max_offset_meters: number;
     max_offset_km: number;
   };
+  map_markers?: {
+    customer: MapMarkerRoleConfig;
+    mechanic: MapMarkerRoleConfig;
+  };
 }
+
+export type MapMarkerRoleConfig = {
+  label: string;
+  icon_url: string | null;
+  pin_color: string;
+};
 
 export interface DirectorySearchMeta {
   requested_radius_km: number;

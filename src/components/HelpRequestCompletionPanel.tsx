@@ -1,15 +1,23 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { HelpRequest } from '../api/helpRequests';
+import { JobWorkDurationText } from './JobWorkDurationText';
 import { vehicleTitle } from '../utils/helpRequestUi';
 
 type Props = {
   request: HelpRequest;
   submitting: boolean;
   onSubmitReview: (rating: number, comment: string) => void;
+  /** Parent scroll view should scroll so the comment field stays above the keyboard. */
+  onCommentFocus?: () => void;
 };
 
-export function HelpRequestCompletionPanel({ request, submitting, onSubmitReview }: Props) {
+export function HelpRequestCompletionPanel({
+  request,
+  submitting,
+  onSubmitReview,
+  onCommentFocus,
+}: Props) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
 
@@ -29,6 +37,7 @@ export function HelpRequestCompletionPanel({ request, submitting, onSubmitReview
     <View style={styles.card}>
       <Text style={styles.title}>Service completed</Text>
       <Text style={styles.sub}>{vehicleTitle(request)} · {request.problem_category?.name}</Text>
+      <JobWorkDurationText job={job} style={styles.workTime} />
       {job?.service_performed ? (
         <Text style={styles.body}>Work done: {job.service_performed}</Text>
       ) : null}
@@ -58,6 +67,8 @@ export function HelpRequestCompletionPanel({ request, submitting, onSubmitReview
         value={comment}
         onChangeText={setComment}
         multiline
+        onFocus={onCommentFocus}
+        blurOnSubmit={false}
       />
       <Pressable
         style={styles.submit}
@@ -85,6 +96,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 18, fontWeight: '800', color: '#166534' },
   sub: { color: '#475569', marginTop: 4 },
+  workTime: { color: '#166534', marginTop: 6 },
   body: { marginTop: 10, color: '#334155', lineHeight: 20 },
   muted: { marginTop: 8, color: '#64748b', fontSize: 13 },
   rateLabel: { marginTop: 16, fontWeight: '700' },

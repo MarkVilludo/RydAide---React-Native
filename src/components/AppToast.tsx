@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, Text, ToastAndroid, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { homeIndicatorBottomInset } from '../utils/screenInsets';
 
 const TOAST_MS = 4200;
 
@@ -16,7 +16,6 @@ export function showAppToast(message: string): void {
 }
 
 export function AppToastHost() {
-  const insets = useSafeAreaInsets();
   const [message, setMessage] = useState<string | null>(null);
   const opacity = useRef(new Animated.Value(0)).current;
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -55,7 +54,7 @@ export function AppToastHost() {
   }
 
   return (
-    <View pointerEvents="none" style={[styles.host, { bottom: insets.bottom + 16 }]}>
+    <View pointerEvents="none" style={[styles.host, { bottom: homeIndicatorBottomInset() + 16 }]}>
       <Animated.View style={[styles.banner, { opacity }]}>
         <Text style={styles.text}>{message}</Text>
       </Animated.View>

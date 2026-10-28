@@ -2,8 +2,8 @@ import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import { DrawerContentScrollView } from '@react-navigation/drawer';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
+import { statusBarTopInset } from '../utils/screenInsets';
 import { useAppConfig } from '../hooks/useAppConfig';
 import type { OwnerStackParamList } from './types';
 
@@ -38,7 +38,6 @@ function DrawerRow({
 }
 
 export function OwnerDrawerContent({ navigation }: DrawerContentComponentProps) {
-  const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
   const { config } = useAppConfig();
   const emergencyOn = config?.features.emergency_assistance ?? false;
@@ -50,7 +49,7 @@ export function OwnerDrawerContent({ navigation }: DrawerContentComponentProps) 
 
   return (
     <DrawerContentScrollView
-      contentContainerStyle={[styles.scroll, { paddingTop: Math.max(insets.top, 16) + 8 }]}
+      contentContainerStyle={[styles.scroll, { paddingTop: statusBarTopInset() + 8 }]}
       scrollEnabled={false}
     >
       <Text style={styles.brand}>RydAid</Text>

@@ -26,6 +26,7 @@ import { useMechanicDistanceOrigin } from '../../hooks/useMechanicDistanceOrigin
 import { resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { formatRequestDate, isActiveJobStatus, jobStatusLabelOf, jobStatusOf, vehicleTitle } from '../../utils/helpRequestUi';
+import { jobWorkDurationLabel } from '../../utils/jobWorkDuration';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'MechanicRequestDetail'>;
 
@@ -116,6 +117,7 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
   }
 
   const job = request.job;
+  const workDurationLabel = job ? jobWorkDurationLabel(job) : null;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -125,6 +127,8 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
           <HelpRequestMap
             request={{ latitude: request.latitude, longitude: request.longitude, title: 'Customer' }}
             height={200}
+            zoomPreset="detail"
+            showLiveDistanceBadge={false}
           />
           <GrabStyleBottomSheet>
             <MechanicCustomerDistance
@@ -188,6 +192,8 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
             <HelpRequestMap
               request={{ latitude: request.latitude, longitude: request.longitude, title: 'Customer' }}
               height={180}
+              zoomPreset="detail"
+              showLiveDistanceBadge={false}
             />
             <Pressable onPress={openMaps}>
               <Text style={styles.link}>Open in maps</Text>
@@ -204,6 +210,7 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
 
       {job && (
         <Section title="Job timeline">
+          {workDurationLabel ? <Text style={styles.workDuration}>{workDurationLabel}</Text> : null}
           <TimelineRow label="Accepted" value={job.accepted_at} />
           <TimelineRow label="On the way" value={job.on_the_way_at} />
           <TimelineRow label="Arrived" value={job.arrived_at} />
@@ -279,6 +286,7 @@ const styles = StyleSheet.create({
   answer: { marginTop: 8 },
   link: { color: '#0284c7', fontWeight: '600', marginTop: 8 },
   timeline: { marginTop: 4, color: '#334155' },
+  workDuration: { fontSize: 16, fontWeight: '800', color: '#166534', marginBottom: 8 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 20 },
   accept: { flex: 1, backgroundColor: '#16a34a', padding: 14, borderRadius: 10, alignItems: 'center' },
   acceptText: { color: '#fff', fontWeight: '800' },

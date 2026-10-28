@@ -7,7 +7,6 @@ import {
   Linking,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,9 +16,10 @@ import { getApiErrorMessage } from '../../api/client';
 import type { HelpRequest } from '../../api/helpRequests';
 import { fetchMechanicHelpRequest, updateJobStatus } from '../../api/mechanicHelp';
 import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSummary';
+import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
+import { JobWorkDurationText } from '../../components/JobWorkDurationText';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
-import { HelpRequestMapLegend } from '../../components/HelpRequestMapLegend';
 import { useDeviceLocation } from '../../hooks/useDeviceLocation';
 import { useMechanicDistanceOrigin } from '../../hooks/useMechanicDistanceOrigin';
 import { useMechanicLocationTracking } from '../../hooks/useMechanicLocationTracking';
@@ -30,13 +30,13 @@ import { jobStatusLabelOf, jobStatusOf, vehicleTitle } from '../../utils/helpReq
 type Props = NativeStackScreenProps<MechanicStackParamList, 'ActiveJob'>;
 
 function headerTitle(jobStatus: string, justAccepted: boolean) {
-  if (justAccepted && jobStatus === 'ACCEPTED') return 'HELP REQUEST ACCEPTED';
+  if (justAccepted && jobStatus === 'ACCEPTED') return 'Help request accepted';
   const map: Record<string, string> = {
-    ACCEPTED: 'ACCEPTED',
-    ON_THE_WAY: 'ON THE WAY',
-    ARRIVED: 'ARRIVED',
-    IN_PROGRESS: 'JOB IN PROGRESS',
-    COMPLETED: 'JOB COMPLETED',
+    ACCEPTED: 'Accepted',
+    ON_THE_WAY: 'On the way',
+    ARRIVED: 'Arrived',
+    IN_PROGRESS: 'Job in progress',
+    COMPLETED: 'Job completed',
   };
   return map[jobStatus] ?? jobStatus;
 }
@@ -48,6 +48,7 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
   const [connectionLost, setConnectionLost] = useState(false);
   const [acting, setActing] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
+  const [photosOpen, setPhotosOpen] = useState(false);
   const [servicePerformed, setServicePerformed] = useState('');
   const [finalAmount, setFinalAmount] = useState('');
 
@@ -65,23 +66,26 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
     }
   }, [helpRequestId, origin?.latitude, origin?.longitude]);
 
+  const jobStatus = request ? jobStatusOf(request) : '';
+  const refreshMs = jobStatus === 'IN_PROGRESS' ? 1000 : 5000;
+
   useFocusEffect(
     useCallback(() => {
       load();
-      const timer = setInterval(() => load(), 5000);
+      const timer = setInterval(() => load(), refreshMs);
       return () => clearInterval(timer);
-    }, [load]),
+    }, [load, refreshMs]),
   );
-
-  const jobStatus = request ? jobStatusOf(request) : '';
-  const onTheWay = jobStatus === 'ON_THE_WAY';
+  const shareLiveWithCustomer = ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED'].includes(jobStatus);
   const mapEnabled = !!request && jobStatus !== 'COMPLETED';
 
-  const { coords: deviceCoords, permissionDenied } = useDeviceLocation(mapEnabled);
+  const { coords: deviceCoords, permissionDenied } = useDeviceLocation(mapEnabled, {
+    live: shareLiveWithCustomer,
+  });
 
   useMechanicLocationTracking({
     helpRequestId,
-    enabled: onTheWay && !permissionDenied,
+    enabled: shareLiveWithCustomer && !permissionDenied,
     tracking: request?.tracking,
   });
 
@@ -164,69 +168,122 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
   }
 
   const tracking = request.tracking;
+  const photoCount = request.media?.length ?? 0;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.header}>{headerTitle(jobStatus, justAccepted)}</Text>
-
-      {request.owner?.name && (
-        <Text style={styles.customerName}>{request.owner.name}</Text>
-      )}
-      <Text style={styles.customerLabel}>Customer</Text>
-
-      <Text style={styles.vehicle}>{vehicleTitle(request)}</Text>
-      <Text style={styles.problem}>{request.problem_category?.name}</Text>
-      <Text style={styles.remarks}>{request.remarks}</Text>
-      <HelpRequestPhotoGallery media={request.media} title="Customer photos" compact />
-      <Text style={styles.status}>Status: {jobStatusLabelOf(request)}</Text>
-
-      <ActiveJobLocationSummary
-        tracking={tracking}
-        mechanicPermissionDenied={permissionDenied && onTheWay}
-        connectionLost={connectionLost}
-        viewerRole="mechanic"
-      />
-
-      <HelpRequestMap
-        request={{ latitude: request.latitude, longitude: request.longitude, title: 'Customer' }}
-        mechanic={mechanicMapPoint}
-        height={280}
-      />
-      <HelpRequestMapLegend distanceKm={displayDistanceKm} />
-
-      {request.owner?.phone && (
-        <Pressable onPress={() => Linking.openURL(`tel:${request.owner!.phone}`)}>
-          <Text style={styles.link}>Call customer</Text>
-        </Pressable>
-      )}
-
-      <View style={styles.actions}>
-        {jobStatus === 'ACCEPTED' && (
-          <Pressable style={styles.primaryBtn} disabled={acting} onPress={startJourney}>
-            <Text style={styles.primaryBtnText}>START JOURNEY</Text>
-          </Pressable>
-        )}
-        {jobStatus === 'ON_THE_WAY' && (
-          <Pressable style={styles.navBtn} onPress={startNavigation}>
-            <Text style={styles.navBtnText}>START NAVIGATION</Text>
-          </Pressable>
-        )}
-        {jobStatus === 'ON_THE_WAY' && (
-          <Pressable style={styles.primaryBtn} disabled={acting} onPress={() => setStatus('ARRIVED')}>
-            <Text style={styles.primaryBtnText}>ARRIVED</Text>
-          </Pressable>
-        )}
-        {jobStatus === 'ARRIVED' && (
-          <Pressable style={styles.primaryBtn} disabled={acting} onPress={() => setStatus('IN_PROGRESS')}>
-            <Text style={styles.primaryBtnText}>START JOB</Text>
-          </Pressable>
-        )}
-        {jobStatus === 'IN_PROGRESS' && (
-          <Pressable style={styles.primaryBtn} disabled={acting} onPress={() => setCompleteOpen(true)}>
-            <Text style={styles.primaryBtnText}>COMPLETE JOB</Text>
-          </Pressable>
-        )}
+    <View style={styles.root}>
+      <View style={styles.mapArea}>
+        <HelpRequestMap
+          request={{ latitude: request.latitude, longitude: request.longitude, title: 'Customer help location' }}
+          mechanic={mechanicMapPoint}
+          requestPinLabel="Customer"
+          mechanicPinLabel="You"
+          fill
+          showMyLocation={false}
+          showRouteLine={!!mechanicMapPoint}
+          liveDistanceKm={displayDistanceKm}
+          showLiveDistanceBadge={shareLiveWithCustomer}
+        />
       </View>
+
+      <GrabStyleBottomSheet>
+        <View style={styles.titleRow}>
+          <Text style={styles.headline} numberOfLines={1}>
+            {headerTitle(jobStatus, justAccepted)}
+          </Text>
+          <Text style={styles.statusPill}>{jobStatusLabelOf(request)}</Text>
+        </View>
+
+        <View style={styles.customerRow}>
+          <View style={styles.customerBlock}>
+            <Text style={styles.customerName} numberOfLines={1}>
+              {request.owner?.name ?? 'Customer'}
+            </Text>
+            <Text style={styles.vehicle} numberOfLines={1}>
+              {vehicleTitle(request)}
+            </Text>
+          </View>
+          {request.owner?.phone ? (
+            <Pressable
+              style={styles.callChip}
+              onPress={() => Linking.openURL(`tel:${request.owner!.phone}`)}
+            >
+              <Text style={styles.callChipText}>Call</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <Text style={styles.problem} numberOfLines={1}>
+          {request.problem_category?.name}
+          {request.remarks ? ` · ${request.remarks}` : ''}
+        </Text>
+
+        <ActiveJobLocationSummary
+          tracking={tracking}
+          mechanicPermissionDenied={permissionDenied && shareLiveWithCustomer}
+          connectionLost={connectionLost}
+          viewerRole="mechanic"
+          compact
+          fallbackDistanceKm={displayDistanceKm}
+        />
+
+        <JobWorkDurationText
+          job={request.job}
+          jobStatus={jobStatus}
+          style={styles.workTime}
+          liveStyle={styles.workTimeLive}
+        />
+
+        {photoCount > 0 ? (
+          <Pressable style={styles.photosLink} onPress={() => setPhotosOpen(true)}>
+            <Text style={styles.photosLinkText}>View customer photos ({photoCount})</Text>
+          </Pressable>
+        ) : null}
+
+        <View style={styles.actions}>
+          {jobStatus === 'ACCEPTED' && (
+            <Pressable style={styles.primaryBtn} disabled={acting} onPress={startJourney}>
+              <Text style={styles.primaryBtnText}>Start journey</Text>
+            </Pressable>
+          )}
+          {jobStatus === 'ON_THE_WAY' && (
+            <View style={styles.actionRow}>
+              <Pressable style={[styles.navBtn, styles.actionHalf]} onPress={startNavigation}>
+                <Text style={styles.navBtnText}>Navigate</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.primaryBtn, styles.actionHalf]}
+                disabled={acting}
+                onPress={() => setStatus('ARRIVED')}
+              >
+                <Text style={styles.primaryBtnText}>Arrived</Text>
+              </Pressable>
+            </View>
+          )}
+          {jobStatus === 'ARRIVED' && (
+            <Pressable style={styles.primaryBtn} disabled={acting} onPress={() => setStatus('IN_PROGRESS')}>
+              <Text style={styles.primaryBtnText}>Start job</Text>
+            </Pressable>
+          )}
+          {jobStatus === 'IN_PROGRESS' && (
+            <Pressable style={styles.primaryBtn} disabled={acting} onPress={() => setCompleteOpen(true)}>
+              <Text style={styles.primaryBtnText}>Complete job</Text>
+            </Pressable>
+          )}
+        </View>
+      </GrabStyleBottomSheet>
+
+      <Modal visible={photosOpen} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.photosCard}>
+            <Text style={styles.modalTitle}>Customer photos</Text>
+            <HelpRequestPhotoGallery media={request.media} compact />
+            <Pressable style={styles.primaryBtn} onPress={() => setPhotosOpen(false)}>
+              <Text style={styles.primaryBtnText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={completeOpen} transparent animationType="slide">
         <View style={styles.modalBackdrop}>
@@ -264,30 +321,60 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  content: { padding: 16, paddingBottom: 40 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  root: { flex: 1, backgroundColor: '#e2e8f0' },
+  mapArea: { flex: 1, backgroundColor: '#cbd5e1', position: 'relative' },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#f8fafc' },
   muted: { color: '#64748b', marginBottom: 12, textAlign: 'center' },
-  header: { fontSize: 18, fontWeight: '800', color: '#166534', textAlign: 'center', marginBottom: 12 },
-  customerName: { fontSize: 20, fontWeight: '700' },
-  customerLabel: { color: '#64748b', fontSize: 13, textTransform: 'uppercase' },
-  vehicle: { fontSize: 22, fontWeight: '700', marginTop: 8 },
-  problem: { fontSize: 17, fontWeight: '600', marginTop: 8 },
-  remarks: { color: '#475569', marginTop: 8, lineHeight: 22 },
-  status: { marginTop: 10, color: '#0284c7', fontWeight: '700', fontSize: 16 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  headline: { flex: 1, fontSize: 18, fontWeight: '800', color: '#166534' },
+  statusPill: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0284c7',
+    backgroundColor: '#e0f2fe',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  customerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 10 },
+  customerBlock: { flex: 1, minWidth: 0 },
+  customerName: { fontSize: 17, fontWeight: '700', color: '#0f172a' },
+  vehicle: { fontSize: 14, fontWeight: '600', color: '#475569', marginTop: 2 },
+  problem: { fontSize: 13, color: '#64748b', marginTop: 6 },
+  workTime: { marginTop: 4 },
+  workTimeLive: { color: '#b45309' },
+  callChip: {
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  callChipText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  photosLink: { marginTop: 6 },
+  photosLinkText: { color: '#0284c7', fontWeight: '600', fontSize: 13 },
+  actions: { marginTop: 12, gap: 8 },
+  actionRow: { flexDirection: 'row', gap: 8 },
+  actionHalf: { flex: 1 },
+  primaryBtn: { backgroundColor: '#16a34a', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 10, alignItems: 'center' },
+  primaryBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  navBtn: { backgroundColor: '#0284c7', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 10, alignItems: 'center' },
+  navBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   link: { color: '#0284c7', fontWeight: '600', marginTop: 12, textAlign: 'center' },
-  actions: { marginTop: 20, gap: 10 },
-  primaryBtn: { backgroundColor: '#16a34a', padding: 14, borderRadius: 10, alignItems: 'center' },
-  primaryBtnText: { color: '#fff', fontWeight: '800' },
-  navBtn: { backgroundColor: '#0284c7', padding: 14, borderRadius: 10, alignItems: 'center' },
-  navBtnText: { color: '#fff', fontWeight: '800' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalCard: { backgroundColor: '#fff', padding: 20, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+  photosCard: {
+    backgroundColor: '#fff',
+    margin: 24,
+    padding: 20,
+    borderRadius: 16,
+    maxHeight: '80%',
+  },
   modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
   input: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 12, minHeight: 80, marginBottom: 12 },
   cancel: { textAlign: 'center', marginTop: 12, color: '#64748b' },

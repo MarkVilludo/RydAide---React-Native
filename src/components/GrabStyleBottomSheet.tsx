@@ -1,13 +1,31 @@
 import React, { type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = {
   children: ReactNode;
+  /** Added on top of system bottom inset (home indicator / Android gesture bar). */
+  bottomInset?: number;
+  /** Android system nav is hidden (immersive) — use minimal bottom pad only. */
+  immersiveBottom?: boolean;
 };
 
-export function GrabStyleBottomSheet({ children }: Props) {
+export function GrabStyleBottomSheet({
+  children,
+  bottomInset = 0,
+  immersiveBottom = false,
+}: Props) {
+  const insets = useSafeAreaInsets();
+  const systemBottom = immersiveBottom
+    ? Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 0)
+    : insets.bottom > 0
+      ? insets.bottom
+      : Platform.OS === 'android'
+        ? 20
+        : 0;
+
   return (
-    <View style={styles.sheet}>
+    <View style={[styles.sheet, { paddingBottom: 24 + systemBottom + bottomInset }]}>
       <View style={styles.handle} />
       {children}
     </View>

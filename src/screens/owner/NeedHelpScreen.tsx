@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { compactBottomInset } from '../../utils/screenInsets';
 import { getApiErrorMessage } from '../../api/client';
 import {
   createHelpRequest,
@@ -38,7 +39,6 @@ export function NeedHelpScreen({ navigation, route }: Props) {
   const emergency = route.params?.emergency ?? true;
   const { config } = useAppConfig();
   const submitLock = useRef(false);
-
   const [step, setStep] = useState<Step>('vehicle');
   const [vehicleDescription, setVehicleDescription] = useState('');
 
@@ -351,16 +351,42 @@ export function NeedHelpScreen({ navigation, route }: Props) {
         )}
       </ScrollView>
 
-      <View style={styles.footer}>
-        <Pressable style={styles.backBtn} onPress={goBack} disabled={submitting}>
-          <Text style={styles.backBtnText}>{stepIndex === 0 ? 'Cancel' : 'Back'}</Text>
+      <View style={[styles.footer, { paddingBottom: Math.max(16, compactBottomInset()) }]}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.backBtn,
+            pressed && styles.footerBtnPressed,
+            submitting && styles.footerBtnDisabled,
+          ]}
+          onPress={goBack}
+          disabled={submitting}
+          accessibilityRole="button"
+          accessibilityLabel={stepIndex === 0 ? 'Cancel request' : 'Go back'}
+        >
+          <Text style={styles.backBtnText}>{stepIndex === 0 ? 'Cancel' : '← Back'}</Text>
         </Pressable>
         {step !== 'review' ? (
-          <Pressable style={styles.primary} onPress={goNext}>
-            <Text style={styles.primaryText}>Continue</Text>
+          <Pressable
+            style={({ pressed }) => [styles.primary, styles.continueBtn, pressed && styles.footerBtnPressed]}
+            onPress={goNext}
+            accessibilityRole="button"
+            accessibilityLabel="Continue to next step"
+          >
+            <Text style={styles.primaryText}>Continue →</Text>
           </Pressable>
         ) : (
-          <Pressable style={styles.primary} onPress={submit} disabled={submitting}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.primary,
+              styles.submitBtn,
+              pressed && styles.footerBtnPressed,
+              submitting && styles.footerBtnDisabled,
+            ]}
+            onPress={submit}
+            disabled={submitting}
+            accessibilityRole="button"
+            accessibilityLabel={emergency ? 'Request help now' : 'Submit request'}
+          >
             {submitting ? (
               <ActivityIndicator color="#fff" />
             ) : (
@@ -388,7 +414,7 @@ const styles = StyleSheet.create({
   progressDot: { flex: 1, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0' },
   progressDotOn: { backgroundColor: '#0284c7' },
   scroll: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 24 },
+  scrollContent: { padding: 16, paddingBottom: 32 },
   title: { fontSize: 22, fontWeight: '800', color: '#0f172a', marginBottom: 16 },
   label: { fontWeight: '600', marginTop: 16, marginBottom: 8 },
   subLabel: { fontSize: 13, color: '#475569', marginBottom: 4 },
@@ -435,20 +461,55 @@ const styles = StyleSheet.create({
   reviewHint: { marginTop: 12, color: '#64748b', fontSize: 13, lineHeight: 18 },
   footer: {
     flexDirection: 'row',
-    gap: 10,
-    padding: 16,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
+    borderTopColor: '#cbd5e1',
     backgroundColor: '#fff',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 16,
   },
-  backBtn: { paddingVertical: 14, paddingHorizontal: 16, justifyContent: 'center' },
-  backBtnText: { color: '#64748b', fontWeight: '600' },
-  primary: {
+  backBtn: {
     flex: 1,
-    backgroundColor: '#dc2626',
-    padding: 16,
-    borderRadius: 12,
+    minHeight: 54,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#334155',
+    backgroundColor: '#f8fafc',
   },
-  primaryText: { color: '#fff', fontWeight: '700' },
+  backBtnText: { color: '#0f172a', fontWeight: '800', fontSize: 16 },
+  primary: {
+    flex: 1.35,
+    minHeight: 54,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueBtn: {
+    backgroundColor: '#0284c7',
+    shadowColor: '#0369a1',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  submitBtn: {
+    backgroundColor: '#dc2626',
+    shadowColor: '#b91c1c',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  primaryText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  footerBtnPressed: { opacity: 0.88, transform: [{ scale: 0.98 }] },
+  footerBtnDisabled: { opacity: 0.55 },
 });

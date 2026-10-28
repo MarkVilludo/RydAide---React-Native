@@ -18,6 +18,11 @@ export function jobStatusLabelOf(request: HelpRequest): string {
   return request.job_status_label ?? request.job?.status_label ?? request.status_label ?? request.status;
 }
 
+export function formatStarRating(rating: number): string {
+  const r = Math.max(1, Math.min(5, Math.round(rating)));
+  return `${'★'.repeat(r)}${'☆'.repeat(5 - r)}`;
+}
+
 export function formatRequestDate(iso?: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -54,6 +59,20 @@ export function isOwnerLiveHelpRequest(request: HelpRequest): boolean {
   return isActiveJobStatus(job);
 }
 
+/** Newest open help request (list assumed sorted newest-first). */
+export function pickPrimaryOwnerLiveHelpRequest(requests: HelpRequest[]): HelpRequest | null {
+  return requests.find((r) => isOwnerLiveHelpRequest(r)) ?? null;
+}
+
 export function isOwnerTerminalHelpRequest(request: HelpRequest): boolean {
   return ['COMPLETED', 'CANCELLED', 'EXPIRED', 'NO_MECHANIC_FOUND'].includes(request.status);
+}
+
+export function isOwnerCompletedHelpRequest(request: HelpRequest): boolean {
+  return request.status === 'COMPLETED' || jobStatusOf(request) === 'COMPLETED';
+}
+
+/** Owner may cancel only while still searching for a mechanic (not after accept). */
+export function canOwnerCancelHelpRequest(request: HelpRequest): boolean {
+  return request.status === 'SEARCHING';
 }

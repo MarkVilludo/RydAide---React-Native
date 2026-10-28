@@ -22,8 +22,8 @@ function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number):
 
 export function useMechanicLocationTracking({ helpRequestId, enabled, tracking }: Options) {
   const lastSent = useRef<{ lat: number; lng: number; at: number } | null>(null);
-  const intervalSeconds = tracking?.location_update?.interval_seconds ?? 20;
-  const minDistanceMeters = tracking?.location_update?.min_distance_meters ?? 50;
+  const intervalSeconds = Math.min(tracking?.location_update?.interval_seconds ?? 12, 12);
+  const minDistanceMeters = Math.min(tracking?.location_update?.min_distance_meters ?? 50, 25);
 
   useEffect(() => {
     if (!enabled) {

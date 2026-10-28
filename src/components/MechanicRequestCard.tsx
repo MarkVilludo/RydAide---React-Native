@@ -2,7 +2,14 @@ import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { HelpRequest } from '../api/helpRequests';
 import { formatDistanceKm, resolveMechanicToCustomerDistanceKm } from '../utils/distanceKm';
-import { formatRequestDate, jobStatusLabelOf, vehicleTitle } from '../utils/helpRequestUi';
+import {
+  formatRequestDate,
+  formatStarRating,
+  jobStatusLabelOf,
+  jobStatusOf,
+  vehicleTitle,
+} from '../utils/helpRequestUi';
+import { jobWorkDurationLabel } from '../utils/jobWorkDuration';
 
 type Props = {
   request: HelpRequest;
@@ -10,6 +17,8 @@ type Props = {
   statusOverride?: string;
   mechanicCoords?: { latitude: number; longitude: number } | null;
   highlightDistance?: boolean;
+  /** Show owner star rating / comment (completed jobs list). */
+  showCustomerReview?: boolean;
 };
 
 export function MechanicRequestCard({
@@ -18,6 +27,7 @@ export function MechanicRequestCard({
   statusOverride,
   mechanicCoords,
   highlightDistance,
+  showCustomerReview = false,
 }: Props) {
   const statusLabel = statusOverride ?? jobStatusLabelOf(request);
   const isEmergency = request.request_type === 'EMERGENCY';
@@ -27,6 +37,8 @@ export function MechanicRequestCard({
     [request, mechanicCoords],
   );
   const distanceLabel = formatDistanceKm(distanceKm);
+  const workTimeLabel =
+    jobStatusOf(request) === 'COMPLETED' ? jobWorkDurationLabel(request.job) : null;
 
   return (
     <Pressable
@@ -63,7 +75,10 @@ export function MechanicRequestCard({
       ) : null}
 
       <View style={styles.footer}>
-        <Text style={styles.status}>{statusLabel}</Text>
+        <View style={styles.footerLeft}>
+          <Text style={styles.status}>{statusLabel}</Text>
+          {workTimeLabel ? <Text style={styles.workTime}>{workTimeLabel}</Text> : null}
+        </View>
         <Text style={styles.date}>{formatRequestDate(request.created_at)}</Text>
       </View>
     </Pressable>
@@ -120,6 +135,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',
   },
+  footerLeft: { flex: 1, minWidth: 0 },
   status: { fontWeight: '700', color: '#334155', fontSize: 13 },
+  workTime: { marginTop: 2, fontWeight: '600', color: '#166534', fontSize: 12 },
   date: { color: '#94a3b8', fontSize: 12 },
 });

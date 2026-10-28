@@ -3,7 +3,13 @@ import { useEffect, useState } from 'react';
 
 export type DeviceCoords = { latitude: number; longitude: number };
 
-export function useDeviceLocation(enabled: boolean) {
+type Options = {
+  /** Tighter GPS updates for live job maps (mechanic en route). */
+  live?: boolean;
+};
+
+export function useDeviceLocation(enabled: boolean, options?: Options) {
+  const live = options?.live ?? false;
   const [coords, setCoords] = useState<DeviceCoords | null>(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
 
@@ -30,7 +36,11 @@ export function useDeviceLocation(enabled: boolean) {
           setCoords({ latitude: current.coords.latitude, longitude: current.coords.longitude });
         }
         subscription = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.Balanced, distanceInterval: 25, timeInterval: 10000 },
+          {
+            accuracy: Location.Accuracy.Balanced,
+            distanceInterval: live ? 8 : 25,
+            timeInterval: live ? 3000 : 10000,
+          },
           (pos) => {
             if (!cancelled) {
               setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
@@ -50,7 +60,7 @@ export function useDeviceLocation(enabled: boolean) {
       cancelled = true;
       subscription?.remove();
     };
-  }, [enabled]);
+  }, [enabled, live]);
 
   return { coords, permissionDenied };
 }

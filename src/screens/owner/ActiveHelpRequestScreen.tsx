@@ -1,10 +1,10 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,18 +18,28 @@ import {
   submitHelpRequestReview,
   type HelpRequest,
 } from '../../api/helpRequests';
+import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSummary';
+import { AndroidHideNavigationBarWhenFocused } from '../../components/AndroidHideNavigationBarWhenFocused';
+import { CancelHelpRequestButton } from '../../components/CancelHelpRequestButton';
 import { HelpRequestCompletionPanel } from '../../components/HelpRequestCompletionPanel';
+import { KeyboardAwareScrollView } from '../../components/KeyboardAwareScrollView';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { HelpJourneyTimeline } from '../../components/HelpJourneyTimeline';
 import { HelpRequestSearchingHero } from '../../components/HelpRequestSearchingHero';
 import { HelpSearchProgressCard } from '../../components/HelpSearchProgressCard';
 import { MapSearchOverlay } from '../../components/MapSearchOverlay';
-import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSummary';
+import { JobWorkDurationText } from '../../components/JobWorkDurationText';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import type { OwnerStackParamList } from '../../navigation/types';
 import { activeJourneyHeadline, buildHelpJourneySteps } from '../../utils/helpJourney';
-import { jobStatusLabelOf, jobStatusOf, vehicleTitle } from '../../utils/helpRequestUi';
+import { haversineDistanceKm } from '../../utils/distanceKm';
+import {
+  canOwnerCancelHelpRequest,
+  jobStatusLabelOf,
+  jobStatusOf,
+  vehicleTitle,
+} from '../../utils/helpRequestUi';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'ActiveHelpRequest'>;
 
@@ -39,12 +49,35 @@ function mechanicDisplayName(request: HelpRequest) {
   return m.display_name || m.mechanic_name || m.business_name || 'Mechanic';
 }
 
+function liveDistanceKmForRequest(request: HelpRequest | null): number | null {
+  const mechanicLoc = request?.tracking?.mechanic_location;
+  if (!request || !mechanicLoc) {
+    return null;
+  }
+  return haversineDistanceKm(
+    mechanicLoc.latitude,
+    mechanicLoc.longitude,
+    request.latitude,
+    request.longitude,
+  );
+}
+
 export function ActiveHelpRequestScreen({ route, navigation }: Props) {
   const { helpRequestId } = route.params;
   const [request, setRequest] = useState<HelpRequest | null>(null);
   const [connectionLost, setConnectionLost] = useState(false);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [photosOpen, setPhotosOpen] = useState(false);
   const cancelLock = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollReviewIntoView = useCallback(() => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+  }, []);
+
+  const pollMs =
+    (request?.job_status ?? request?.job?.status) === 'IN_PROGRESS' ? 1000 : 2000;
 
   useEffect(() => {
     let cancelled = false;
@@ -68,14 +101,16 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
           if (!cancelled) setConnectionLost(true);
         });
     load();
-    timer = setInterval(load, 4000);
+    timer = setInterval(load, pollMs);
     return () => {
       cancelled = true;
       if (timer) clearInterval(timer);
     };
-  }, [helpRequestId]);
+  }, [helpRequestId, pollMs]);
 
   const journeySteps = useMemo(() => (request ? buildHelpJourneySteps(request) : []), [request]);
+
+  const liveDistanceKm = useMemo(() => liveDistanceKmForRequest(request), [request]);
 
   if (!request) {
     return (
@@ -100,16 +135,15 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
       ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'IN_PROGRESS'].includes(jobStatus));
   const tracking = request.tracking;
   const mechanicLoc = tracking?.mechanic_location;
+  const workStarted = jobStatus === 'IN_PROGRESS';
+  const photoCount = request.media?.length ?? 0;
 
-  const canCancel =
-    searching || (accepted && request.status === 'ACCEPTED');
+  const canCancel = canOwnerCancelHelpRequest(request);
 
   const confirmCancel = () => {
     Alert.alert(
       'Cancel request?',
-      searching
-        ? 'Stop searching for a mechanic?'
-        : 'Cancel while the mechanic is assigned? They will be notified.',
+      'Stop searching for a mechanic? You can submit a new request anytime.',
       [
         { text: 'Keep request', style: 'cancel' },
         {
@@ -132,15 +166,16 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
     );
   };
 
-  return (
-    <View style={styles.root}>
-      <View style={styles.mapWrap}>
-        {accepted ? (
+  if (accepted && request.mechanic) {
+    return (
+      <View style={styles.root}>
+        <AndroidHideNavigationBarWhenFocused active={workStarted} />
+        <View style={styles.mapArea}>
           <HelpRequestMap
             request={{
               latitude: request.latitude,
               longitude: request.longitude,
-              title: 'You',
+              title: 'Your help location',
             }}
             mechanic={
               mechanicLoc
@@ -151,47 +186,165 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
                   }
                 : null
             }
+            requestPinLabel="You"
+            mechanicPinLabel="Mechanic"
+            fill
+            showMyLocation={false}
+            showRouteLine={!!mechanicLoc}
+            liveDistanceKm={liveDistanceKm}
+            showLiveDistanceBadge={!!mechanicLoc && !workStarted}
+            liveDistanceBadgeVariant="owner"
+          />
+        </View>
+
+        <GrabStyleBottomSheet immersiveBottom={workStarted}>
+          {workStarted ? (
+            <>
+              <View style={styles.titleRow}>
+                <Text style={styles.jobProgressHeadline} numberOfLines={1}>
+                  Job in progress
+                </Text>
+                <Text style={styles.statusPill}>{jobStatusLabelOf(request)}</Text>
+              </View>
+
+              <View style={styles.personRow}>
+                <View style={styles.personBlock}>
+                  <Text style={styles.personName} numberOfLines={1}>
+                    {mechanicDisplayName(request)}
+                  </Text>
+                  <Text style={styles.vehicle} numberOfLines={1}>
+                    {vehicleTitle(request)}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.problemLine} numberOfLines={1}>
+                {request.problem_category?.name}
+                {request.remarks ? ` · ${request.remarks}` : ''}
+              </Text>
+
+              <JobWorkDurationText
+                job={request.job}
+                jobStatus={jobStatus}
+                style={styles.workTime}
+                liveStyle={styles.workTimeLive}
+              />
+
+              {connectionLost ? (
+                <Text style={styles.connectionBanner}>Connection lost — map may be outdated</Text>
+              ) : null}
+
+              {photoCount > 0 ? (
+                <Pressable style={styles.photosLink} onPress={() => setPhotosOpen(true)}>
+                  <Text style={styles.photosLinkText}>View problem photos ({photoCount})</Text>
+                </Pressable>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <View style={styles.titleStack}>
+                <Text style={styles.sheetHeadline} numberOfLines={2}>
+                  {activeJourneyHeadline(request)}
+                </Text>
+                <Text style={styles.statusPillInline}>{jobStatusLabelOf(request)}</Text>
+              </View>
+
+              <View style={styles.personRow}>
+                <View style={styles.personBlock}>
+                  <Text style={styles.personName} numberOfLines={1}>
+                    {mechanicDisplayName(request)}
+                  </Text>
+                  <Text style={styles.vehicle} numberOfLines={1}>
+                    {vehicleTitle(request)}
+                  </Text>
+                </View>
+                {request.mechanic.phone ? (
+                  <Pressable
+                    style={styles.callChip}
+                    onPress={() => Linking.openURL(`tel:${request.mechanic!.phone}`)}
+                  >
+                    <Text style={styles.callChipText}>Call</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+
+              <Text style={styles.problemLine} numberOfLines={2}>
+                {request.problem_category?.name}
+                {request.remarks ? ` · ${request.remarks}` : ''}
+              </Text>
+
+              <ActiveJobLocationSummary
+                tracking={tracking}
+                connectionLost={connectionLost}
+                viewerRole="owner"
+                compact
+              />
+
+              {connectionLost ? (
+                <Text style={styles.connectionBanner}>Connection lost — map may be outdated</Text>
+              ) : null}
+
+              {photoCount > 0 ? (
+                <Pressable style={styles.photosLink} onPress={() => setPhotosOpen(true)}>
+                  <Text style={styles.photosLinkText}>View problem photos ({photoCount})</Text>
+                </Pressable>
+              ) : null}
+            </>
+          )}
+        </GrabStyleBottomSheet>
+
+        <Modal visible={photosOpen} transparent animationType="fade">
+          <View style={styles.modalBackdrop}>
+            <View style={styles.photosCard}>
+              <Text style={styles.modalTitle}>Problem photos</Text>
+              <HelpRequestPhotoGallery media={request.media} compact />
+              <Pressable style={styles.modalCloseBtn} onPress={() => setPhotosOpen(false)}>
+                <Text style={styles.modalCloseBtnText}>Close</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.root}>
+      <View style={styles.mapWrap}>
+        <View style={styles.mapPlaceholder}>
+          <HelpRequestMap
+            request={{
+              latitude: request.latitude,
+              longitude: request.longitude,
+              title: 'You',
+            }}
+            requestPinLabel="You"
             height={280}
           />
-        ) : (
-          <View style={styles.mapPlaceholder}>
-            <HelpRequestMap
-              request={{
-                latitude: request.latitude,
-                longitude: request.longitude,
-                title: 'You',
-              }}
-              height={280}
+          {searching && (
+            <MapSearchOverlay
+              visible
+              message="Finding a mechanic"
+              submessage={
+                request.search_progress
+                  ? `${request.search_progress.mechanics_notified_total} notified · ${request.search_progress.mechanics_awaiting_response} waiting`
+                  : 'Contacting providers near you'
+              }
             />
-            {searching && (
-              <MapSearchOverlay
-                visible
-                message="Finding a mechanic"
-                submessage={
-                  request.search_progress
-                    ? `${request.search_progress.mechanics_notified_total} notified · ${request.search_progress.mechanics_awaiting_response} waiting`
-                    : 'Contacting providers near you'
-                }
-              />
-            )}
-          </View>
-        )}
+          )}
+        </View>
       </View>
 
-      <ScrollView style={styles.sheetScroll} contentContainerStyle={styles.sheetScrollContent}>
+      <KeyboardAwareScrollView
+        ref={scrollRef}
+        style={styles.sheetScroll}
+        extraBottomPadding={completed ? 160 : canCancel ? 8 : 0}
+        contentContainerStyle={[styles.sheetScrollContent, canCancel && styles.sheetScrollWithFooter]}
+      >
         <GrabStyleBottomSheet>
           <Text style={styles.headline}>{activeJourneyHeadline(request)}</Text>
-          <Text style={styles.problem}>{request.problem_category?.name}</Text>
-
-          {canCancel ? (
-            <Pressable
-              style={({ pressed }) => [styles.cancelSheetBtn, pressed && styles.cancelSheetBtnPressed]}
-              onPress={confirmCancel}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel request"
-            >
-              <Text style={styles.cancelSheetBtnText}>Cancel request</Text>
-            </Pressable>
+          {request.problem_category?.name ? (
+            <Text style={styles.problem}>{request.problem_category.name}</Text>
           ) : null}
 
           <HelpJourneyTimeline steps={journeySteps} compact />
@@ -227,6 +380,7 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
             <HelpRequestCompletionPanel
               request={request}
               submitting={reviewSubmitting}
+              onCommentFocus={scrollReviewIntoView}
               onSubmitReview={async (rating, comment) => {
                 setReviewSubmitting(true);
                 try {
@@ -242,66 +396,18 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
             />
           )}
 
-          <View style={styles.summaryStrip}>
-            <Text style={styles.summaryText}>{vehicleTitle(request)}</Text>
-            <Text style={styles.summarySub} numberOfLines={2}>
-              {request.problem_category?.name} · {request.remarks}
-            </Text>
-          </View>
+          {!searching && !completed && (
+            <>
+              <Text style={styles.summaryText}>{vehicleTitle(request)}</Text>
+              <Text style={styles.remarks}>{request.remarks}</Text>
+            </>
+          )}
 
           <HelpRequestPhotoGallery media={request.media} title="Problem photos" compact />
-
-          {accepted && request.mechanic && (
-            <View style={styles.card}>
-              <View style={styles.mechanicRow}>
-                {request.mechanic.avatar_url ? (
-                  <Image source={{ uri: request.mechanic.avatar_url }} style={styles.avatar} />
-                ) : (
-                  <View style={styles.avatarPlaceholder} />
-                )}
-                <View style={styles.mechanicInfo}>
-                  <Text style={styles.shop}>{mechanicDisplayName(request)}</Text>
-                  <Text style={styles.rating}>★ {request.mechanic.rating_average.toFixed(1)}</Text>
-                  {request.mechanic.is_verified && (
-                    <Text style={styles.verified}>Verified mechanic</Text>
-                  )}
-                  {request.mechanic.rating_count != null && request.mechanic.rating_count > 0 && (
-                    <Text style={styles.jobCount}>
-                      {request.mechanic.rating_count} completed jobs
-                    </Text>
-                  )}
-                </View>
-              </View>
-
-              <Text style={styles.statusLine}>{jobStatusLabelOf(request)}</Text>
-
-              <ActiveJobLocationSummary
-                tracking={tracking}
-                connectionLost={connectionLost}
-                viewerRole="owner"
-              />
-
-              {request.mechanic.phone && (
-                <Pressable
-                  style={styles.callBtn}
-                  onPress={() => Linking.openURL(`tel:${request.mechanic!.phone}`)}
-                >
-                  <Text style={styles.callBtnText}>Call mechanic</Text>
-                </Pressable>
-              )}
-
-            </View>
-          )}
-
-          {!searching && !accepted && (
-            <Text style={styles.remarks}>{request.remarks}</Text>
-          )}
-
-          {tracking?.eta_disclaimer && (
-            <Text style={styles.disclaimer}>{tracking.eta_disclaimer}</Text>
-          )}
         </GrabStyleBottomSheet>
-      </ScrollView>
+      </KeyboardAwareScrollView>
+
+      {canCancel ? <CancelHelpRequestButton fixedFooter onPress={confirmCancel} /> : null}
     </View>
   );
 }
@@ -311,52 +417,58 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   loadingText: { color: '#64748b' },
   connectionLost: { color: '#dc2626' },
+  mapArea: { flex: 1, backgroundColor: '#cbd5e1' },
+  titleStack: { gap: 6, marginBottom: 2 },
+  statusPillInline: {
+    alignSelf: 'flex-start',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0284c7',
+    backgroundColor: '#e0f2fe',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  jobProgressHeadline: { flex: 1, fontSize: 18, fontWeight: '800', color: '#166534' },
+  workTime: { marginTop: 4 },
+  workTimeLive: { color: '#b45309' },
   mapWrap: { height: 280, backgroundColor: '#cbd5e1' },
   mapPlaceholder: { flex: 1, position: 'relative' },
-  cancelSheetBtn: {
-    marginTop: 12,
-    marginBottom: 4,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#dc2626',
-    backgroundColor: '#fef2f2',
-    alignItems: 'center',
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  sheetHeadline: { flex: 1, fontSize: 18, fontWeight: '800', color: '#0284c7' },
+  statusPill: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0284c7',
+    backgroundColor: '#e0f2fe',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
   },
-  cancelSheetBtnPressed: { opacity: 0.88, backgroundColor: '#fee2e2' },
-  cancelSheetBtnText: { color: '#dc2626', fontWeight: '800', fontSize: 16 },
+  personRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 10 },
+  personBlock: { flex: 1, minWidth: 0 },
+  personName: { fontSize: 17, fontWeight: '700', color: '#0f172a' },
+  vehicle: { fontSize: 14, fontWeight: '600', color: '#475569', marginTop: 2 },
+  problemLine: { fontSize: 13, color: '#64748b', marginTop: 6 },
+  callChip: {
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  callChipText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  photosLink: { marginTop: 6 },
+  photosLinkText: { color: '#0284c7', fontWeight: '600', fontSize: 13 },
+  connectionBanner: { marginTop: 6, color: '#dc2626', fontWeight: '600', fontSize: 13 },
   sheetScroll: { flex: 1 },
   sheetScrollContent: { flexGrow: 1 },
+  sheetScrollWithFooter: { paddingBottom: 8 },
   headline: { fontSize: 22, fontWeight: '800', color: '#0f172a' },
   problem: { fontSize: 16, color: '#475569', marginTop: 4, marginBottom: 8 },
-  card: {
-    marginTop: 16,
-    backgroundColor: '#f8fafc',
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  mechanicRow: { flexDirection: 'row', gap: 12 },
-  avatar: { width: 56, height: 56, borderRadius: 28 },
-  avatarPlaceholder: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#e2e8f0' },
-  mechanicInfo: { flex: 1 },
-  shop: { fontSize: 17, fontWeight: '700' },
-  rating: { marginTop: 4, color: '#64748b' },
-  jobCount: { marginTop: 2, color: '#64748b', fontSize: 13 },
-  verified: { color: '#16a34a', marginTop: 4, fontSize: 13, fontWeight: '600' },
-  statusLine: { marginTop: 12, fontSize: 15, fontWeight: '600', color: '#0284c7' },
-  callBtn: {
-    marginTop: 12,
-    backgroundColor: '#0284c7',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  callBtnText: { color: '#fff', fontWeight: '700' },
-  remarks: { marginTop: 12, color: '#475569', lineHeight: 20 },
-  disclaimer: { marginTop: 12, fontSize: 12, color: '#94a3b8', textAlign: 'center' },
+  summaryText: { marginTop: 12, fontWeight: '700', color: '#0f172a' },
+  remarks: { marginTop: 8, color: '#475569', lineHeight: 20 },
   terminalCard: {
     marginTop: 12,
     padding: 14,
@@ -375,12 +487,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   retryBtnText: { color: '#fff', fontWeight: '700' },
-  summaryStrip: {
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 24 },
+  photosCard: { backgroundColor: '#fff', padding: 20, borderRadius: 16, maxHeight: '80%' },
+  modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
+  modalCloseBtn: {
     marginTop: 12,
-    padding: 12,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: '#0284c7',
+    paddingVertical: 14,
     borderRadius: 10,
+    alignItems: 'center',
   },
-  summaryText: { fontWeight: '700', color: '#0f172a' },
-  summarySub: { color: '#64748b', marginTop: 4, fontSize: 13 },
+  modalCloseBtnText: { color: '#fff', fontWeight: '800' },
 });

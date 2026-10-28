@@ -1,18 +1,22 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { DrawerActions } from '@react-navigation/native';
-import React, { useEffect, useRef } from 'react';
+import { DrawerActions, useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Easing,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { fetchOwnerActiveHelpRequest, type HelpRequest } from '../../api/helpRequests';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import type { OwnerStackParamList } from '../../navigation/types';
+import { jobStatusLabelOf, vehicleTitle } from '../../utils/helpRequestUi';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'OwnerHome'>;
 
@@ -175,8 +179,46 @@ const actionStyles = StyleSheet.create({
 
 export function OwnerHomeScreen({ navigation }: Props) {
   const { config } = useAppConfig();
+  const emergencyOn = config?.features.emergency_assistance ?? false;
+  const [activeRequest, setActiveRequest] = useState<HelpRequest | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const resumePrompted = useRef(false);
   const heroOpacity = useRef(new Animated.Value(0)).current;
   const heroY = useRef(new Animated.Value(20)).current;
+
+  const openActiveRequest = useCallback(
+    (request: HelpRequest) => {
+      navigation.navigate('ActiveHelpRequest', { helpRequestId: request.id });
+    },
+    [navigation],
+  );
+
+  const load = useCallback(async (showRefresh = false) => {
+    if (showRefresh) setRefreshing(true);
+    try {
+      const live = emergencyOn ? await fetchOwnerActiveHelpRequest() : null;
+      setActiveRequest(live);
+    } catch {
+      setActiveRequest(null);
+    } finally {
+      if (showRefresh) setRefreshing(false);
+    }
+  }, [emergencyOn]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  useEffect(() => {
+    if (!emergencyOn || !activeRequest || resumePrompted.current) return;
+    resumePrompted.current = true;
+    Alert.alert('Help request in progress', 'Open your active request to track your mechanic?', [
+      { text: 'Later', style: 'cancel' },
+      { text: 'Open', onPress: () => openActiveRequest(activeRequest) },
+    ]);
+  }, [activeRequest, emergencyOn, openActiveRequest]);
 
   useEffect(() => {
     heroOpacity.setValue(0);
@@ -215,7 +257,22 @@ export function OwnerHomeScreen({ navigation }: Props) {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
       >
+        {emergencyOn && activeRequest ? (
+          <Pressable
+            style={styles.activeRow}
+            onPress={() => openActiveRequest(activeRequest)}
+            accessibilityRole="button"
+            accessibilityLabel="Open active help request"
+          >
+            <Text style={styles.activeLabel} numberOfLines={2}>
+              Active help · {vehicleTitle(activeRequest)} · {jobStatusLabelOf(activeRequest)}
+            </Text>
+            <Text style={styles.activeGo}>Open →</Text>
+          </Pressable>
+        ) : null}
+
         <Animated.View
           style={[styles.hero, { opacity: heroOpacity, transform: [{ translateY: heroY }] }]}
         >
@@ -299,6 +356,18 @@ const styles = StyleSheet.create({
   topTitle: { fontSize: 17, fontWeight: '700', color: '#0f172a' },
   scroll: { flex: 1 },
   scrollContent: { padding: 20, paddingTop: 8, paddingBottom: 32 },
+  activeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0284c7',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+    gap: 10,
+  },
+  activeLabel: { flex: 1, color: '#fff', fontWeight: '600', fontSize: 14, lineHeight: 19 },
+  activeGo: { color: '#e0f2fe', fontWeight: '800', fontSize: 14 },
   hero: {
     backgroundColor: '#0f172a',
     borderRadius: 20,

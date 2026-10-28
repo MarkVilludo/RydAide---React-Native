@@ -4,7 +4,8 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { fetchHelpRequests, type HelpRequest } from '../../api/helpRequests';
 import type { OwnerStackParamList } from '../../navigation/types';
-import { isOwnerLiveHelpRequest } from '../../utils/helpRequestUi';
+import { isOwnerLiveHelpRequest, jobStatusOf } from '../../utils/helpRequestUi';
+import { jobWorkDurationLabel } from '../../utils/jobWorkDuration';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'HelpRequestHistory'>;
 
@@ -92,6 +93,9 @@ export function HelpRequestHistoryScreen({ navigation }: Props) {
           {item.shop && <Text style={styles.meta}>Shop: {item.shop.name}</Text>}
           {item.accepted_at && <Text style={styles.meta}>Accepted: {formatDate(item.accepted_at)}</Text>}
           {item.completed_at && <Text style={styles.meta}>Completed: {formatDate(item.completed_at)}</Text>}
+          {jobStatusOf(item) === 'COMPLETED' && jobWorkDurationLabel(item.job) ? (
+            <Text style={styles.workTime}>{jobWorkDurationLabel(item.job)}</Text>
+          ) : null}
           {item.cancelled_at && <Text style={styles.meta}>Cancelled: {formatDate(item.cancelled_at)}</Text>}
           <Text style={styles.tapHint}>
             {isOwnerLiveHelpRequest(item) ? 'Tap to track live' : 'Tap for full details'}
@@ -115,5 +119,6 @@ const styles = StyleSheet.create({
   line: { color: '#334155', marginTop: 4, fontSize: 14 },
   remarks: { color: '#64748b', marginTop: 6, fontStyle: 'italic' },
   meta: { color: '#64748b', marginTop: 4, fontSize: 12 },
+  workTime: { color: '#166534', marginTop: 4, fontSize: 12, fontWeight: '700' },
   tapHint: { color: '#0284c7', marginTop: 10, fontSize: 12, fontWeight: '500' },
 });

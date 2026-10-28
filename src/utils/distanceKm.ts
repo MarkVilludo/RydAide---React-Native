@@ -93,3 +93,14 @@ export function formatDistanceKm(km: number | null | undefined): string | null {
   }
   return `${km.toFixed(km < 10 ? 1 : 0)} km away`;
 }
+
+/** Compact distance for map overlays (meters / km only, no prose). */
+export function formatMapDistanceKm(km: number | null | undefined): string | null {
+  if (km == null || !Number.isFinite(km)) {
+    return null;
+  }
+  if (km < 1) {
+    return `${Math.max(1, Math.round(km * 1000))} m`;
+  }
+  return `${km.toFixed(km < 10 ? 1 : 0)} km`;
+}

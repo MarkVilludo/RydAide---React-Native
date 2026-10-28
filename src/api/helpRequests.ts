@@ -1,3 +1,4 @@
+import { pickPrimaryOwnerLiveHelpRequest } from '../utils/helpRequestUi';
 import { api } from './client';
 
 /** Legacy linked garage record — optional on help requests. */
@@ -94,6 +95,10 @@ export interface ServiceJob {
   arrived_at?: string | null;
   started_at?: string | null;
   completed_at?: string | null;
+  /** Final duration when completed (started_at → completed_at). */
+  work_duration_seconds?: number | null;
+  /** Live elapsed seconds while status is IN_PROGRESS (server clock; syncs owner + mechanic). */
+  work_elapsed_seconds?: number | null;
   shop?: { id: number; name: string } | null;
   pricing?: ServiceJobPricing | null;
 }
@@ -215,6 +220,11 @@ export async function createHelpRequest(payload: CreateHelpRequestPayload): Prom
 export async function fetchHelpRequests(): Promise<HelpRequest[]> {
   const { data } = await api.get('/help-requests');
   return data.data.help_requests;
+}
+
+export async function fetchOwnerActiveHelpRequest(): Promise<HelpRequest | null> {
+  const requests = await fetchHelpRequests();
+  return pickPrimaryOwnerLiveHelpRequest(requests);
 }
 
 export async function fetchHelpRequest(id: number): Promise<HelpRequest> {

@@ -18,6 +18,7 @@ const config = {
     },
   },
   android: {
+    softwareKeyboardLayoutMode: 'resize',
     usesCleartextTraffic: true,
     adaptiveIcon: {
       backgroundColor: '#E6F4FE',
@@ -39,6 +40,7 @@ const config = {
       },
     ],
     'expo-status-bar',
+    'expo-navigation-bar',
     'expo-maps',
   ],
 };

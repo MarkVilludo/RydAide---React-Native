@@ -9,8 +9,8 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { resolveMediaUrl } from '../utils/resolveMediaUrl';
+import { homeIndicatorBottomInset, statusBarTopInset } from '../utils/screenInsets';
 
 export type HelpRequestMediaItem = {
   id: number;
@@ -32,7 +32,6 @@ export function HelpRequestPhotoGallery({
   title = 'Attached photos',
   compact = false,
 }: Props) {
-  const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
@@ -82,7 +81,12 @@ export function HelpRequestPhotoGallery({
       </ScrollView>
 
       <Modal visible={viewerOpen} animationType="fade" transparent onRequestClose={() => setViewerOpen(false)}>
-        <View style={[styles.modalBackdrop, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <View
+          style={[
+            styles.modalBackdrop,
+            { paddingTop: statusBarTopInset(), paddingBottom: homeIndicatorBottomInset() },
+          ]}
+        >
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>
               Photo {viewerIndex + 1} / {photos.length}
