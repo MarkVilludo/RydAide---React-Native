@@ -20,7 +20,6 @@ import {
   SearchRadiusSelector,
 } from '../../components/SearchRadiusSelector';
 import { useAppConfig } from '../../hooks/useAppConfig';
-import { ensureDevNearbyDataBeforeSearch } from '../../utils/ensureDevNearbyData';
 import type { OwnerStackParamList } from '../../navigation/types';
 import type { MapDirectoryPin } from '../../types/mapPins';
 
@@ -96,11 +95,6 @@ export function FindShopScreen(_props: Props) {
     setLoading(true);
     setSearched(true);
     try {
-      await ensureDevNearbyDataBeforeSearch(
-        config?.features.dynamic_nearby_seed === true,
-        center.latitude,
-        center.longitude,
-      );
       const { shops, search } = await searchShops({
         latitude: center.latitude,
         longitude: center.longitude,

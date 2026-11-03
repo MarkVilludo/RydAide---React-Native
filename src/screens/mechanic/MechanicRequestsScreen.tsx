@@ -98,7 +98,7 @@ export function MechanicRequestsScreen({ navigation, route }: Props) {
   const openRequest = (request: HelpRequest) => {
     const jobStatus = jobStatusOf(request);
     if (request.status === 'SEARCHING') {
-      navigation.navigate('MechanicRequestDetail', { helpRequestId: request.id });
+      navigation.navigate('IncomingRequestDetail', { helpRequestId: request.id });
       return;
     }
     if (isActiveJobStatus(jobStatus)) {
@@ -190,6 +190,7 @@ export function MechanicRequestsScreen({ navigation, route }: Props) {
               request={item}
               mechanicCoords={mechanicCoords}
               highlightDistance={tab === 'incoming'}
+              showCustomerReview={tab === 'completed'}
               onPress={() => openRequest(item)}
               statusOverride={statusOverride}
             />

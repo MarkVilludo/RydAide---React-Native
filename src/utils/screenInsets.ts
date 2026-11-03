@@ -30,9 +30,18 @@ export function statusBarTopInset(): number {
   return Constants.statusBarHeight ?? 47;
 }
 
-/** Modest bottom padding (sheet footers, cancel buttons). */
+/** Modest bottom padding (inline cancel links — not sticky footers). */
 export function compactBottomInset(): number {
   return Platform.OS === 'ios' ? 8 : 4;
+}
+
+type BottomInsetSource = { bottom: number };
+
+/** Sticky footers (Continue / Submit) — clears home indicator and Android gesture nav. */
+export function stickyFooterBottomPadding(insets: BottomInsetSource, extra = 16): number {
+  const system =
+    insets.bottom > 0 ? insets.bottom : Platform.OS === 'android' ? 24 : 12;
+  return Math.max(extra, system);
 }
 
 /** Full home-indicator clearance for modals and toasts. */

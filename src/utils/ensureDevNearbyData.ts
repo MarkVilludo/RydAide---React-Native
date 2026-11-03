@@ -2,7 +2,8 @@ import axios from 'axios';
 import { ensureNearbyProviders } from '../api/nearbySeed';
 
 /**
- * Repositions local test mechanics/shops before directory search (requires login).
+ * Repositions local test mechanics/shops (dev API only). Use from help-request flows if needed —
+ * not from directory / nearby map search (would teleport pins to the search point).
  */
 export async function ensureDevNearbyDataBeforeSearch(
   enabled: boolean,

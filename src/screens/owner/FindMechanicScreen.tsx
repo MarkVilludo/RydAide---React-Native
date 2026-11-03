@@ -22,7 +22,6 @@ import {
   SearchRadiusSelector,
 } from '../../components/SearchRadiusSelector';
 import { useAppConfig } from '../../hooks/useAppConfig';
-import { ensureDevNearbyDataBeforeSearch } from '../../utils/ensureDevNearbyData';
 import type { OwnerStackParamList } from '../../navigation/types';
 import type { MapDirectoryPin } from '../../types/mapPins';
 
@@ -84,11 +83,8 @@ export function FindMechanicScreen({ navigation }: Props) {
     setLoading(true);
     setSearched(true);
     try {
-      await ensureDevNearbyDataBeforeSearch(
-        config?.features.dynamic_nearby_seed === true,
-        center.latitude,
-        center.longitude,
-      );
+      // Directory search uses real mechanic coordinates — do not call dev nearby seed here
+      // (that API moves test providers to the tap point and makes every pin follow the search center).
       const { mechanics, search } = await searchMechanics({
         latitude: center.latitude,
         longitude: center.longitude,
@@ -105,7 +101,7 @@ export function FindMechanicScreen({ navigation }: Props) {
     } finally {
       if (gen === searchGen.current) setLoading(false);
     }
-  }, [center, config?.features.dynamic_nearby_seed, emergency, radiusKm]);
+  }, [center, emergency, radiusKm]);
 
   useEffect(() => {
     if (!center || locating) return;

@@ -1,6 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { fetchCurrentUser, login as apiLogin, logout as apiLogout, register as apiRegister } from '../api/auth';
+import { unregisterPushToken } from '../api/pushTokens';
+import { getCurrentPushToken, setCurrentPushToken } from '../services/pushNotifications';
 import { setApiAuthToken } from '../api/client';
 import type { User } from '../api/types';
 
@@ -74,11 +76,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    const pushToken = getCurrentPushToken();
     try {
-      await apiLogout();
+      await apiLogout(pushToken);
     } catch {
       // Token may already be invalid.
     }
+    if (pushToken) {
+      try {
+        await unregisterPushToken(pushToken);
+      } catch {
+        /* ignore */
+      }
+    }
+    setCurrentPushToken(null);
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     setApiAuthToken(null);
     setUser(null);

@@ -9,6 +9,7 @@ import { MechanicRequestDetailScreen } from '../screens/mechanic/MechanicRequest
 import { MechanicRequestsScreen } from '../screens/mechanic/MechanicRequestsScreen';
 import { MechanicSubscriptionScreen } from '../screens/mechanic/MechanicSubscriptionScreen';
 import { MechanicWorkLocationScreen } from '../screens/mechanic/MechanicWorkLocationScreen';
+import { MechanicActiveJobRecovery } from '../components/MechanicActiveJobRecovery';
 import { MechanicLocationProvider } from '../context/MechanicLocationContext';
 import type { MechanicStackParamList } from './types';
 
@@ -17,6 +18,7 @@ const Stack = createNativeStackNavigator<MechanicStackParamList>();
 export function MechanicNavigator() {
   return (
     <MechanicLocationProvider>
+    <MechanicActiveJobRecovery />
     <Stack.Navigator>
       <Stack.Screen name="MechanicHome" component={MechanicHomeScreen} options={{ headerShown: false }} />
       <Stack.Screen

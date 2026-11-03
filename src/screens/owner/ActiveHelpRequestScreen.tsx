@@ -6,7 +6,6 @@ import {
   Linking,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -22,7 +21,10 @@ import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSumm
 import { AndroidHideNavigationBarWhenFocused } from '../../components/AndroidHideNavigationBarWhenFocused';
 import { CancelHelpRequestButton } from '../../components/CancelHelpRequestButton';
 import { HelpRequestCompletionPanel } from '../../components/HelpRequestCompletionPanel';
-import { KeyboardAwareScrollView } from '../../components/KeyboardAwareScrollView';
+import {
+  KeyboardAwareScrollView,
+  type KeyboardAwareScrollViewRef,
+} from '../../components/KeyboardAwareScrollView';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { HelpJourneyTimeline } from '../../components/HelpJourneyTimeline';
@@ -69,10 +71,10 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [photosOpen, setPhotosOpen] = useState(false);
   const cancelLock = useRef(false);
-  const scrollRef = useRef<ScrollView>(null);
+  const reviewScrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const scrollReviewIntoView = useCallback(() => {
     requestAnimationFrame(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
+      reviewScrollRef.current?.scrollToEnd({ animated: true });
     });
   }, []);
 
@@ -336,7 +338,7 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
       </View>
 
       <KeyboardAwareScrollView
-        ref={scrollRef}
+        ref={reviewScrollRef}
         style={styles.sheetScroll}
         extraBottomPadding={completed ? 160 : canCancel ? 8 : 0}
         contentContainerStyle={[styles.sheetScrollContent, canCancel && styles.sheetScrollWithFooter]}

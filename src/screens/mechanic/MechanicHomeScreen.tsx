@@ -212,6 +212,44 @@ export function MechanicHomeScreen({ navigation }: Props) {
     const next = isOnline ? 'offline' : 'available';
     setAvailabilityBusy(true);
     try {
+      if (next === 'available') {
+        const target = mechanicQueueFetchCoords({ servicePin, servicePinManual, coords, maxOffsetKm });
+        if (!target) {
+          Alert.alert(
+            'Location needed',
+            'Enable GPS or save your service location on the map before going online so nearby owners can find you.',
+          );
+          return;
+        }
+        const useManualPin = servicePinManual && servicePin != null;
+        if (useManualPin && !coords) {
+          Alert.alert('GPS required', 'Turn on location so we can verify your service pin before going online.');
+          return;
+        }
+        try {
+          const updatedLoc = await updateMechanicProfileLocation(
+            target.latitude,
+            target.longitude,
+            undefined,
+            useManualPin && coords
+              ? { source: 'manual', gps: coords }
+              : { source: 'device' },
+          );
+          applySavedMechanicLocation(
+            updatedLoc.latitude ?? target.latitude,
+            updatedLoc.longitude ?? target.longitude,
+            useManualPin,
+          );
+          setWorkLocation({
+            latitude: updatedLoc.latitude ?? target.latitude,
+            longitude: updatedLoc.longitude ?? target.longitude,
+            address: updatedLoc.address ?? workLocation?.address ?? null,
+          });
+        } catch {
+          Alert.alert('Could not update location', 'Fix your work location, then try going online again.');
+          return;
+        }
+      }
       const updated = await updateMechanicAvailability(next);
       setAvailability(updated.availability_status ?? next);
     } catch {

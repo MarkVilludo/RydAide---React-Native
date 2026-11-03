@@ -30,8 +30,8 @@ export async function register(input: {
   return data.data;
 }
 
-export async function logout(): Promise<void> {
-  await api.post('/auth/logout');
+export async function logout(pushToken?: string | null): Promise<void> {
+  await api.post('/auth/logout', pushToken ? { push_token: pushToken } : undefined);
 }
 
 export async function fetchCurrentUser(): Promise<User> {

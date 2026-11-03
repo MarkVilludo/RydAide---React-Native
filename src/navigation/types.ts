@@ -37,6 +37,6 @@ export type MechanicStackParamList = {
 
 export type RootStackParamList = {
   Auth: undefined;
-  OwnerApp: undefined;
-  MechanicApp: undefined;
+  OwnerApp: NavigatorScreenParams<OwnerDrawerParamList> | undefined;
+  MechanicApp: NavigatorScreenParams<MechanicStackParamList> | undefined;
 };

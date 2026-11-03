@@ -13,9 +13,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { fetchOwnerActiveHelpRequest, type HelpRequest } from '../../api/helpRequests';
+import { fetchHelpRequests, type HelpRequest } from '../../api/helpRequests';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import type { OwnerStackParamList } from '../../navigation/types';
+import { pickPrimaryOwnerLiveHelpRequest } from '../../utils/helpRequestStatus';
 import { jobStatusLabelOf, vehicleTitle } from '../../utils/helpRequestUi';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'OwnerHome'>;
@@ -196,7 +197,9 @@ export function OwnerHomeScreen({ navigation }: Props) {
   const load = useCallback(async (showRefresh = false) => {
     if (showRefresh) setRefreshing(true);
     try {
-      const live = emergencyOn ? await fetchOwnerActiveHelpRequest() : null;
+      const live = emergencyOn
+        ? pickPrimaryOwnerLiveHelpRequest(await fetchHelpRequests())
+        : null;
       setActiveRequest(live);
     } catch {
       setActiveRequest(null);
@@ -251,7 +254,7 @@ export function OwnerHomeScreen({ navigation }: Props) {
           <Text style={styles.menuIcon}>☰</Text>
         </Pressable>
         <Text style={styles.topTitle}>RydAid</Text>
-        <View style={styles.menuBtnPlaceholder} />
+        <View style={styles.topBarSpacer} />
       </View>
       <ScrollView
         style={styles.scroll}
@@ -351,6 +354,7 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   menuBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  topBarSpacer: { width: 44 },
   menuBtnPlaceholder: { width: 44 },
   menuIcon: { fontSize: 24, color: '#0f172a' },
   topTitle: { fontSize: 17, fontWeight: '700', color: '#0f172a' },

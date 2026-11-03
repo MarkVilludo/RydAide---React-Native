@@ -74,6 +74,24 @@ export function MechanicRequestCard({
         </Text>
       ) : null}
 
+      {showCustomerReview ? (
+        request.review ? (
+          <View style={styles.reviewBlock}>
+            <View style={styles.reviewRow}>
+              <Text style={styles.reviewStars}>{formatStarRating(request.review.rating)}</Text>
+              <Text style={styles.reviewScore}>{request.review.rating}/5</Text>
+            </View>
+            {request.review.comment ? (
+              <Text style={styles.reviewComment} numberOfLines={2}>
+                {request.review.comment}
+              </Text>
+            ) : null}
+          </View>
+        ) : jobStatusOf(request) === 'COMPLETED' ? (
+          <Text style={styles.reviewPending}>No customer review yet</Text>
+        ) : null
+      ) : null}
+
       <View style={styles.footer}>
         <View style={styles.footerLeft}>
           <Text style={styles.status}>{statusLabel}</Text>
@@ -126,6 +144,19 @@ const styles = StyleSheet.create({
   distanceMutedText: { color: '#94a3b8', fontWeight: '700' },
   remarks: { marginTop: 10, fontSize: 14, lineHeight: 20, color: '#475569' },
   address: { marginTop: 8, fontSize: 13, color: '#64748b' },
+  reviewBlock: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: '#fffbeb',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  reviewRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  reviewStars: { fontSize: 16, color: '#f59e0b', letterSpacing: 1 },
+  reviewScore: { fontSize: 13, fontWeight: '800', color: '#92400e' },
+  reviewComment: { marginTop: 6, fontSize: 13, lineHeight: 18, color: '#57534e', fontStyle: 'italic' },
+  reviewPending: { marginTop: 10, fontSize: 12, fontWeight: '600', color: '#94a3b8' },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',

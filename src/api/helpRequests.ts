@@ -1,4 +1,3 @@
-import { pickPrimaryOwnerLiveHelpRequest } from '../utils/helpRequestUi';
 import { api } from './client';
 
 /** Legacy linked garage record — optional on help requests. */
@@ -222,9 +221,9 @@ export async function fetchHelpRequests(): Promise<HelpRequest[]> {
   return data.data.help_requests;
 }
 
-export async function fetchOwnerActiveHelpRequest(): Promise<HelpRequest | null> {
-  const requests = await fetchHelpRequests();
-  return pickPrimaryOwnerLiveHelpRequest(requests);
+export async function fetchActiveHelpRequest(): Promise<HelpRequest | null> {
+  const { data } = await api.get('/help-requests/active');
+  return data.data.help_request ?? null;
 }
 
 export async function fetchHelpRequest(id: number): Promise<HelpRequest> {

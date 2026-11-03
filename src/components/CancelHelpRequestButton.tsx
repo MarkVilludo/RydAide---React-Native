@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { compactBottomInset } from '../utils/screenInsets';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { stickyFooterBottomPadding } from '../utils/screenInsets';
 
 type Props = {
   onPress: () => void;
@@ -9,7 +10,8 @@ type Props = {
 };
 
 export function CancelHelpRequestButton({ onPress, fixedFooter = false }: Props) {
-  const bottomPad = compactBottomInset();
+  const insets = useSafeAreaInsets();
+  const bottomPad = stickyFooterBottomPadding(insets, 12);
 
   const button = (
     <Pressable

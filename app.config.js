@@ -31,7 +31,20 @@ const config = {
   web: {
     favicon: './assets/favicon.png',
   },
+  extra: {
+    eas: {
+      projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID,
+    },
+  },
   plugins: [
+    [
+      'expo-notifications',
+      {
+        icon: './assets/icon.png',
+        color: '#0284c7',
+        defaultChannel: 'help-requests',
+      },
+    ],
     'expo-secure-store',
     [
       'expo-location',

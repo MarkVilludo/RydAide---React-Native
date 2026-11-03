@@ -6,12 +6,14 @@ import {
   Alert,
   Linking,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { KeyboardAwareScrollView } from '../../components/KeyboardAwareScrollView';
+import {
+  KeyboardAwareScrollView,
+  type KeyboardAwareScrollViewRef,
+} from '../../components/KeyboardAwareScrollView';
 import { getApiErrorMessage } from '../../api/client';
 import {
   cancelHelpRequest,
@@ -42,11 +44,11 @@ export function HelpRequestDetailScreen({ route }: Props) {
   const [request, setRequest] = useState<HelpRequest | null>(null);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const cancelLock = useRef(false);
-  const scrollRef = useRef<ScrollView>(null);
+  const reviewScrollRef = useRef<KeyboardAwareScrollViewRef>(null);
 
   const scrollReviewIntoView = useCallback(() => {
     requestAnimationFrame(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
+      reviewScrollRef.current?.scrollToEnd({ animated: true });
     });
   }, []);
 
@@ -116,7 +118,7 @@ export function HelpRequestDetailScreen({ route }: Props) {
       />
 
       <KeyboardAwareScrollView
-        ref={scrollRef}
+        ref={reviewScrollRef}
         style={styles.scroll}
         extraBottomPadding={canReview ? 160 : canCancel ? 8 : 0}
         contentContainerStyle={[styles.scrollContent, canCancel && styles.scrollWithFooter]}

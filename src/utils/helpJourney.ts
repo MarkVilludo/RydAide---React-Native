@@ -1,5 +1,5 @@
 import type { HelpRequest } from '../api/helpRequests';
-import { jobStatusOf } from './helpRequestUi';
+import { jobStatusOf } from './helpRequestStatus';
 
 export type JourneyStepState = 'done' | 'active' | 'pending' | 'failed';
 

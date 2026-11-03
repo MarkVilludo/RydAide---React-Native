@@ -12,7 +12,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { compactBottomInset } from '../../utils/screenInsets';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { stickyFooterBottomPadding } from '../../utils/screenInsets';
 import { getApiErrorMessage } from '../../api/client';
 import {
   createHelpRequest,
@@ -37,6 +38,8 @@ const STEPS: Step[] = ['vehicle', 'problem', 'location', 'review'];
 
 export function NeedHelpScreen({ navigation, route }: Props) {
   const emergency = route.params?.emergency ?? true;
+  const insets = useSafeAreaInsets();
+  const footerBottomPad = stickyFooterBottomPadding(insets);
   const { config } = useAppConfig();
   const submitLock = useRef(false);
   const [step, setStep] = useState<Step>('vehicle');
@@ -351,7 +354,7 @@ export function NeedHelpScreen({ navigation, route }: Props) {
         )}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: Math.max(16, compactBottomInset()) }]}>
+      <View style={[styles.footer, { paddingBottom: footerBottomPad }]}>
         <Pressable
           style={({ pressed }) => [
             styles.backBtn,

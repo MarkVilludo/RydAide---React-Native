@@ -9,6 +9,7 @@ import { FindShopScreen } from '../screens/owner/FindShopScreen';
 import { NeedHelpScreen } from '../screens/owner/NeedHelpScreen';
 import { HelpRequestDetailScreen } from '../screens/owner/HelpRequestDetailScreen';
 import { HelpRequestHistoryScreen } from '../screens/owner/HelpRequestHistoryScreen';
+import { OwnerActiveJobRecovery } from '../components/OwnerActiveJobRecovery';
 import { OwnerHomeScreen } from '../screens/owner/OwnerHomeScreen';
 import { OwnerDrawerContent } from './OwnerDrawerContent';
 import type { OwnerDrawerParamList, OwnerStackParamList } from './types';
@@ -53,7 +54,9 @@ function StackHeaderLeft({ navigation }: { navigation: OwnerStackNav }) {
 
 function OwnerStackNavigator() {
   return (
-    <Stack.Navigator
+    <>
+      <OwnerActiveJobRecovery />
+      <Stack.Navigator
       screenOptions={({ navigation }) => ({
         headerTintColor: '#0284c7',
         headerLeft: () => <StackHeaderLeft navigation={navigation} />,
@@ -75,6 +78,7 @@ function OwnerStackNavigator() {
       />
       <Stack.Screen name="HelpRequestDetail" component={HelpRequestDetailScreen} options={{ title: 'Request details' }} />
     </Stack.Navigator>
+    </>
   );
 }
 

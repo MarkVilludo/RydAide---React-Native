@@ -2,7 +2,7 @@ import { GoogleMaps } from 'expo-maps';
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { MapDirectoryPin } from '../types/mapPins';
-import { zoomForRadiusKm } from '../utils/mapZoom';
+import { zoomForRadiusKm } from '../utils/mapRegion';
 
 export type SearchCenter = {
   latitude: number;
