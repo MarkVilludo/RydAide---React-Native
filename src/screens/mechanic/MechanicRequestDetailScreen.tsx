@@ -27,6 +27,7 @@ import { resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { formatRequestDate, isActiveJobStatus, jobStatusLabelOf, jobStatusOf, vehicleTitle } from '../../utils/helpRequestUi';
 import { jobWorkDurationLabel } from '../../utils/jobWorkDuration';
+import { subscriptionRequiredMessage } from '../../utils/mechanicAcceptErrors';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'MechanicRequestDetail'>;
 
@@ -78,7 +79,15 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
         initialRequest: accepted,
       });
     } catch (e) {
-      Alert.alert('Accept failed', getApiErrorMessage(e));
+      const subMsg = subscriptionRequiredMessage(e);
+      if (subMsg) {
+        Alert.alert('Mechanic Pro required', subMsg, [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Subscribe', onPress: () => navigation.navigate('MechanicSubscription') },
+        ]);
+      } else {
+        Alert.alert('Accept failed', getApiErrorMessage(e));
+      }
       load();
     } finally {
       setActing(false);

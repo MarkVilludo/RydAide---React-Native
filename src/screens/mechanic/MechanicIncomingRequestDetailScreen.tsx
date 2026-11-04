@@ -24,6 +24,7 @@ import { useMechanicDistanceOrigin } from '../../hooks/useMechanicDistanceOrigin
 import { resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { vehicleTitle } from '../../utils/helpRequestUi';
+import { subscriptionRequiredMessage } from '../../utils/mechanicAcceptErrors';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'IncomingRequestDetail'>;
 
@@ -63,7 +64,15 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
         initialRequest: accepted,
       });
     } catch (e) {
-      Alert.alert('Accept failed', getApiErrorMessage(e));
+      const subMsg = subscriptionRequiredMessage(e);
+      if (subMsg) {
+        Alert.alert('Mechanic Pro required', subMsg, [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Subscribe', onPress: () => navigation.navigate('MechanicSubscription') },
+        ]);
+      } else {
+        Alert.alert('Accept failed', getApiErrorMessage(e));
+      }
       load();
     } finally {
       setActing(false);

@@ -16,6 +16,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fetchEntitlements } from '../../api/auth';
+import { fetchMechanicSubscription, type MechanicSubscriptionDetails } from '../../api/mechanicSubscription';
+import { MechanicCreditsCard } from '../../components/MechanicCreditsCard';
 import type { HelpRequest } from '../../api/helpRequests';
 import { fetchMechanicHelpQueues } from '../../api/mechanicHelp';
 import {
@@ -79,6 +81,7 @@ export function MechanicHomeScreen({ navigation }: Props) {
   const pageOpacity = useRef(new Animated.Value(0)).current;
 
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
+  const [subscriptionDashboard, setSubscriptionDashboard] = useState<MechanicSubscriptionDetails | null>(null);
   const [listingStatus, setListingStatus] = useState<string | null>(null);
   const [availability, setAvailability] = useState<'available' | 'offline' | 'busy'>('offline');
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
@@ -113,6 +116,11 @@ export function MechanicHomeScreen({ navigation }: Props) {
     try {
       await Promise.all([
         fetchEntitlements().then(setEntitlements).catch(() => setEntitlements(null)),
+        subscriptionsOn
+          ? fetchMechanicSubscription()
+              .then((d) => setSubscriptionDashboard(d.subscription))
+              .catch(() => setSubscriptionDashboard(null))
+          : Promise.resolve(),
         fetchMyMechanicProfile()
           .then((p) => {
             setListingStatus(p?.verification_status ?? (p ? 'pending' : 'none'));
@@ -150,6 +158,7 @@ export function MechanicHomeScreen({ navigation }: Props) {
     }
   }, [
     emergencyOn,
+    subscriptionsOn,
     coords?.latitude,
     coords?.longitude,
     servicePin?.latitude,
@@ -394,10 +403,15 @@ export function MechanicHomeScreen({ navigation }: Props) {
                   </View>
                 ) : null}
 
-                {atFreeLimit && subscriptionsOn && !isPro ? (
-                  <Pressable style={styles.proLink} onPress={() => navigation.navigate('MechanicSubscription')}>
-                    <Text style={styles.proLinkText}>Upgrade · ₱{proPrice}/mo</Text>
-                  </Pressable>
+                {subscriptionsOn ? (
+                  <MechanicCreditsCard
+                    dashboard={subscriptionDashboard}
+                    entitlementsRemaining={acceptedRemaining}
+                    entitlementsTotal={entitlements?.accepted_requests?.limit ?? entitlements?.max_accepted_requests}
+                    isPro={isPro}
+                    proPrice={proPrice}
+                    onSubscribe={() => navigation.navigate('MechanicSubscription')}
+                  />
                 ) : null}
               </>
             )}

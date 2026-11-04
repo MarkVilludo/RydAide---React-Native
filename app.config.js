@@ -1,8 +1,13 @@
 const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
 
+const iosBundleId = process.env.EXPO_PUBLIC_IOS_BUNDLE_ID?.trim() || 'com.rydaid.mobile';
+const androidPackage = process.env.EXPO_PUBLIC_ANDROID_PACKAGE?.trim() || 'com.rydaid.mobile';
+const mechanicProProductId =
+  process.env.EXPO_PUBLIC_MECHANIC_PRO_PRODUCT_ID?.trim() || 'com.rydaid.mechanic.pro.monthly';
+
 /** @type {import('expo/config').ExpoConfig} */
 const config = {
-  name: 'RydAidMobile',
+  name: 'RydAid',
   slug: 'RydAidMobile',
   version: '1.0.0',
   orientation: 'portrait',
@@ -10,6 +15,7 @@ const config = {
   userInterfaceStyle: 'light',
   ios: {
     supportsTablet: true,
+    bundleIdentifier: iosBundleId,
     infoPlist: {
       NSLocationWhenInUseUsageDescription: 'RydAid uses your location to find nearby mechanics.',
       NSAppTransportSecurity: {
@@ -18,6 +24,7 @@ const config = {
     },
   },
   android: {
+    package: androidPackage,
     softwareKeyboardLayoutMode: 'resize',
     usesCleartextTraffic: true,
     adaptiveIcon: {
@@ -34,6 +41,12 @@ const config = {
   extra: {
     eas: {
       projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID,
+    },
+    storeBilling: {
+      mechanicProProductId,
+      iosBundleId,
+      androidPackage,
+      sandbox: process.env.EXPO_PUBLIC_STORE_SANDBOX === 'true',
     },
   },
   plugins: [
@@ -55,6 +68,7 @@ const config = {
     'expo-status-bar',
     'expo-navigation-bar',
     'expo-maps',
+    'expo-iap',
   ],
 };
 

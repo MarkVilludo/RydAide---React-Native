@@ -54,7 +54,7 @@ api.interceptors.response.use(
 export function getApiErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     if (!error.response) {
-      return `Cannot reach the API at ${API_URL}. Check that Laravel is running, ngrok/LAN URL is correct, and restart Expo after changing .env.`;
+      return `Cannot reach the API at ${API_URL}. On your Mac run: ipconfig getifaddr en0 — put that IP in RydAidMobile/.env as EXPO_PUBLIC_API_URL (same Wi‑Fi as the phone), keep Laravel on php artisan serve --host=0.0.0.0 --port=8000, then npx expo start -c.`;
     }
     const data = error.response?.data as ApiError | undefined;
     if (data?.message) {
