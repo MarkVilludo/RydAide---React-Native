@@ -92,6 +92,21 @@ IAP **does not work in Expo Go**. Use a build from the profiles above (`npx expo
 
 ---
 
+## Local dev without App Store / Play (simulate payment)
+
+You do **not** need a deployed app or real GCash for local E2E.
+
+1. Laravel `.env`: `APP_ENV=local`, `STORE_VERIFICATION_MODE=testing` (never in production).
+2. Run API + Expo on the same Wi‑Fi (`EXPO_PUBLIC_API_URL` = Mac LAN IP).
+3. Log in as `mechanic.paytest@rydaid.test` / `password` (0 free credits).
+4. Open **Mechanic Pro** → tap green **Simulate payment (local dev)**.
+5. API activates Pro via `POST /mechanic/subscription/verify-purchase` (testing mode — no receipt).
+6. Accept a HELP request to confirm Pro works.
+
+Real **App Store / Google Play** (or PayMongo GCash if re-enabled) is only needed for production-like billing tests.
+
+---
+
 ## End-to-end sandbox test
 
 1. Laravel staging API reachable from the phone (`EXPO_PUBLIC_API_URL`).

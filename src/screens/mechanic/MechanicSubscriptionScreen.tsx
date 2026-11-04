@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import {
   cancelMechanicSubscription,
   fetchMechanicSubscription,
+  simulateMechanicProPurchaseDev,
   type MechanicSubscriptionDetails,
   type PaymentHistoryItem,
 } from '../../api/mechanicSubscription';
@@ -69,6 +70,23 @@ export function MechanicSubscriptionScreen(_props: Props) {
   );
 
   const isPro = dashboard?.billing_status === 'ACTIVE';
+  const simulateEnabled = config?.mechanic_monetization?.simulate_purchase_enabled === true;
+
+  const onSimulateDevPurchase = async () => {
+    setPurchaseBusy(true);
+    try {
+      await simulateMechanicProPurchaseDev(
+        resolvedProductId,
+        Platform.OS === 'ios' ? 'ios' : 'android',
+      );
+      await load(true);
+      Alert.alert('Mechanic Pro (dev)', 'Simulated payment applied. You can accept HELP requests again.');
+    } catch (e) {
+      Alert.alert('Simulation failed', getApiErrorMessage(e));
+    } finally {
+      setPurchaseBusy(false);
+    }
+  };
 
   const onSubscribe = async () => {
     if (!isNativeStoreBillingAvailable()) {
@@ -138,13 +156,25 @@ export function MechanicSubscriptionScreen(_props: Props) {
         onSubscribe={() => void onSubscribe()}
       />
 
+      {!isPro && simulateEnabled ? (
+        <Pressable
+          style={[styles.devSimBtn, purchaseBusy && styles.btnDisabled]}
+          disabled={purchaseBusy}
+          onPress={() => void onSimulateDevPurchase()}
+        >
+          <Text style={styles.devSimBtnText}>Simulate payment (local dev — no GCash / store charge)</Text>
+        </Pressable>
+      ) : null}
+
       {!isPro ? (
         <Pressable style={[styles.primaryBtn, purchaseBusy && styles.btnDisabled]} disabled={purchaseBusy} onPress={() => void onSubscribe()}>
           {purchaseBusy ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <Text style={styles.primaryBtnText}>
-              Subscribe via {Platform.OS === 'ios' ? 'App Store' : 'Google Play'}
+              {simulateEnabled
+                ? 'Subscribe via App Store / Play (requires EAS build)'
+                : `Subscribe via ${Platform.OS === 'ios' ? 'App Store' : 'Google Play'}`}
             </Text>
           )}
         </Pressable>
@@ -208,6 +238,15 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
   },
   noteText: { fontSize: 14, lineHeight: 20, color: '#475569' },
+  devSimBtn: {
+    backgroundColor: '#059669',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  devSimBtnText: { color: '#fff', fontWeight: '700', fontSize: 14, textAlign: 'center' },
   primaryBtn: {
     backgroundColor: '#0070f3',
     borderRadius: 14,

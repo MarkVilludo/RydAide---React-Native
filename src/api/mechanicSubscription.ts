@@ -49,6 +49,19 @@ export async function fetchMechanicSubscription(): Promise<{
   return data.data;
 }
 
+/** Dev/local only when API has STORE_VERIFICATION_MODE=testing (no real App Store / Play charge). */
+export async function simulateMechanicProPurchaseDev(
+  productId: string,
+  platform: 'ios' | 'android',
+): Promise<{ already_processed: boolean; subscription: MechanicSubscriptionDetails }> {
+  return verifyMechanicProStorePurchase({
+    platform,
+    product_id: productId,
+    transaction_id: `dev-sim-${Date.now()}`,
+    sandbox: true,
+  });
+}
+
 export async function verifyMechanicProStorePurchase(body: {
   platform: 'ios' | 'android';
   product_id: string;
