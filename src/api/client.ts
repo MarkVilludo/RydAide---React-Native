@@ -53,8 +53,11 @@ api.interceptors.response.use(
 
 function messageFromResponseBody(data: unknown, status: number): string | null {
   if (data && typeof data === 'object' && 'message' in data) {
-    const message = (data as ApiError).message;
+    const message = (data as ApiError & { message?: string }).message;
     if (typeof message === 'string' && message.trim() !== '') {
+      if (message.includes('could not be found') && message.includes('route')) {
+        return 'This app version needs a server update (missing API route). Deploy latest RydAid code on the server, then run: php artisan route:clear && php artisan config:cache';
+      }
       return message;
     }
   }
