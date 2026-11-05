@@ -43,3 +43,25 @@ export async function fetchEntitlements(): Promise<Entitlements> {
   const { data } = await api.get<ApiSuccess<{ entitlements: Entitlements }>>('/entitlements');
   return data.data.entitlements;
 }
+
+export async function resendVerificationEmail(): Promise<void> {
+  await api.post('/auth/email/verification-notification');
+}
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  await api.post('/auth/forgot-password', { email: email.trim() });
+}
+
+export async function resetPassword(input: {
+  email: string;
+  token: string;
+  password: string;
+  password_confirmation: string;
+}): Promise<void> {
+  await api.post('/auth/reset-password', {
+    email: input.email.trim(),
+    token: input.token.trim(),
+    password: input.password,
+    password_confirmation: input.password_confirmation,
+  });
+}

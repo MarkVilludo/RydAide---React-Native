@@ -20,6 +20,7 @@ type AuthContextValue = {
     role: 'owner' | 'mechanic';
   }) => Promise<void>;
   signOut: () => Promise<void>;
+  refreshUser: () => Promise<User>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -75,6 +76,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const refreshUser = useCallback(async () => {
+    const current = await fetchCurrentUser();
+    setUser(current);
+    return current;
+  }, []);
+
   const signOut = useCallback(async () => {
     const pushToken = getCurrentPushToken();
     try {
@@ -96,8 +103,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, isLoading, signIn, signUp, signOut }),
-    [user, isLoading, signIn, signUp, signOut],
+    () => ({ user, isLoading, signIn, signUp, signOut, refreshUser }),
+    [user, isLoading, signIn, signUp, signOut, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

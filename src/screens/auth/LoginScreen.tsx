@@ -62,6 +62,10 @@ export function LoginScreen({ navigation }: Props) {
         {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Sign in</Text>}
       </Pressable>
 
+      <Pressable onPress={() => navigation.navigate('ForgotPassword')} style={styles.forgotWrap}>
+        <Text style={styles.forgotLink}>Forgot password?</Text>
+      </Pressable>
+
       <Pressable onPress={() => navigation.navigate('Register')}>
         <Text style={styles.link}>Create an account</Text>
       </Pressable>
@@ -93,6 +97,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   primaryText: { color: '#fff', fontWeight: '600' },
+  forgotWrap: { marginTop: 16 },
+  forgotLink: { color: '#0284c7', textAlign: 'center', fontSize: 14 },
   link: { color: '#0284c7', textAlign: 'center', marginTop: 20 },
   privacyWrap: { marginTop: 28 },
   privacyLink: { textAlign: 'center', color: '#64748b', fontSize: 13, textDecorationLine: 'underline' },

@@ -11,12 +11,15 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getApiErrorMessage } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { useAppConfig } from '../../hooks/useAppConfig';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
 export function RegisterScreen({ navigation }: Props) {
   const { signUp } = useAuth();
+  const { config } = useAppConfig();
+  const requireVerification = config?.auth?.require_email_verification !== false;
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,6 +47,9 @@ export function RegisterScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Create account</Text>
+      {requireVerification ? (
+        <Text style={styles.subtitle}>We will email you a verification link before you can use the app.</Text>
+      ) : null}
 
       <View style={styles.roleRow}>
         <Pressable
@@ -101,7 +107,8 @@ export function RegisterScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: '#f8fafc' },
-  title: { fontSize: 24, fontWeight: '600', marginBottom: 16, color: '#0f172a' },
+  title: { fontSize: 24, fontWeight: '600', marginBottom: 8, color: '#0f172a' },
+  subtitle: { color: '#64748b', marginBottom: 16, lineHeight: 20 },
   roleRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   roleChip: {
     flex: 1,

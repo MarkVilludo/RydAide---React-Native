@@ -3,6 +3,8 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 export type AuthStackParamList = {
   Login: undefined;
   Register: undefined;
+  ForgotPassword: undefined;
+  ResetPassword: { email?: string; token?: string } | undefined;
 };
 
 export type OwnerStackParamList = {
@@ -37,6 +39,7 @@ export type MechanicStackParamList = {
 
 export type RootStackParamList = {
   Auth: undefined;
+  VerifyEmail: undefined;
   OwnerApp: NavigatorScreenParams<OwnerDrawerParamList> | undefined;
   MechanicApp: NavigatorScreenParams<MechanicStackParamList> | undefined;
 };

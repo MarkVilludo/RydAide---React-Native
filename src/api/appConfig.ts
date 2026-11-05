@@ -46,6 +46,9 @@ export interface AppConfig {
   legal?: {
     privacy_url?: string;
   };
+  auth?: {
+    require_email_verification?: boolean;
+  };
 }
 
 export type MapMarkerRoleConfig = {
