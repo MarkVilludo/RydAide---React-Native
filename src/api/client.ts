@@ -51,22 +51,62 @@ api.interceptors.response.use(
   },
 );
 
-export function getApiErrorMessage(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    if (!error.response) {
-      return `Cannot reach the API at ${API_URL}. On your Mac run: ipconfig getifaddr en0 — put that IP in RydAidMobile/.env as EXPO_PUBLIC_API_URL (same Wi‑Fi as the phone), keep Laravel on php artisan serve --host=0.0.0.0 --port=8000, then npx expo start -c.`;
+function messageFromResponseBody(data: unknown, status: number): string | null {
+  if (data && typeof data === 'object' && 'message' in data) {
+    const message = (data as ApiError).message;
+    if (typeof message === 'string' && message.trim() !== '') {
+      return message;
     }
-    const data = error.response?.data as ApiError | undefined;
-    if (data?.message) {
-      return data.message;
-    }
-    if (data?.errors) {
-      const first = Object.values(data.errors)[0]?.[0];
+  }
+  if (data && typeof data === 'object' && 'errors' in data) {
+    const errors = (data as ApiError).errors;
+    if (errors) {
+      const first = Object.values(errors)[0]?.[0];
       if (first) {
         return first;
       }
     }
   }
+  if (typeof data === 'string' && data.trim() !== '') {
+    const snippet = data.replace(/\s+/g, ' ').trim().slice(0, 120);
+    return `Server returned HTML (HTTP ${status}). Check API URL: ${API_URL}. ${snippet}`;
+  }
+  return null;
+}
+
+export function getApiErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message && !axios.isAxiosError(error)) {
+    return error.message;
+  }
+
+  if (axios.isAxiosError(error)) {
+    if (!error.response) {
+      const isLocal = API_URL.startsWith('http://192.168.') || API_URL.includes('127.0.0.1');
+      if (isLocal) {
+        return `Cannot reach the API at ${API_URL}. Start Laravel: php artisan serve --host=0.0.0.0 --port=8000 — or set EXPO_PUBLIC_API_URL=https://rydaid.quantumrealm.tech/api/v1 in .env and run npx expo start -c.`;
+      }
+      return `Cannot reach the API at ${API_URL}. Check your connection or EXPO_PUBLIC_API_URL in .env, then npx expo start -c.`;
+    }
+
+    const { status, data } = error.response;
+    const parsed = messageFromResponseBody(data, status);
+    if (parsed) {
+      return parsed;
+    }
+
+    if (status === 404) {
+      return `API not found (404). Is EXPO_PUBLIC_API_URL correct? Current: ${API_URL}`;
+    }
+    if (status === 429) {
+      return 'Too many attempts. Wait a minute and try again.';
+    }
+    if (status >= 500) {
+      return `Server error (${status}). Try again later or check the live site admin.`;
+    }
+
+    return `Request failed (HTTP ${status}). API: ${API_URL}`;
+  }
+
   return 'Something went wrong. Please try again.';
 }
 

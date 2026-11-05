@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getApiErrorMessage } from '../../api/client';
-import { API_ORIGIN } from '../../config';
+import { API_ORIGIN, API_URL, apiEnvironment } from '../../config';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import { useAuth } from '../../context/AuthContext';
 import type { AuthStackParamList } from '../../navigation/types';
@@ -73,6 +73,12 @@ export function LoginScreen({ navigation }: Props) {
       <Pressable onPress={() => Linking.openURL(privacyUrl).catch(() => {})} style={styles.privacyWrap}>
         <Text style={styles.privacyLink}>Privacy Policy</Text>
       </Pressable>
+
+      {__DEV__ ? (
+        <Text style={styles.apiHint} selectable>
+          API ({apiEnvironment()}): {API_URL}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -102,4 +108,5 @@ const styles = StyleSheet.create({
   link: { color: '#0284c7', textAlign: 'center', marginTop: 20 },
   privacyWrap: { marginTop: 28 },
   privacyLink: { textAlign: 'center', color: '#64748b', fontSize: 13, textDecorationLine: 'underline' },
+  apiHint: { marginTop: 16, fontSize: 11, color: '#94a3b8', textAlign: 'center' },
 });

@@ -6,13 +6,20 @@ function deviceName(): string {
   return `expo-${Platform.OS}`;
 }
 
+function parseAuthPayload(data: ApiSuccess<AuthPayload>): AuthPayload {
+  if (!data?.success || !data.data?.token || !data.data?.user) {
+    throw new Error(data?.message || 'Unexpected login response from server.');
+  }
+  return data.data;
+}
+
 export async function login(email: string, password: string): Promise<AuthPayload> {
   const { data } = await api.post<ApiSuccess<AuthPayload>>('/auth/login', {
     email,
     password,
     device_name: deviceName(),
   });
-  return data.data;
+  return parseAuthPayload(data);
 }
 
 export async function register(input: {
@@ -27,7 +34,7 @@ export async function register(input: {
     ...input,
     device_name: deviceName(),
   });
-  return data.data;
+  return parseAuthPayload(data);
 }
 
 export async function logout(pushToken?: string | null): Promise<void> {
