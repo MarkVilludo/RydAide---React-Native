@@ -4,11 +4,11 @@ Full stack guide: **[RydAid/docs/DEPLOYMENT.md](../RydAid/docs/DEPLOYMENT.md)** 
 
 ## Quick steps
 
-1. **Deploy Laravel API** with HTTPS (see backend doc). Note the URL: `https://api.yourdomain.com/api/v1`.
+1. **Deploy Laravel** (API + admin + `/privacy` on one domain). Production example:
+   - Admin: `https://rydaid.quantumrealm.tech/admin/login`
+   - Mobile API: `https://rydaid.quantumrealm.tech/api/v1`
 
-2. **Expo env** (expo.dev → your project → Environment variables):
-   - Profile `internal-android` or `production`
-   - `EXPO_PUBLIC_API_URL=https://api.yourdomain.com/api/v1`
+2. **Expo env** — `eas.json` already sets `EXPO_PUBLIC_API_URL` for `internal-android` / `production`. Local dev uses `RydAidMobile/.env` (LAN IP). See `src/config.ts` and `.env.example`.
 
 3. **Build** (not Expo Go):
 
