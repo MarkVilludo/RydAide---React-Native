@@ -45,6 +45,7 @@ export interface AppConfig {
   };
   legal?: {
     privacy_url?: string;
+    account_deletion_url?: string;
   };
   auth?: {
     require_email_verification?: boolean;

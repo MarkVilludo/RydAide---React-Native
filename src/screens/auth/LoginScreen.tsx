@@ -14,6 +14,7 @@ import { getApiErrorMessage } from '../../api/client';
 import { API_ORIGIN, API_URL, apiEnvironment } from '../../config';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import { useAuth } from '../../context/AuthContext';
+import { confirmBeforeDeleteAccountFlow } from '../../utils/deleteAccountConfirm';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
@@ -22,6 +23,7 @@ export function LoginScreen({ navigation }: Props) {
   const { signIn } = useAuth();
   const { config } = useAppConfig();
   const privacyUrl = config?.legal?.privacy_url ?? `${API_ORIGIN}/privacy`;
+  const deletionUrl = config?.legal?.account_deletion_url ?? `${API_ORIGIN}/account-deletion`;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -72,6 +74,16 @@ export function LoginScreen({ navigation }: Props) {
 
       <Pressable onPress={() => Linking.openURL(privacyUrl).catch(() => {})} style={styles.privacyWrap}>
         <Text style={styles.privacyLink}>Privacy Policy</Text>
+      </Pressable>
+      <Pressable
+        onPress={() =>
+          confirmBeforeDeleteAccountFlow(() => {
+            Linking.openURL(deletionUrl).catch(() => {});
+          })
+        }
+        style={styles.privacyWrap}
+      >
+        <Text style={styles.privacyLink}>Delete account & data</Text>
       </Pressable>
 
       {__DEV__ ? (

@@ -10,6 +10,7 @@ import { NeedHelpScreen } from '../screens/owner/NeedHelpScreen';
 import { HelpRequestDetailScreen } from '../screens/owner/HelpRequestDetailScreen';
 import { HelpRequestHistoryScreen } from '../screens/owner/HelpRequestHistoryScreen';
 import { OwnerActiveJobRecovery } from '../components/OwnerActiveJobRecovery';
+import { DeleteAccountScreen } from '../screens/account/DeleteAccountScreen';
 import { OwnerHomeScreen } from '../screens/owner/OwnerHomeScreen';
 import { OwnerDrawerContent } from './OwnerDrawerContent';
 import type { OwnerDrawerParamList, OwnerStackParamList } from './types';
@@ -77,6 +78,7 @@ function OwnerStackNavigator() {
         options={{ title: 'Help requests' }}
       />
       <Stack.Screen name="HelpRequestDetail" component={HelpRequestDetailScreen} options={{ title: 'Request details' }} />
+      <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} options={{ title: 'Delete account' }} />
     </Stack.Navigator>
     </>
   );

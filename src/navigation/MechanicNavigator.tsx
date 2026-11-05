@@ -1,5 +1,6 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
+import { DeleteAccountScreen } from '../screens/account/DeleteAccountScreen';
 import { MechanicActiveJobScreen } from '../screens/mechanic/MechanicActiveJobScreen';
 import { MechanicHomeScreen } from '../screens/mechanic/MechanicHomeScreen';
 import { MechanicOnboardingScreen } from '../screens/mechanic/MechanicOnboardingScreen';
@@ -49,6 +50,7 @@ export function MechanicNavigator() {
         component={MechanicWorkLocationScreen}
         options={{ title: 'Service location' }}
       />
+      <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} options={{ title: 'Delete account' }} />
     </Stack.Navigator>
     </MechanicLocationProvider>
   );

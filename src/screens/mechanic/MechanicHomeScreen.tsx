@@ -35,6 +35,7 @@ import { useMechanicLiveLocation } from '../../context/MechanicLocationContext';
 import { mechanicQueueFetchCoords, useServicePinMaxOffsetKm } from '../../hooks/useMechanicDistanceOrigin';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import type { MechanicStackParamList } from '../../navigation/types';
+import { confirmBeforeDeleteAccountFlow } from '../../utils/deleteAccountConfirm';
 import { jobStatusLabelOf, vehicleTitle } from '../../utils/helpRequestUi';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'MechanicHome'>;
@@ -431,6 +432,15 @@ export function MechanicHomeScreen({ navigation }: Props) {
                 />
               </View>
             ) : null}
+
+            <Pressable
+              onPress={() =>
+                confirmBeforeDeleteAccountFlow(() => navigation.navigate('DeleteAccount'))
+              }
+              style={styles.deleteAccount}
+            >
+              <Text style={styles.deleteAccountText}>Delete account & data</Text>
+            </Pressable>
           </View>
         </Animated.View>
       </ScrollView>
@@ -453,6 +463,8 @@ const styles = StyleSheet.create({
   tagline: { fontSize: 13, color: '#64748b', marginTop: 2 },
   signOut: { paddingVertical: 6, paddingHorizontal: 10 },
   signOutText: { fontSize: 13, fontWeight: '600', color: '#475569' },
+  deleteAccount: { marginTop: 20, paddingVertical: 12, alignItems: 'center' },
+  deleteAccountText: { fontSize: 13, color: '#dc2626', fontWeight: '600' },
   sheet: {
     flex: 1,
     backgroundColor: '#fff',

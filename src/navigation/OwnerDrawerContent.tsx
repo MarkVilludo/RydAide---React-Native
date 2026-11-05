@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { statusBarTopInset } from '../utils/screenInsets';
 import { useAppConfig } from '../hooks/useAppConfig';
 import type { OwnerStackParamList } from './types';
+import { confirmBeforeDeleteAccountFlow } from '../utils/deleteAccountConfirm';
 
 type StackRoute = keyof OwnerStackParamList;
 
@@ -71,6 +72,19 @@ export function OwnerDrawerContent({ navigation }: DrawerContentComponentProps) 
       </View>
 
       <View style={styles.divider} />
+
+      <DrawerRow
+        icon="🗑"
+        label="Delete account"
+        subtitle="Request data deletion"
+        onPress={() => {
+          confirmBeforeDeleteAccountFlow(() => {
+            navigation.closeDrawer();
+            navigation.navigate('OwnerMain', { screen: 'DeleteAccount' });
+          });
+        }}
+        danger
+      />
 
       <DrawerRow
         icon="⎋"

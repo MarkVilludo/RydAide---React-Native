@@ -19,6 +19,7 @@ export type OwnerStackParamList = {
   HelpRequestHistory: undefined;
   HelpRequestDetail: { helpRequestId: number };
   FindShop: undefined;
+  DeleteAccount: undefined;
 };
 
 export type OwnerDrawerParamList = {
@@ -35,6 +36,7 @@ export type MechanicStackParamList = {
   ActiveJob: { helpRequestId: number; justAccepted?: boolean; initialRequest?: import('../api/helpRequests').HelpRequest };
   MechanicSubscription: undefined;
   MechanicWorkLocation: undefined;
+  DeleteAccount: undefined;
 };
 
 export type RootStackParamList = {
