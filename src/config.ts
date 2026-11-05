@@ -18,10 +18,9 @@ function localApiUrl(): string {
 
 /**
  * API base URL resolution (first match wins):
- * 1. EXPO_PUBLIC_API_URL — explicit (typical in .env for LAN dev)
- * 2. EXPO_PUBLIC_API_ENV=production|local
- * 3. Release builds (!__DEV__) → production
- * 4. Dev → local fallback (simulator); use .env LAN IP for a physical device
+ * 1. EXPO_PUBLIC_API_URL — explicit override
+ * 2. EXPO_PUBLIC_API_ENV=local → simulator / Mac Laravel
+ * 3. Default → deployed production (Expo Go, EAS, and release builds)
  */
 function resolveApiUrl(): string {
   const explicit = process.env.EXPO_PUBLIC_API_URL?.trim();
@@ -30,18 +29,11 @@ function resolveApiUrl(): string {
   }
 
   const mode = process.env.EXPO_PUBLIC_API_ENV?.trim().toLowerCase();
-  if (mode === 'production') {
-    return productionApiUrl();
-  }
   if (mode === 'local') {
     return localApiUrl();
   }
 
-  if (!__DEV__) {
-    return productionApiUrl();
-  }
-
-  return localApiUrl();
+  return productionApiUrl();
 }
 
 /** API base for axios (`/auth/login`, etc.). */
