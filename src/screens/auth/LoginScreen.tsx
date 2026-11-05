@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -10,6 +11,8 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getApiErrorMessage } from '../../api/client';
+import { API_ORIGIN } from '../../config';
+import { useAppConfig } from '../../hooks/useAppConfig';
 import { useAuth } from '../../context/AuthContext';
 import type { AuthStackParamList } from '../../navigation/types';
 
@@ -17,6 +20,8 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 export function LoginScreen({ navigation }: Props) {
   const { signIn } = useAuth();
+  const { config } = useAppConfig();
+  const privacyUrl = config?.legal?.privacy_url ?? `${API_ORIGIN}/privacy`;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -60,6 +65,10 @@ export function LoginScreen({ navigation }: Props) {
       <Pressable onPress={() => navigation.navigate('Register')}>
         <Text style={styles.link}>Create an account</Text>
       </Pressable>
+
+      <Pressable onPress={() => Linking.openURL(privacyUrl).catch(() => {})} style={styles.privacyWrap}>
+        <Text style={styles.privacyLink}>Privacy Policy</Text>
+      </Pressable>
     </View>
   );
 }
@@ -85,4 +94,6 @@ const styles = StyleSheet.create({
   },
   primaryText: { color: '#fff', fontWeight: '600' },
   link: { color: '#0284c7', textAlign: 'center', marginTop: 20 },
+  privacyWrap: { marginTop: 28 },
+  privacyLink: { textAlign: 'center', color: '#64748b', fontSize: 13, textDecorationLine: 'underline' },
 });

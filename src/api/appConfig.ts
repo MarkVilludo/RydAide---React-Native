@@ -43,6 +43,9 @@ export interface AppConfig {
     customer: MapMarkerRoleConfig;
     mechanic: MapMarkerRoleConfig;
   };
+  legal?: {
+    privacy_url?: string;
+  };
 }
 
 export type MapMarkerRoleConfig = {
