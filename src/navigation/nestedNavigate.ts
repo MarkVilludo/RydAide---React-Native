@@ -36,7 +36,7 @@ export function navigateOwnerStackScreen<S extends keyof OwnerStackParamList>(
   );
 }
 
-/** Mechanic: Root → Stack screen */
+/** Mechanic: Root → Drawer (MechanicMain) → Stack screen */
 export function navigateMechanicStackScreen<S extends keyof MechanicStackParamList>(
   screen: S,
   params?: MechanicStackParamList[S],
@@ -44,7 +44,10 @@ export function navigateMechanicStackScreen<S extends keyof MechanicStackParamLi
   dispatchWhenReady(
     CommonActions.navigate({
       name: 'MechanicApp',
-      params: params !== undefined ? { screen, params } : { screen },
+      params: {
+        screen: 'MechanicMain',
+        params: params !== undefined ? { screen, params } : { screen },
+      },
     }),
   );
 }

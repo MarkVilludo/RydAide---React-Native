@@ -1,13 +1,13 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useFocusEffect } from '@react-navigation/native';
+import { DrawerActions, useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Animated,
   Easing,
+  Platform,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -35,8 +35,8 @@ import { useMechanicLiveLocation } from '../../context/MechanicLocationContext';
 import { mechanicQueueFetchCoords, useServicePinMaxOffsetKm } from '../../hooks/useMechanicDistanceOrigin';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import type { MechanicStackParamList } from '../../navigation/types';
-import { confirmBeforeDeleteAccountFlow } from '../../utils/deleteAccountConfirm';
 import { jobStatusLabelOf, vehicleTitle } from '../../utils/helpRequestUi';
+import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'MechanicHome'>;
 
@@ -73,7 +73,7 @@ function PulseOnlineDot() {
 }
 
 export function MechanicHomeScreen({ navigation }: Props) {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const { config } = useAppConfig();
   const emergencyOn = config?.features.emergency_assistance ?? false;
   const subscriptionsOn = config?.features.mechanic_subscriptions ?? false;
@@ -306,19 +306,57 @@ export function MechanicHomeScreen({ navigation }: Props) {
         style={styles.flex}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
-        bounces={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} />}
+        bounces
+        alwaysBounceVertical={Platform.OS === 'ios'}
+        refreshControl={
+          <RydAidRefreshControl refreshing={refreshing} onRefresh={() => load(true)} title="Pull to refresh" />
+        }
       >
         <Animated.View style={[styles.page, { opacity: pageOpacity }]}>
           <View style={styles.topRow}>
-            <View>
+            <Pressable
+              onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+              style={styles.menuBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Open menu"
+            >
+              <Text style={styles.menuIcon}>☰</Text>
+            </Pressable>
+            <View style={styles.topTitles}>
               <Text style={styles.hello}>Hi, {firstName(user?.name)}</Text>
               <Text style={styles.tagline}>Mechanic dashboard</Text>
             </View>
-            <Pressable onPress={signOut} style={styles.signOut}>
-              <Text style={styles.signOutText}>Sign out</Text>
-            </Pressable>
           </View>
+
+          {emergencyOn ? (
+            <View style={styles.shortcuts}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shortcutsScroll}>
+                <Pressable style={({ pressed }) => [styles.shortcutChip, pressed && styles.shortcutChipPressed]} onPress={() => openRequests('incoming')}>
+                  <Text style={styles.shortcutIcon}>📥</Text>
+                  <Text style={styles.shortcutLabel}>Incoming</Text>
+                  {incomingCount > 0 ? (
+                    <View style={styles.shortcutBadge}>
+                      <Text style={styles.shortcutBadgeText}>{incomingCount > 99 ? '99+' : incomingCount}</Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+                <Pressable style={({ pressed }) => [styles.shortcutChip, pressed && styles.shortcutChipPressed]} onPress={() => navigation.navigate('MechanicRequests', { tab: 'accepted_active' })}>
+                  <Text style={styles.shortcutIcon}>📋</Text>
+                  <Text style={styles.shortcutLabel}>My jobs</Text>
+                </Pressable>
+                <Pressable style={({ pressed }) => [styles.shortcutChip, pressed && styles.shortcutChipPressed]} onPress={() => navigation.navigate('MechanicWorkLocation')}>
+                  <Text style={styles.shortcutIcon}>📍</Text>
+                  <Text style={styles.shortcutLabel}>Map</Text>
+                </Pressable>
+                {subscriptionsOn ? (
+                  <Pressable style={({ pressed }) => [styles.shortcutChip, styles.shortcutChipPro, pressed && styles.shortcutChipPressed]} onPress={() => navigation.navigate('MechanicSubscription')}>
+                    <Text style={styles.shortcutIcon}>⭐</Text>
+                    <Text style={[styles.shortcutLabel, styles.shortcutLabelPro]}>Pro</Text>
+                  </Pressable>
+                ) : null}
+              </ScrollView>
+            </View>
+          ) : null}
 
           <View style={styles.sheet}>
             {emergencyOn && !verified ? (
@@ -333,11 +371,19 @@ export function MechanicHomeScreen({ navigation }: Props) {
             ) : null}
 
             {!emergencyOn ? (
-              <Text style={styles.offlineMsg}>Help dispatch is not live in your area yet.</Text>
+              <View style={styles.offlineCard}>
+                <Text style={styles.offlineCardTitle}>Help dispatch is off</Text>
+                <Text style={styles.offlineMsg}>
+                  Your listing and map still work. Turn on emergency assistance in server or admin settings to receive roadside requests.
+                </Text>
+                <Pressable style={styles.offlineCta} onPress={() => navigation.navigate('MechanicOnboarding')}>
+                  <Text style={styles.offlineCtaText}>Edit your listing →</Text>
+                </Pressable>
+              </View>
             ) : (
               <>
                 <Pressable
-                  style={[styles.onlineRow, isOnline && styles.onlineRowLive]}
+                  style={({ pressed }) => [styles.onlineRow, isOnline && styles.onlineRowLive, pressed && styles.onlineRowPressed]}
                   onPress={() => void toggleOnline()}
                   disabled={availabilityBusy || isBusy}
                 >
@@ -435,15 +481,6 @@ export function MechanicHomeScreen({ navigation }: Props) {
                 />
               </View>
             ) : null}
-
-            <Pressable
-              onPress={() =>
-                confirmBeforeDeleteAccountFlow(() => navigation.navigate('DeleteAccount'))
-              }
-              style={styles.deleteAccount}
-            >
-              <Text style={styles.deleteAccountText}>Delete account & data</Text>
-            </Pressable>
           </View>
         </Animated.View>
       </ScrollView>
@@ -458,16 +495,64 @@ const styles = StyleSheet.create({
   page: { flex: 1 },
   topRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+    gap: 12,
   },
+  menuBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  menuIcon: { fontSize: 22, color: '#0f172a' },
+  topTitles: { flex: 1 },
   hello: { fontSize: 22, fontWeight: '800', color: '#0f172a' },
   tagline: { fontSize: 13, color: '#64748b', marginTop: 2 },
-  signOut: { paddingVertical: 6, paddingHorizontal: 10 },
-  signOutText: { fontSize: 13, fontWeight: '600', color: '#475569' },
-  deleteAccount: { marginTop: 20, paddingVertical: 12, alignItems: 'center' },
-  deleteAccountText: { fontSize: 13, color: '#dc2626', fontWeight: '600' },
+  shortcuts: { marginBottom: 12 },
+  shortcutsScroll: { flexDirection: 'row', paddingVertical: 2, paddingRight: 4 },
+  shortcutChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginRight: 8,
+    gap: 8,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  shortcutChipPro: {
+    borderColor: '#bae6fd',
+    backgroundColor: '#f0f9ff',
+  },
+  shortcutChipPressed: { opacity: 0.92, transform: [{ scale: 0.98 }] },
+  shortcutIcon: { fontSize: 16 },
+  shortcutLabel: { fontSize: 13, fontWeight: '700', color: '#334155' },
+  shortcutLabelPro: { color: '#0369a1' },
+  shortcutBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#dc2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  shortcutBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   sheet: {
     flex: 1,
     backgroundColor: '#fff',
@@ -486,7 +571,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   verifyText: { color: '#b45309', fontWeight: '700', fontSize: 13 },
-  offlineMsg: { color: '#64748b', fontSize: 14, lineHeight: 20, marginBottom: 8 },
+  offlineCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  offlineCardTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a', marginBottom: 6 },
+  offlineMsg: { color: '#64748b', fontSize: 14, lineHeight: 20 },
+  offlineCta: { alignSelf: 'flex-start', marginTop: 12, paddingVertical: 8 },
+  offlineCtaText: { fontSize: 14, fontWeight: '700', color: '#0284c7' },
   onlineRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -497,6 +593,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   onlineRowLive: { backgroundColor: '#f0fdf4' },
+  onlineRowPressed: { opacity: 0.95 },
   pulseWrap: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
   pulseRing: {
     position: 'absolute',

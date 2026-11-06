@@ -10,6 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 import { getApiErrorMessage } from '../../api/client';
 import type { DirectorySearchMeta } from '../../api/appConfig';
 import { searchShops, type Shop } from '../../api/shops';
@@ -40,6 +41,7 @@ export function FindShopScreen(_props: Props) {
   const [results, setResults] = useState<Shop[]>([]);
   const [searchMeta, setSearchMeta] = useState<DirectorySearchMeta | null>(null);
   const [searched, setSearched] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const ensureLocationPermission = useCallback(async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
@@ -109,6 +111,16 @@ export function FindShopScreen(_props: Props) {
     }
   };
 
+  const onRefresh = async () => {
+    if (!center) return;
+    setRefreshing(true);
+    try {
+      await runSearch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const listHeader = (
     <View style={styles.headerBlock}>
       <Text style={styles.intro}>
@@ -166,6 +178,9 @@ export function FindShopScreen(_props: Props) {
       contentContainerStyle={styles.content}
       data={results}
       keyExtractor={(item) => String(item.id)}
+      refreshControl={
+        <RydAidRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} title="Pull to refresh" />
+      }
       ListHeaderComponent={listHeader}
       ListEmptyComponent={
         searched && !loading ? (

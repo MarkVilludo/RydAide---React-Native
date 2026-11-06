@@ -5,6 +5,7 @@ import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -29,6 +30,7 @@ import { useAppConfig } from '../../hooks/useAppConfig';
 import { useEnsureNearbyProviders } from '../../hooks/useEnsureNearbyProviders';
 import type { OwnerStackParamList } from '../../navigation/types';
 import { NeedHelpVehicleStep } from './NeedHelpVehicleStep';
+import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'NeedHelp'>;
 
@@ -60,14 +62,33 @@ export function NeedHelpScreen({ navigation, route }: Props) {
 
   const [submitting, setSubmitting] = useState(false);
   const [mapRecenterKey, setMapRecenterKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEnsureNearbyProviders(lat, lng, config?.features.dynamic_nearby_seed === true);
 
-  React.useEffect(() => {
+  const reloadCategories = React.useCallback(() => {
     fetchProblemCategories()
       .then(setCategories)
       .catch(() => setCategories([]));
   }, []);
+
+  React.useEffect(() => {
+    reloadCategories();
+  }, [reloadCategories]);
+
+  const onPullRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    try {
+      reloadCategories();
+      if (categoryId) {
+        await fetchCategoryQuestions(categoryId)
+          .then(setQuestions)
+          .catch(() => setQuestions([]));
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, [categoryId, reloadCategories]);
 
   React.useEffect(() => {
     if (!categoryId) return;
@@ -253,7 +274,14 @@ export function NeedHelpScreen({ navigation, route }: Props) {
         ))}
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        alwaysBounceVertical={Platform.OS === 'ios'}
+        refreshControl={
+          <RydAidRefreshControl refreshing={refreshing} onRefresh={() => void onPullRefresh()} title="Refresh form" />
+        }
+      >
         {step === 'vehicle' && (
           <NeedHelpVehicleStep value={vehicleDescription} onChange={setVehicleDescription} />
         )}

@@ -2,6 +2,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 import { fetchHelpRequests, type HelpRequest } from '../../api/helpRequests';
 import type { OwnerStackParamList } from '../../navigation/types';
 import { isOwnerLiveHelpRequest, jobStatusOf } from '../../utils/helpRequestUi';
@@ -31,13 +32,18 @@ function locationLabel(item: HelpRequest) {
 export function HelpRequestHistoryScreen({ navigation }: Props) {
   const [items, setItems] = useState<HelpRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const load = useCallback((isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
     fetchHelpRequests()
       .then(setItems)
       .catch(() => setItems([]))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setRefreshing(false);
+      });
   }, []);
 
   useFocusEffect(
@@ -55,6 +61,9 @@ export function HelpRequestHistoryScreen({ navigation }: Props) {
       style={styles.list}
       data={items}
       keyExtractor={(item) => String(item.id)}
+      refreshControl={
+        <RydAidRefreshControl refreshing={refreshing} onRefresh={() => load(true)} title="Pull to refresh" />
+      }
       ListHeaderComponent={
         <View style={styles.header}>
           <Text style={styles.headerTitle}>My help history</Text>

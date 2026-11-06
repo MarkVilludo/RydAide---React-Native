@@ -10,6 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 import { getApiErrorMessage } from '../../api/client';
 import type { DirectorySearchMeta } from '../../api/appConfig';
 import { searchMechanics, type MechanicResult } from '../../api/mechanics';
@@ -44,6 +45,7 @@ export function FindMechanicScreen({ navigation }: Props) {
   const [results, setResults] = useState<MechanicResult[]>([]);
   const [searchMeta, setSearchMeta] = useState<DirectorySearchMeta | null>(null);
   const [searched, setSearched] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const searchGen = useRef(0);
 
   const ensureLocationPermission = useCallback(async () => {
@@ -77,11 +79,14 @@ export function FindMechanicScreen({ navigation }: Props) {
     goToMyLocation();
   }, [goToMyLocation]);
 
-  const runSearch = useCallback(async () => {
+  const runSearch = useCallback(async (opts?: { soft?: boolean }) => {
     if (!center) return;
+    const soft = opts?.soft === true;
     const gen = ++searchGen.current;
-    setLoading(true);
-    setSearched(true);
+    if (!soft) {
+      setLoading(true);
+      setSearched(true);
+    }
     try {
       // Directory search uses real mechanic coordinates — do not call dev nearby seed here
       // (that API moves test providers to the tap point and makes every pin follow the search center).
@@ -99,9 +104,21 @@ export function FindMechanicScreen({ navigation }: Props) {
         Alert.alert('Search failed', getApiErrorMessage(error));
       }
     } finally {
-      if (gen === searchGen.current) setLoading(false);
+      if (gen === searchGen.current && !soft) {
+        setLoading(false);
+      }
     }
   }, [center, emergency, radiusKm]);
+
+  const onRefreshList = useCallback(async () => {
+    if (!center) return;
+    setRefreshing(true);
+    try {
+      await runSearch({ soft: true });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [center, runSearch]);
 
   useEffect(() => {
     if (!center || locating) return;
@@ -214,6 +231,9 @@ export function FindMechanicScreen({ navigation }: Props) {
         contentContainerStyle={styles.listContent}
         data={loading ? [] : results}
         keyExtractor={(item) => String(item.id)}
+        refreshControl={
+          <RydAidRefreshControl refreshing={refreshing} onRefresh={() => void onRefreshList()} title="Pull to refresh" />
+        }
         ListEmptyComponent={
           searched && !loading ? (
             <Text style={styles.empty}>

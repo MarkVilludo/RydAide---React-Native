@@ -5,7 +5,6 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +15,7 @@ import type { HelpRequest } from '../../api/helpRequests';
 import { fetchMyMechanicProfile } from '../../api/mechanicProfile';
 import { fetchMechanicHelpQueues, type MechanicHelpQueues } from '../../api/mechanicHelp';
 import { MechanicRequestCard } from '../../components/MechanicRequestCard';
+import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 import { useMechanicLiveLocation } from '../../context/MechanicLocationContext';
 import {
   mechanicQueueFetchCoords,
@@ -172,7 +172,9 @@ export function MechanicRequestsScreen({ navigation, route }: Props) {
           data={list}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={list.length === 0 ? styles.listEmpty : styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
+          refreshControl={
+            <RydAidRefreshControl refreshing={refreshing} onRefresh={() => void load(true)} title="Pull to refresh" />
+          }
           ListEmptyComponent={
             <View style={styles.emptyBox}>
               <Text style={styles.emptyTitle}>Nothing here</Text>

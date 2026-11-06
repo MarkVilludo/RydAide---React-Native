@@ -5,7 +5,6 @@ import {
   Alert,
   Platform,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,6 +22,7 @@ import { MechanicCreditsCard } from '../../components/MechanicCreditsCard';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { getApiErrorMessage } from '../../api/client';
+import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 import {
   isNativeStoreBillingAvailable,
   mechanicProMonthlyProductId,
@@ -155,7 +155,10 @@ export function MechanicSubscriptionScreen(_props: Props) {
     <ScrollView
       style={styles.scroll}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} />}
+      alwaysBounceVertical={Platform.OS === 'ios'}
+      refreshControl={
+        <RydAidRefreshControl refreshing={refreshing} onRefresh={() => load(true)} title="Pull to refresh" />
+      }
     >
       <Text style={styles.title}>Mechanic Pro</Text>
       <Text style={styles.subtitle}>

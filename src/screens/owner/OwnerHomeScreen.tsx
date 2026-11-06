@@ -5,8 +5,8 @@ import {
   Alert,
   Animated,
   Easing,
+  Platform,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,6 +19,7 @@ import type { OwnerStackParamList } from '../../navigation/types';
 import { pickPrimaryOwnerLiveHelpRequest } from '../../utils/helpRequestStatus';
 import { jobStatusLabelOf, vehicleTitle } from '../../utils/helpRequestUi';
 import { BrandLogo } from '../../components/BrandLogo';
+import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'OwnerHome'>;
 
@@ -261,7 +262,10 @@ export function OwnerHomeScreen({ navigation }: Props) {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
+        alwaysBounceVertical={Platform.OS === 'ios'}
+        refreshControl={
+          <RydAidRefreshControl refreshing={refreshing} onRefresh={() => void load(true)} title="Pull to refresh" />
+        }
       >
         {emergencyOn && activeRequest ? (
           <Pressable

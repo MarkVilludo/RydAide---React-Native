@@ -1,7 +1,6 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
-import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { navigationRef } from './navigationRef';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
@@ -31,11 +30,7 @@ export function RootNavigator() {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#0284c7" />
-      </View>
-    );
+    return null;
   }
 
   return (

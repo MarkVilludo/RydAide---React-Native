@@ -39,9 +39,13 @@ export type MechanicStackParamList = {
   DeleteAccount: undefined;
 };
 
+export type MechanicDrawerParamList = {
+  MechanicMain: NavigatorScreenParams<MechanicStackParamList>;
+};
+
 export type RootStackParamList = {
   Auth: undefined;
   VerifyEmail: undefined;
   OwnerApp: NavigatorScreenParams<OwnerDrawerParamList> | undefined;
-  MechanicApp: NavigatorScreenParams<MechanicStackParamList> | undefined;
+  MechanicApp: NavigatorScreenParams<MechanicDrawerParamList> | undefined;
 };
