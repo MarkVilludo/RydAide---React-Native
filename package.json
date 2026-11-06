@@ -31,13 +31,17 @@
   "devDependencies": {
     "@types/react": "~19.3.0",
     "babel-preset-expo": "~58.0.21",
+    "eas-cli": "^16.32.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "eas": "eas",
+    "build:android:internal": "eas build --profile internal-android --platform android",
+    "build:android:apk": "eas build --profile internal-apk --platform android"
   },
   "private": true,
   "engines": {

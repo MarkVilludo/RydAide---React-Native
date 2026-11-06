@@ -27,7 +27,12 @@ export type MechanicSubscriptionDetails = {
   payments_enabled: boolean;
   payment_method_label: string;
   billing_provider?: string;
-  store_products?: { ios?: string; android?: string };
+  store_products?: {
+    ios?: string;
+    ios_yearly?: string;
+    android?: string;
+    android_yearly?: string;
+  };
 };
 
 export type PaymentHistoryItem = {

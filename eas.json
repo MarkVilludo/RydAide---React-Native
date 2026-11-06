@@ -32,7 +32,6 @@
     "preview": {
       "extends": "base",
       "distribution": "internal",
-      "channel": "preview",
       "ios": {
         "simulator": false,
         "resourceClass": "m-medium"
@@ -47,7 +46,6 @@
     "testflight": {
       "extends": "base",
       "distribution": "store",
-      "channel": "testflight",
       "ios": {
         "simulator": false,
         "resourceClass": "m-medium"
@@ -59,7 +57,6 @@
     "internal-android": {
       "extends": "base",
       "distribution": "internal",
-      "channel": "internal",
       "android": {
         "buildType": "app-bundle"
       },
@@ -68,10 +65,15 @@
         "EXPO_PUBLIC_API_URL": "https://rydaid.quantumrealm.tech/api/v1"
       }
     },
+    "internal-apk": {
+      "extends": "internal-android",
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "production": {
       "extends": "base",
       "distribution": "store",
-      "channel": "production",
       "autoIncrement": true,
       "ios": {
         "resourceClass": "m-medium"

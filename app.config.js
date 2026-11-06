@@ -5,15 +5,25 @@ const androidPackage = process.env.EXPO_PUBLIC_ANDROID_PACKAGE?.trim() || 'com.r
 const mechanicProProductId =
   process.env.EXPO_PUBLIC_MECHANIC_PRO_PRODUCT_ID?.trim() || 'com.rydaid.mechanic.pro.monthly';
 
+/** Linked on expo.dev — override with EXPO_PUBLIC_EAS_PROJECT_ID in .env if needed */
+const easProjectId =
+  process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() || '579d9891-5bb8-4e2b-b4f0-975570d3d60e';
+
 /** @type {import('expo/config').ExpoConfig} */
 const config = {
   name: 'RydAid',
-  slug: 'RydAidMobile',
+  slug: 'rydaid-app',
   version: '1.0.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
+  splash: {
+    image: './assets/splash-icon.png',
+    resizeMode: 'contain',
+    backgroundColor: '#f8fafc',
+  },
   userInterfaceStyle: 'light',
   ios: {
+    icon: './assets/icon.png',
     supportsTablet: true,
     bundleIdentifier: iosBundleId,
     infoPlist: {
@@ -24,6 +34,7 @@ const config = {
     },
   },
   android: {
+    icon: './assets/icon.png',
     package: androidPackage,
     softwareKeyboardLayoutMode: 'resize',
     usesCleartextTraffic: true,
@@ -40,7 +51,7 @@ const config = {
   },
   extra: {
     eas: {
-      projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID,
+      projectId: easProjectId,
     },
     storeBilling: {
       mechanicProProductId,
@@ -53,7 +64,7 @@ const config = {
     [
       'expo-notifications',
       {
-        icon: './assets/icon.png',
+        icon: './assets/notification-icon.png',
         color: '#0284c7',
         defaultChannel: 'help-requests',
       },

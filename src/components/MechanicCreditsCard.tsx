@@ -1,13 +1,15 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { MechanicSubscriptionDetails } from '../api/mechanicSubscription';
+import { billingIntervalLabel, formatProPriceLine } from '../utils/mechanicProPricing';
 
 type Props = {
   dashboard: MechanicSubscriptionDetails | null;
   entitlementsRemaining: number | null | undefined;
   entitlementsTotal: number | null | undefined;
   isPro: boolean;
-  proPrice: number;
+  proMonthlyPrice: number;
+  proYearlyPrice?: number;
   onSubscribe: () => void;
 };
 
@@ -16,19 +18,27 @@ export function MechanicCreditsCard({
   entitlementsRemaining,
   entitlementsTotal,
   isPro,
-  proPrice,
+  proMonthlyPrice,
+  proYearlyPrice,
   onSubscribe,
 }: Props) {
   const total = dashboard?.free_credits.total ?? entitlementsTotal ?? 5;
   const remaining = dashboard?.free_credits.remaining ?? entitlementsRemaining ?? total;
   const billingStatus = dashboard?.billing_status;
 
-  if (isPro || billingStatus === 'ACTIVE') {
+  const priceLine = formatProPriceLine(dashboard, proMonthlyPrice, proYearlyPrice);
+  const activeSuffix = billingIntervalLabel(dashboard);
+
+  const showAmount = isPro || billingStatus === 'ACTIVE';
+
+  if (showAmount) {
     return (
       <View style={[styles.card, styles.cardPro]}>
         <Text style={styles.badge}>PRO MECHANIC</Text>
         <Text style={styles.title}>Subscription: ACTIVE</Text>
-        <Text style={styles.price}>₱{proPrice}/month</Text>
+        <Text style={styles.price}>
+          {dashboard ? `₱${dashboard.amount_php}${activeSuffix}` : priceLine}
+        </Text>
         <Text style={styles.body}>Unlimited eligible HELP request acceptances.</Text>
         {dashboard?.subscription?.expires_at ? (
           <Text style={styles.meta}>Renews / expires: {new Date(dashboard.subscription.expires_at).toLocaleDateString()}</Text>
@@ -45,7 +55,7 @@ export function MechanicCreditsCard({
           {remaining} / {total} remaining
         </Text>
         <Text style={styles.body}>
-          Your free HELP request credits have been used. Subscribe to Pro for ₱{proPrice}/month to continue accepting
+          Your free HELP request credits have been used. Subscribe to Mechanic Pro ({priceLine}) to continue accepting
           customer requests.
         </Text>
         <Pressable style={styles.cta} onPress={onSubscribe}>
@@ -63,7 +73,7 @@ export function MechanicCreditsCard({
         {remaining} / {total} remaining
       </Text>
       <Text style={styles.body}>You can accept {remaining} customer HELP request{remaining === 1 ? '' : 's'} for free.</Text>
-      <Text style={styles.hint}>After using your free credits, upgrade to Pro for ₱{proPrice}/month.</Text>
+      <Text style={styles.hint}>After using your free credits, upgrade to Mechanic Pro ({priceLine}).</Text>
       <Pressable style={styles.linkBtn} onPress={onSubscribe}>
         <Text style={styles.linkText}>View Mechanic Pro</Text>
       </Pressable>

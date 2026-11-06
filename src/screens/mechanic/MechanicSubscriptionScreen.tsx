@@ -25,7 +25,8 @@ import type { MechanicStackParamList } from '../../navigation/types';
 import { getApiErrorMessage } from '../../api/client';
 import {
   isNativeStoreBillingAvailable,
-  mechanicProProductId,
+  mechanicProMonthlyProductId,
+  mechanicProYearlyProductId,
   purchaseMechanicPro,
 } from '../../services/mechanicProStore';
 import { MECHANIC_PRO_SUBSCRIPTION_ID } from '../../constants/storeBilling';
@@ -34,18 +35,32 @@ type Props = NativeStackScreenProps<MechanicStackParamList, 'MechanicSubscriptio
 
 export function MechanicSubscriptionScreen(_props: Props) {
   const { config } = useAppConfig();
-  const proPrice = config?.mechanic_monetization.pro_monthly_price_php ?? 99;
-  const storeProductId =
+  const proMonthlyPrice = config?.mechanic_monetization.pro_monthly_price_php ?? 99;
+  const proYearlyPrice = config?.mechanic_monetization.pro_yearly_price_php;
+  const monthlyStoreId =
     Platform.OS === 'ios'
       ? config?.mechanic_monetization.store_product_ids?.ios
       : config?.mechanic_monetization.store_product_ids?.android;
-  const resolvedProductId = storeProductId ?? mechanicProProductId() ?? MECHANIC_PRO_SUBSCRIPTION_ID;
+  const yearlyStoreId =
+    Platform.OS === 'ios'
+      ? config?.mechanic_monetization.store_product_ids?.ios_yearly
+      : config?.mechanic_monetization.store_product_ids?.android_yearly;
+
+  const fallbackMonthly = mechanicProMonthlyProductId() ?? MECHANIC_PRO_SUBSCRIPTION_ID;
+  const fallbackYearly = mechanicProYearlyProductId();
+
+  const resolvedMonthlyId = monthlyStoreId?.trim() || fallbackMonthly;
+  const resolvedYearlyId = yearlyStoreId?.trim() || fallbackYearly;
+  const yearlyAvailable = resolvedYearlyId.length > 0;
 
   const [dashboard, setDashboard] = useState<MechanicSubscriptionDetails | null>(null);
   const [history, setHistory] = useState<PaymentHistoryItem[]>([]);
+  const [billingCycle, setBillingCycle] = useState<'month' | 'year'>('month');
   const [loading, setLoading] = useState(true);
   const [purchaseBusy, setPurchaseBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const productIdForPurchase = billingCycle === 'year' && yearlyAvailable ? resolvedYearlyId : resolvedMonthlyId;
 
   const load = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true);
@@ -76,7 +91,7 @@ export function MechanicSubscriptionScreen(_props: Props) {
     setPurchaseBusy(true);
     try {
       await simulateMechanicProPurchaseDev(
-        resolvedProductId,
+        productIdForPurchase,
         Platform.OS === 'ios' ? 'ios' : 'android',
       );
       await load(true);
@@ -96,7 +111,7 @@ export function MechanicSubscriptionScreen(_props: Props) {
 
     setPurchaseBusy(true);
     try {
-      await purchaseMechanicPro(resolvedProductId);
+      await purchaseMechanicPro(productIdForPurchase);
       await load(true);
       Alert.alert('Mechanic Pro', 'Your subscription is being activated. Pull to refresh if status does not update yet.');
     } catch (e) {
@@ -152,9 +167,31 @@ export function MechanicSubscriptionScreen(_props: Props) {
         entitlementsRemaining={dashboard?.free_credits.remaining}
         entitlementsTotal={dashboard?.free_credits.total}
         isPro={isPro}
-        proPrice={proPrice}
+        proMonthlyPrice={proMonthlyPrice}
+        proYearlyPrice={proYearlyPrice}
         onSubscribe={() => void onSubscribe()}
       />
+
+      {!isPro && yearlyAvailable ? (
+        <View style={styles.cycleRow}>
+          <Pressable
+            style={[styles.cycleChip, billingCycle === 'month' && styles.cycleChipOn]}
+            onPress={() => setBillingCycle('month')}
+          >
+            <Text style={[styles.cycleChipText, billingCycle === 'month' && styles.cycleChipTextOn]}>Monthly</Text>
+            <Text style={[styles.cycleSub, billingCycle === 'month' && styles.cycleSubOn]}>₱{proMonthlyPrice}/mo</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.cycleChip, billingCycle === 'year' && styles.cycleChipOn]}
+            onPress={() => setBillingCycle('year')}
+          >
+            <Text style={[styles.cycleChipText, billingCycle === 'year' && styles.cycleChipTextOn]}>Yearly</Text>
+            <Text style={[styles.cycleSub, billingCycle === 'year' && styles.cycleSubOn]}>
+              ₱{proYearlyPrice ?? '—'}/yr
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {!isPro && simulateEnabled ? (
         <Pressable
@@ -191,8 +228,9 @@ export function MechanicSubscriptionScreen(_props: Props) {
 
       <View style={styles.note}>
         <Text style={styles.noteText}>
-          Store product ID: {resolvedProductId}. Price in the store may differ from ₱{proPrice}. Use sandbox testers for
-          TestFlight/internal builds.
+          Store product ID: {productIdForPurchase}. Price in the store may differ from CMS amounts. Use sandbox testers
+          for TestFlight/internal builds.
+          {!yearlyAvailable ? ' Yearly billing appears when yearly product IDs are set on the server and in the app env.' : ''}
         </Text>
       </View>
 
@@ -229,6 +267,28 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#0f172a', marginBottom: 8 },
   body: { fontSize: 15, lineHeight: 22, color: '#475569' },
+  cycleRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  cycleChip: {
+    flex: 1,
+    marginHorizontal: 4,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#fff',
+  },
+  cycleChipOn: {
+    borderColor: '#0284c7',
+    backgroundColor: '#f0f9ff',
+  },
+  cycleChipText: { fontSize: 15, fontWeight: '700', color: '#64748b' },
+  cycleChipTextOn: { color: '#0f172a' },
+  cycleSub: { fontSize: 13, color: '#94a3b8', marginTop: 4 },
+  cycleSubOn: { color: '#0369a1' },
   note: {
     marginBottom: 12,
     padding: 14,

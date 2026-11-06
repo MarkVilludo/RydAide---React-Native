@@ -18,6 +18,7 @@ import { useAppConfig } from '../../hooks/useAppConfig';
 import type { OwnerStackParamList } from '../../navigation/types';
 import { pickPrimaryOwnerLiveHelpRequest } from '../../utils/helpRequestStatus';
 import { jobStatusLabelOf, vehicleTitle } from '../../utils/helpRequestUi';
+import { BrandLogo } from '../../components/BrandLogo';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'OwnerHome'>;
 
@@ -253,7 +254,7 @@ export function OwnerHomeScreen({ navigation }: Props) {
         >
           <Text style={styles.menuIcon}>☰</Text>
         </Pressable>
-        <Text style={styles.topTitle}>RydAid</Text>
+        <BrandLogo width={108} />
         <View style={styles.topBarSpacer} />
       </View>
       <ScrollView
@@ -357,7 +358,6 @@ const styles = StyleSheet.create({
   topBarSpacer: { width: 44 },
   menuBtnPlaceholder: { width: 44 },
   menuIcon: { fontSize: 24, color: '#0f172a' },
-  topTitle: { fontSize: 17, fontWeight: '700', color: '#0f172a' },
   scroll: { flex: 1 },
   scrollContent: { padding: 20, paddingTop: 8, paddingBottom: 32 },
   activeRow: {

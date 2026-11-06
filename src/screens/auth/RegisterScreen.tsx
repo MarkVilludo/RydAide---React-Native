@@ -13,6 +13,7 @@ import { getApiErrorMessage } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import type { AuthStackParamList } from '../../navigation/types';
+import { BrandLogo } from '../../components/BrandLogo';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
@@ -46,6 +47,7 @@ export function RegisterScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <BrandLogo width={176} style={styles.logo} />
       <Text style={styles.title}>Create account</Text>
       {requireVerification ? (
         <Text style={styles.subtitle}>We will email you a verification link before you can use the app.</Text>
@@ -107,7 +109,8 @@ export function RegisterScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: '#f8fafc' },
-  title: { fontSize: 24, fontWeight: '600', marginBottom: 8, color: '#0f172a' },
+  logo: { marginBottom: 12, alignSelf: 'center' },
+  title: { fontSize: 24, fontWeight: '600', marginBottom: 8, color: '#0f172a', textAlign: 'center' },
   subtitle: { color: '#64748b', marginBottom: 16, lineHeight: 20 },
   roleRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   roleChip: {

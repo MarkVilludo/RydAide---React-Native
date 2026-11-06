@@ -32,8 +32,14 @@ export interface AppConfig {
     free_emergency_accept_limit: number;
     pro_plan_code: string;
     pro_monthly_price_php: number;
+    pro_yearly_price_php?: number;
     simulate_purchase_enabled?: boolean;
-    store_product_ids?: { ios?: string; android?: string };
+    store_product_ids?: {
+      ios?: string;
+      ios_yearly?: string;
+      android?: string;
+      android_yearly?: string;
+    };
   };
   service_pin?: {
     max_offset_meters: number;

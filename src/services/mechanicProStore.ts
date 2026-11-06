@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import { verifyMechanicProStorePurchase } from '../api/mechanicSubscription';
-import { MECHANIC_PRO_SUBSCRIPTION_ID, STORE_SANDBOX } from '../constants/storeBilling';
+import { MECHANIC_PRO_SUBSCRIPTION_ID, MECHANIC_PRO_YEARLY_SUBSCRIPTION_ID, STORE_SANDBOX } from '../constants/storeBilling';
 
 type Purchase = Record<string, unknown>;
 
@@ -19,6 +19,15 @@ async function loadIapModule(): Promise<typeof import('expo-iap') | null> {
   }
 }
 
+export function mechanicProMonthlyProductId(): string {
+  return MECHANIC_PRO_SUBSCRIPTION_ID;
+}
+
+export function mechanicProYearlyProductId(): string {
+  return MECHANIC_PRO_YEARLY_SUBSCRIPTION_ID;
+}
+
+/** @deprecated use mechanicProMonthlyProductId */
 export function mechanicProProductId(): string {
   return MECHANIC_PRO_SUBSCRIPTION_ID;
 }

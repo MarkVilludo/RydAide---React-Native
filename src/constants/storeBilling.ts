@@ -5,6 +5,10 @@
 export const MECHANIC_PRO_SUBSCRIPTION_ID =
   process.env.EXPO_PUBLIC_MECHANIC_PRO_PRODUCT_ID?.trim() || 'com.rydaid.mechanic.pro.monthly';
 
+/** Yearly Mechanic Pro SKU — optional; must match store console and server env when used. */
+export const MECHANIC_PRO_YEARLY_SUBSCRIPTION_ID =
+  process.env.EXPO_PUBLIC_MECHANIC_PRO_YEARLY_PRODUCT_ID?.trim() || '';
+
 /** iOS bundle ID — must match App Store Connect app record. */
 export const IOS_BUNDLE_IDENTIFIER =
   process.env.EXPO_PUBLIC_IOS_BUNDLE_ID?.trim() || 'com.rydaid.mobile';

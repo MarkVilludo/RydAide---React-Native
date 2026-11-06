@@ -60,4 +60,5 @@ export interface Entitlements {
   accepted_requests?: AcceptedRequestsEntitlement;
   can_accept_help_requests?: boolean;
   mechanic_pro_monthly_price_php?: number;
+  mechanic_pro_yearly_price_php?: number;
 }

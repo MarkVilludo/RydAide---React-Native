@@ -16,6 +16,7 @@ import { useAppConfig } from '../../hooks/useAppConfig';
 import { useAuth } from '../../context/AuthContext';
 import { confirmBeforeDeleteAccountFlow } from '../../utils/deleteAccountConfirm';
 import type { AuthStackParamList } from '../../navigation/types';
+import { BrandLogo } from '../../components/BrandLogo';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
@@ -41,7 +42,7 @@ export function LoginScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.brand}>RydAid</Text>
+      <BrandLogo width={200} style={styles.logo} />
       <Text style={styles.subtitle}>Sign in to continue</Text>
 
       <TextInput
@@ -97,7 +98,7 @@ export function LoginScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: '#f8fafc' },
-  brand: { fontSize: 32, fontWeight: '700', color: '#0369a1', textAlign: 'center' },
+  logo: { marginBottom: 8 },
   subtitle: { textAlign: 'center', color: '#64748b', marginBottom: 24, marginTop: 8 },
   input: {
     backgroundColor: '#fff',

@@ -7,6 +7,7 @@ import { statusBarTopInset } from '../utils/screenInsets';
 import { useAppConfig } from '../hooks/useAppConfig';
 import type { OwnerStackParamList } from './types';
 import { confirmBeforeDeleteAccountFlow } from '../utils/deleteAccountConfirm';
+import { BrandLogo } from '../components/BrandLogo';
 
 type StackRoute = keyof OwnerStackParamList;
 
@@ -53,7 +54,7 @@ export function OwnerDrawerContent({ navigation }: DrawerContentComponentProps) 
       contentContainerStyle={[styles.scroll, { paddingTop: statusBarTopInset() + 8 }]}
       scrollEnabled={false}
     >
-      <Text style={styles.brand}>RydAid</Text>
+      <BrandLogo width={140} style={styles.brandLogo} />
       <Text style={styles.userName}>{user?.name ?? 'Owner'}</Text>
       <Text style={styles.userEmail}>{user?.email ?? ''}</Text>
 
@@ -101,7 +102,7 @@ export function OwnerDrawerContent({ navigation }: DrawerContentComponentProps) 
 
 const styles = StyleSheet.create({
   scroll: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 24 },
-  brand: { fontSize: 22, fontWeight: '800', color: '#0f172a', letterSpacing: -0.3 },
+  brandLogo: { alignSelf: 'flex-start', marginBottom: 4 },
   userName: { fontSize: 16, fontWeight: '600', color: '#334155', marginTop: 20 },
   userEmail: { fontSize: 13, color: '#64748b', marginTop: 4, marginBottom: 8 },
   section: { marginTop: 16 },

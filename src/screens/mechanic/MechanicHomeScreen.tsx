@@ -77,7 +77,8 @@ export function MechanicHomeScreen({ navigation }: Props) {
   const { config } = useAppConfig();
   const emergencyOn = config?.features.emergency_assistance ?? false;
   const subscriptionsOn = config?.features.mechanic_subscriptions ?? false;
-  const proPrice = config?.mechanic_monetization?.pro_monthly_price_php ?? 99;
+  const proMonthlyPrice = config?.mechanic_monetization?.pro_monthly_price_php ?? 99;
+  const proYearlyPrice = config?.mechanic_monetization?.pro_yearly_price_php;
 
   const pageOpacity = useRef(new Animated.Value(0)).current;
 
@@ -188,7 +189,8 @@ export function MechanicHomeScreen({ navigation }: Props) {
     entitlements?.accepted_requests?.remaining ?? entitlements?.accepted_requests_remaining;
   const unlimitedAccepts =
     entitlements?.accepted_requests?.unlimited ?? entitlements?.unlimited_accepted_requests ?? false;
-  const isPro = entitlements?.plan_code === 'MECHANIC_PRO';
+  const isPro =
+    entitlements?.plan_code === 'MECHANIC_PRO' || entitlements?.plan_code === 'MECHANIC_PRO_YEARLY';
   const atFreeLimit =
     subscriptionsOn &&
     !unlimitedAccepts &&
@@ -410,7 +412,8 @@ export function MechanicHomeScreen({ navigation }: Props) {
                     entitlementsRemaining={acceptedRemaining}
                     entitlementsTotal={entitlements?.accepted_requests?.limit ?? entitlements?.max_accepted_requests}
                     isPro={isPro}
-                    proPrice={proPrice}
+                    proMonthlyPrice={proMonthlyPrice}
+                    proYearlyPrice={proYearlyPrice}
                     onSubscribe={() => navigation.navigate('MechanicSubscription')}
                   />
                 ) : null}
