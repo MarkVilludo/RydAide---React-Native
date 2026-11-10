@@ -89,11 +89,24 @@ const radarStyles = StyleSheet.create({
   dotInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#38bdf8' },
 });
 
-function FeatureChip({ icon, label }: { icon: string; label: string }) {
+function FeatureChip({
+  icon,
+  label,
+  variant = 'onDark',
+}: {
+  icon: string;
+  label: string;
+  variant?: 'onDark' | 'onLight';
+}) {
   return (
-    <View style={chipStyles.chip}>
+    <View
+      style={[
+        chipStyles.chip,
+        variant === 'onLight' ? chipStyles.chipOnLight : chipStyles.chipOnDark,
+      ]}
+    >
       <Text style={chipStyles.icon}>{icon}</Text>
-      <Text style={chipStyles.label}>{label}</Text>
+      <Text style={[chipStyles.label, variant === 'onLight' && chipStyles.labelOnLight]}>{label}</Text>
     </View>
   );
 }
@@ -102,14 +115,16 @@ const chipStyles = StyleSheet.create({
   chip: {
     flex: 1,
     minWidth: 96,
-    backgroundColor: 'rgba(15, 23, 42, 0.06)',
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 8,
     alignItems: 'center',
   },
+  chipOnDark: { backgroundColor: 'rgba(15, 23, 42, 0.35)' },
+  chipOnLight: { backgroundColor: 'rgba(15, 23, 42, 0.06)' },
   icon: { fontSize: 18, marginBottom: 4 },
-  label: { fontSize: 11, fontWeight: '600', color: '#334155', textAlign: 'center', lineHeight: 14 },
+  label: { fontSize: 11, fontWeight: '600', color: '#cbd5e1', textAlign: 'center', lineHeight: 14 },
+  labelOnLight: { color: '#334155' },
 });
 
 function ActionCard({
@@ -281,68 +296,126 @@ export function OwnerHomeScreen({ navigation }: Props) {
           </Pressable>
         ) : null}
 
-        <Animated.View
-          style={[styles.hero, { opacity: heroOpacity, transform: [{ translateY: heroY }] }]}
-        >
-          <View style={styles.heroTopRow}>
-            <View style={styles.badge}>
-              <View style={styles.badgeDot} />
-              <Text style={styles.badgeText}>Roadside & emergency ready</Text>
+        {!emergencyOn ? (
+          <>
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Find nearby</Text>
+              <Text style={styles.sectionSub}>
+                Browse verified mechanics and repair shops by location and search radius.
+              </Text>
+              <View style={styles.actionRow}>
+                <ActionCard
+                  emoji="🔧"
+                  title="Mechanics"
+                  subtitle="Mobile & on-call pros around you"
+                  accent="#0284c7"
+                  delay={120}
+                  onPress={() => navigation.navigate('FindMechanic')}
+                />
+                <ActionCard
+                  emoji="🏪"
+                  title="Shops"
+                  subtitle="Verified garages & service centers"
+                  accent="#7c3aed"
+                  delay={200}
+                  onPress={() => navigation.navigate('FindShop')}
+                />
+              </View>
             </View>
-          </View>
 
-          <Text style={styles.heroTitle}>Help when you're stuck</Text>
-          <Text style={styles.heroSub}>
-            RydAid connects you to verified mechanics and repair shops near your location — for emergencies or when
-            you just need someone trusted nearby.
-          </Text>
+            {config?.rollout.area_label ? (
+              <View style={styles.rolloutBanner}>
+                <Text style={styles.rolloutTitle}>Growing in {config.rollout.area_label}</Text>
+                <Text style={styles.rolloutBody}>
+                  Search any location — results show verified providers within your chosen radius only.
+                </Text>
+              </View>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <Animated.View
+              style={[styles.hero, { opacity: heroOpacity, transform: [{ translateY: heroY }] }]}
+            >
+              <View style={styles.heroTopRow}>
+                <View style={styles.badge}>
+                  <View style={styles.badgeDot} />
+                  <Text style={styles.badgeText}>Roadside & emergency ready</Text>
+                </View>
+              </View>
 
-          <View style={styles.heroVisualRow}>
-            <PulseRadar />
-            <View style={styles.heroBullets}>
-              <Text style={styles.bullet}>• Share your location & vehicle details</Text>
-              <Text style={styles.bullet}>• Match with providers in your search radius</Text>
-              <Text style={styles.bullet}>• Or browse the directory anytime</Text>
+              <Text style={styles.heroTitle}>Help when you're stuck</Text>
+              <Text style={styles.heroSub}>
+                Tell us where you are and what happened — we match you with verified mechanics who can respond fast.
+              </Text>
+
+              <Pressable
+                style={({ pressed }) => [styles.primaryHelpCta, pressed && styles.primaryHelpCtaPressed]}
+                onPress={() => navigation.navigate('NeedHelp', { emergency: true })}
+                accessibilityRole="button"
+                accessibilityLabel="Get help now"
+              >
+                <Text style={styles.primaryHelpCtaTitle}>Get help now</Text>
+                <Text style={styles.primaryHelpCtaSub}>Roadside & emergency dispatch to mechanics near you</Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [styles.secondaryHelpCta, pressed && styles.secondaryHelpCtaPressed]}
+                onPress={() => navigation.navigate('NeedHelp', { emergency: false })}
+                accessibilityRole="button"
+                accessibilityLabel="Book a service"
+              >
+                <Text style={styles.secondaryHelpCtaText}>Book a service</Text>
+              </Pressable>
+
+              <View style={styles.heroVisualRow}>
+                <PulseRadar />
+                <View style={styles.heroBullets}>
+                  <Text style={styles.bullet}>• Share your location & vehicle details</Text>
+                  <Text style={styles.bullet}>• Match with providers in your search radius</Text>
+                  <Text style={styles.bullet}>• Track your request in the app</Text>
+                </View>
+              </View>
+
+              <View style={styles.chipRow}>
+                <FeatureChip icon="📍" label="Near you" />
+                <FeatureChip icon="✓" label="Verified" />
+                <FeatureChip icon="⚡" label="Fast dispatch" />
+              </View>
+            </Animated.View>
+
+            {config?.rollout.area_label ? (
+              <View style={styles.rolloutBanner}>
+                <Text style={styles.rolloutTitle}>Growing in {config.rollout.area_label}</Text>
+                <Text style={styles.rolloutBody}>
+                  Search any location — results show verified providers within your chosen radius only.
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Or browse the directory</Text>
+              <View style={styles.actionRow}>
+                <ActionCard
+                  emoji="🔧"
+                  title="Mechanics"
+                  subtitle="Mobile & on-call pros around you"
+                  accent="#0284c7"
+                  delay={280}
+                  onPress={() => navigation.navigate('FindMechanic')}
+                />
+                <ActionCard
+                  emoji="🏪"
+                  title="Shops"
+                  subtitle="Verified garages & service centers"
+                  accent="#7c3aed"
+                  delay={380}
+                  onPress={() => navigation.navigate('FindShop')}
+                />
+              </View>
             </View>
-          </View>
-
-          <View style={styles.chipRow}>
-            <FeatureChip icon="📍" label="Near you" />
-            <FeatureChip icon="✓" label="Verified" />
-            <FeatureChip icon="⚡" label="Fast dispatch" />
-          </View>
-        </Animated.View>
-
-        {config?.rollout.area_label ? (
-          <View style={styles.rolloutBanner}>
-            <Text style={styles.rolloutTitle}>Growing in {config.rollout.area_label}</Text>
-            <Text style={styles.rolloutBody}>
-              Search any location — results show verified providers within your chosen radius only.
-            </Text>
-          </View>
-        ) : null}
-
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Find nearby</Text>
-          <View style={styles.actionRow}>
-            <ActionCard
-              emoji="🔧"
-              title="Mechanics"
-              subtitle="Mobile & on-call pros around you"
-              accent="#0284c7"
-              delay={280}
-              onPress={() => navigation.navigate('FindMechanic')}
-            />
-            <ActionCard
-              emoji="🏪"
-              title="Shops"
-              subtitle="Verified garages & service centers"
-              accent="#7c3aed"
-              delay={380}
-              onPress={() => navigation.navigate('FindShop')}
-            />
-          </View>
-        </View>
+          </>
+        )}
 
       </ScrollView>
     </SafeAreaView>
@@ -364,6 +437,28 @@ const styles = StyleSheet.create({
   menuIcon: { fontSize: 24, color: '#0f172a' },
   scroll: { flex: 1 },
   scrollContent: { padding: 20, paddingTop: 8, paddingBottom: 32 },
+  sectionSub: { fontSize: 14, color: '#64748b', lineHeight: 20, marginBottom: 12, marginTop: -4 },
+  primaryHelpCta: {
+    marginTop: 16,
+    backgroundColor: '#0284c7',
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+  },
+  primaryHelpCtaPressed: { opacity: 0.92 },
+  primaryHelpCtaTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  primaryHelpCtaSub: { color: '#e0f2fe', fontSize: 13, marginTop: 6, lineHeight: 18 },
+  secondaryHelpCta: {
+    marginTop: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.45)',
+    alignItems: 'center',
+  },
+  secondaryHelpCtaPressed: { backgroundColor: 'rgba(255, 255, 255, 0.06)' },
+  secondaryHelpCtaText: { color: '#e0f2fe', fontWeight: '700', fontSize: 15 },
   activeRow: {
     flexDirection: 'row',
     alignItems: 'center',

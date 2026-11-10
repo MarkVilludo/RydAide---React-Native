@@ -34,14 +34,18 @@ import { MapSearchOverlay } from '../../components/MapSearchOverlay';
 import { JobWorkDurationText } from '../../components/JobWorkDurationText';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import type { OwnerStackParamList } from '../../navigation/types';
-import { activeJourneyHeadline, buildHelpJourneySteps } from '../../utils/helpJourney';
+import {
+  activeJourneyHeadline,
+  buildActiveJobJourneySteps,
+  buildHelpJourneySteps,
+} from '../../utils/helpJourney';
 import { haversineDistanceKm } from '../../utils/distanceKm';
 import {
   canOwnerCancelHelpRequest,
-  jobStatusLabelOf,
   jobStatusOf,
   vehicleTitle,
 } from '../../utils/helpRequestUi';
+import { needHelpParamsFromHelpRequest } from '../../utils/needHelpDraft';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'ActiveHelpRequest'>;
 
@@ -111,6 +115,10 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
   }, [helpRequestId, pollMs]);
 
   const journeySteps = useMemo(() => (request ? buildHelpJourneySteps(request) : []), [request]);
+  const activeJobJourneySteps = useMemo(
+    () => (request ? buildActiveJobJourneySteps(request) : []),
+    [request],
+  );
 
   const liveDistanceKm = useMemo(() => liveDistanceKmForRequest(request), [request]);
 
@@ -200,99 +208,67 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
         </View>
 
         <GrabStyleBottomSheet immersiveBottom={workStarted}>
+          <HelpJourneyTimeline steps={activeJobJourneySteps} compact />
+
+          <Text style={styles.sheetHeadline} numberOfLines={2}>
+            {activeJourneyHeadline(request)}
+          </Text>
+
+          <Text style={styles.plansChangeHint}>
+            {request.mechanic.phone
+              ? 'A mechanic has accepted this request. Call them if your plans change — cancellation is no longer available in the app.'
+              : 'A mechanic has accepted this request. Contact them if your plans change — cancellation is no longer available in the app.'}
+          </Text>
+
+          <View style={styles.personRow}>
+            <View style={styles.personBlock}>
+              <Text style={styles.personName} numberOfLines={1}>
+                {mechanicDisplayName(request)}
+              </Text>
+              <Text style={styles.vehicle} numberOfLines={1}>
+                {vehicleTitle(request)}
+              </Text>
+            </View>
+            {request.mechanic.phone ? (
+              <Pressable
+                style={styles.callChip}
+                onPress={() => Linking.openURL(`tel:${request.mechanic!.phone}`)}
+              >
+                <Text style={styles.callChipText}>Call</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          <Text style={styles.problemLine} numberOfLines={workStarted ? 1 : 2}>
+            {request.problem_category?.name}
+            {request.remarks ? ` · ${request.remarks}` : ''}
+          </Text>
+
           {workStarted ? (
-            <>
-              <View style={styles.titleRow}>
-                <Text style={styles.jobProgressHeadline} numberOfLines={1}>
-                  Job in progress
-                </Text>
-                <Text style={styles.statusPill}>{jobStatusLabelOf(request)}</Text>
-              </View>
-
-              <View style={styles.personRow}>
-                <View style={styles.personBlock}>
-                  <Text style={styles.personName} numberOfLines={1}>
-                    {mechanicDisplayName(request)}
-                  </Text>
-                  <Text style={styles.vehicle} numberOfLines={1}>
-                    {vehicleTitle(request)}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.problemLine} numberOfLines={1}>
-                {request.problem_category?.name}
-                {request.remarks ? ` · ${request.remarks}` : ''}
-              </Text>
-
-              <JobWorkDurationText
-                job={request.job}
-                jobStatus={jobStatus}
-                style={styles.workTime}
-                liveStyle={styles.workTimeLive}
-              />
-
-              {connectionLost ? (
-                <Text style={styles.connectionBanner}>Connection lost — map may be outdated</Text>
-              ) : null}
-
-              {photoCount > 0 ? (
-                <Pressable style={styles.photosLink} onPress={() => setPhotosOpen(true)}>
-                  <Text style={styles.photosLinkText}>View problem photos ({photoCount})</Text>
-                </Pressable>
-              ) : null}
-            </>
+            <JobWorkDurationText
+              job={request.job}
+              jobStatus={jobStatus}
+              style={styles.workTime}
+              liveStyle={styles.workTimeLive}
+            />
           ) : (
-            <>
-              <View style={styles.titleStack}>
-                <Text style={styles.sheetHeadline} numberOfLines={2}>
-                  {activeJourneyHeadline(request)}
-                </Text>
-                <Text style={styles.statusPillInline}>{jobStatusLabelOf(request)}</Text>
-              </View>
-
-              <View style={styles.personRow}>
-                <View style={styles.personBlock}>
-                  <Text style={styles.personName} numberOfLines={1}>
-                    {mechanicDisplayName(request)}
-                  </Text>
-                  <Text style={styles.vehicle} numberOfLines={1}>
-                    {vehicleTitle(request)}
-                  </Text>
-                </View>
-                {request.mechanic.phone ? (
-                  <Pressable
-                    style={styles.callChip}
-                    onPress={() => Linking.openURL(`tel:${request.mechanic!.phone}`)}
-                  >
-                    <Text style={styles.callChipText}>Call</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-
-              <Text style={styles.problemLine} numberOfLines={2}>
-                {request.problem_category?.name}
-                {request.remarks ? ` · ${request.remarks}` : ''}
-              </Text>
-
-              <ActiveJobLocationSummary
-                tracking={tracking}
-                connectionLost={connectionLost}
-                viewerRole="owner"
-                compact
-              />
-
-              {connectionLost ? (
-                <Text style={styles.connectionBanner}>Connection lost — map may be outdated</Text>
-              ) : null}
-
-              {photoCount > 0 ? (
-                <Pressable style={styles.photosLink} onPress={() => setPhotosOpen(true)}>
-                  <Text style={styles.photosLinkText}>View problem photos ({photoCount})</Text>
-                </Pressable>
-              ) : null}
-            </>
+            <ActiveJobLocationSummary
+              tracking={tracking}
+              connectionLost={connectionLost}
+              viewerRole="owner"
+              compact
+            />
           )}
+
+          {connectionLost ? (
+            <Text style={styles.connectionBanner}>Connection lost — map may be outdated</Text>
+          ) : null}
+
+          {photoCount > 0 ? (
+            <Pressable style={styles.photosLink} onPress={() => setPhotosOpen(true)}>
+              <Text style={styles.photosLinkText}>View problem photos ({photoCount})</Text>
+            </Pressable>
+          ) : null}
         </GrabStyleBottomSheet>
 
         <Modal visible={photosOpen} transparent animationType="fade">
@@ -351,6 +327,12 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
 
           <HelpJourneyTimeline steps={journeySteps} compact />
 
+          {canCancel ? (
+            <Text style={styles.cancelHint}>
+              Still looking for a mechanic. You can cancel below if you no longer need help.
+            </Text>
+          ) : null}
+
           {searching ? (
             <HelpRequestSearchingHero startedAt={request.created_at ?? new Date().toISOString()} />
           ) : null}
@@ -364,16 +346,26 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
               <Text style={styles.terminalTitle}>{request.status_label ?? request.status}</Text>
               <Text style={styles.terminalBody}>
                 {failedMatch
-                  ? 'No mechanic accepted in time. You can try again from Find Mechanic.'
+                  ? 'No mechanic accepted in time. Your vehicle, problem, photos, and pin are saved — send the request again or browse nearby mechanics.'
                   : 'This request was cancelled.'}
               </Text>
               {failedMatch && (
-                <Pressable
-                  style={styles.retryBtn}
-                  onPress={() => navigation.replace('NeedHelp', { emergency: true })}
-                >
-                  <Text style={styles.retryBtnText}>Try again</Text>
-                </Pressable>
+                <View style={styles.terminalActions}>
+                  <Pressable
+                    style={styles.retryBtn}
+                    onPress={() =>
+                      navigation.replace('NeedHelp', needHelpParamsFromHelpRequest(request))
+                    }
+                  >
+                    <Text style={styles.retryBtnText}>Try again</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.browseBtn}
+                    onPress={() => navigation.navigate('FindMechanic')}
+                  >
+                    <Text style={styles.browseBtnText}>Browse nearby mechanics</Text>
+                  </Pressable>
+                </View>
               )}
             </View>
           )}
@@ -420,35 +412,33 @@ const styles = StyleSheet.create({
   loadingText: { color: '#64748b' },
   connectionLost: { color: '#dc2626' },
   mapArea: { flex: 1, backgroundColor: '#cbd5e1' },
-  titleStack: { gap: 6, marginBottom: 2 },
-  statusPillInline: {
-    alignSelf: 'flex-start',
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0284c7',
-    backgroundColor: '#e0f2fe',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    overflow: 'hidden',
+  sheetHeadline: { fontSize: 18, fontWeight: '800', color: '#0284c7', marginTop: 8 },
+  plansChangeHint: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#475569',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    padding: 10,
   },
-  jobProgressHeadline: { flex: 1, fontSize: 18, fontWeight: '800', color: '#166534' },
+  cancelHint: {
+    marginTop: 10,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#475569',
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 10,
+    padding: 10,
+  },
   workTime: { marginTop: 4 },
   workTimeLive: { color: '#b45309' },
   mapWrap: { height: 280, backgroundColor: '#cbd5e1' },
   mapPlaceholder: { flex: 1, position: 'relative' },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  sheetHeadline: { flex: 1, fontSize: 18, fontWeight: '800', color: '#0284c7' },
-  statusPill: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0284c7',
-    backgroundColor: '#e0f2fe',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    overflow: 'hidden',
-  },
   personRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 10 },
   personBlock: { flex: 1, minWidth: 0 },
   personName: { fontSize: 17, fontWeight: '700', color: '#0f172a' },
@@ -481,14 +471,23 @@ const styles = StyleSheet.create({
   },
   terminalTitle: { fontWeight: '800', color: '#b91c1c', fontSize: 17 },
   terminalBody: { color: '#475569', marginTop: 6, lineHeight: 20 },
+  terminalActions: { marginTop: 14, gap: 10 },
   retryBtn: {
-    marginTop: 14,
     backgroundColor: '#0284c7',
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
   },
   retryBtnText: { color: '#fff', fontWeight: '700' },
+  browseBtn: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#0284c7',
+    backgroundColor: '#fff',
+  },
+  browseBtnText: { color: '#0284c7', fontWeight: '700' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 24 },
   photosCard: { backgroundColor: '#fff', padding: 20, borderRadius: 16, maxHeight: '80%' },
   modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },

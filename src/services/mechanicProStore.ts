@@ -1,12 +1,47 @@
+import { isRunningInExpoGo } from 'expo';
 import { Platform } from 'react-native';
 import { verifyMechanicProStorePurchase } from '../api/mechanicSubscription';
 import { MECHANIC_PRO_SUBSCRIPTION_ID, MECHANIC_PRO_YEARLY_SUBSCRIPTION_ID, STORE_SANDBOX } from '../constants/storeBilling';
 
 type Purchase = Record<string, unknown>;
 
+export const STORE_BILLING_UNAVAILABLE_MESSAGE =
+  'Google Play / App Store billing is not available in Expo Go. Install a RydAid build from EAS (e.g. npm run build:android:apk), then open that app — not Expo Go — and try Subscribe again.';
+
 let iapModule: typeof import('expo-iap') | null | undefined;
+let nativeIapChecked = false;
+let nativeIapAvailable = false;
+
+function isExpoIapNativeLinked(): boolean {
+  if (nativeIapChecked) {
+    return nativeIapAvailable;
+  }
+  nativeIapChecked = true;
+  if (isRunningInExpoGo()) {
+    nativeIapAvailable = false;
+    return false;
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { requireNativeModule } = require('expo-modules-core') as typeof import('expo-modules-core');
+    requireNativeModule('ExpoIap');
+    nativeIapAvailable = true;
+  } catch {
+    nativeIapAvailable = false;
+  }
+  return nativeIapAvailable;
+}
+
+/** True on iOS/Android dev client or store build where expo-iap native code is linked. */
+export function isStoreBillingNativeAvailable(): boolean {
+  return (Platform.OS === 'ios' || Platform.OS === 'android') && isExpoIapNativeLinked();
+}
 
 async function loadIapModule(): Promise<typeof import('expo-iap') | null> {
+  if (!isStoreBillingNativeAvailable()) {
+    iapModule = null;
+    return null;
+  }
   if (iapModule !== undefined) {
     return iapModule;
   }
@@ -90,12 +125,18 @@ async function androidSubscriptionOffers(
 export async function purchaseMechanicPro(productId: string = MECHANIC_PRO_SUBSCRIPTION_ID): Promise<void> {
   const IAP = await loadIapModule();
   if (!IAP) {
-    throw new Error(
-      'In-app purchases require an EAS development or TestFlight build with expo-iap. Expo Go cannot run store billing.',
-    );
+    throw new Error(STORE_BILLING_UNAVAILABLE_MESSAGE);
   }
 
-  await IAP.initConnection();
+  try {
+    await IAP.initConnection();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/ExpoIap|native module/i.test(msg)) {
+      throw new Error(STORE_BILLING_UNAVAILABLE_MESSAGE);
+    }
+    throw e;
+  }
 
   return new Promise((resolve, reject) => {
     let settled = false;

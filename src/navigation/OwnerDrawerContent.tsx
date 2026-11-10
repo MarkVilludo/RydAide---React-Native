@@ -59,7 +59,12 @@ export function OwnerDrawerContent({ navigation }: DrawerContentComponentProps) 
       <Text style={styles.userEmail}>{user?.email ?? ''}</Text>
 
       <View style={styles.section}>
-        <DrawerRow icon="🏠" label="Home" subtitle="Emergency & nearby search" onPress={() => goTo('OwnerHome')} />
+        <DrawerRow
+          icon="🏠"
+          label="Home"
+          subtitle={emergencyOn ? 'Help & nearby search' : 'Browse mechanics & shops'}
+          onPress={() => goTo('OwnerHome')}
+        />
         {emergencyOn ? (
           <>
             <DrawerRow

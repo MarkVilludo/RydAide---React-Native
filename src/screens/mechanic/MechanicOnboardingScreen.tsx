@@ -51,6 +51,8 @@ export function MechanicOnboardingScreen({ navigation }: Props) {
   const [govIdNumber, setGovIdNumber] = useState('');
   const [idDocumentUri, setIdDocumentUri] = useState<string | null>(null);
   const [idSelfieUri, setIdSelfieUri] = useState<string | null>(null);
+  const [verificationRejectionReason, setVerificationRejectionReason] = useState<string | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([fetchMyMechanicProfile(), fetchVehicleTypes()])
@@ -61,6 +63,8 @@ export function MechanicOnboardingScreen({ navigation }: Props) {
           setBusinessName(profile.business_name);
           setPhone(profile.phone ?? '');
           setAddress(profile.address ?? '');
+          setVerificationStatus(profile.verification_status ?? null);
+          setVerificationRejectionReason(profile.identity_verification?.rejection_reason ?? null);
           if (profile.service_radius_km) {
             setServiceRadiusKm(String(profile.service_radius_km));
           }
@@ -176,6 +180,13 @@ export function MechanicOnboardingScreen({ navigation }: Props) {
         Free registration — no payment or subscription. Verify your identity first, then complete your listing.
       </Text>
 
+      {verificationStatus === 'rejected' && verificationRejectionReason ? (
+        <View style={styles.rejectionBanner}>
+          <Text style={styles.rejectionTitle}>Verification needs updates</Text>
+          <Text style={styles.rejectionBody}>{verificationRejectionReason}</Text>
+        </View>
+      ) : null}
+
       {!existingId && (
         <>
           <Text style={styles.sectionTitle}>Step 1 — Identity verification</Text>
@@ -253,6 +264,16 @@ const styles = StyleSheet.create({
   container: { padding: 20, backgroundColor: '#f8fafc' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   lead: { color: '#475569', marginBottom: 16 },
+  rejectionBanner: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 16,
+  },
+  rejectionTitle: { color: '#dc2626', fontWeight: '700', marginBottom: 6 },
+  rejectionBody: { color: '#7f1d1d', lineHeight: 20 },
   sectionTitle: { fontSize: 17, fontWeight: '700', color: '#0f172a', marginBottom: 8, marginTop: 8 },
   hint: { color: '#64748b', marginBottom: 12, lineHeight: 20 },
   label: { fontWeight: '600', marginBottom: 6 },

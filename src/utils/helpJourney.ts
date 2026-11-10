@@ -23,6 +23,43 @@ function currentPhase(request: HelpRequest): PhaseKey {
   return 'finding';
 }
 
+function journeyStepsForPhases(
+  request: HelpRequest,
+  phases: Array<{ key: PhaseKey; label: string }>,
+): JourneyStep[] {
+  const active = currentPhase(request);
+  let activeIndex = phases.findIndex((p) => p.key === active);
+  if (activeIndex < 0) {
+    activeIndex = 0;
+  }
+
+  return phases.map((p, index) => {
+    let state: JourneyStepState = 'pending';
+    if (index < activeIndex) state = 'done';
+    else if (index === activeIndex) state = 'active';
+
+    const subtitle =
+      p.key === 'finding' && request.status === 'SEARCHING'
+        ? request.search_progress?.message
+        : undefined;
+
+    return { key: p.key, label: p.label, state, subtitle };
+  });
+}
+
+const ACTIVE_JOB_JOURNEY_PHASES: Array<{ key: PhaseKey; label: string }> = [
+  { key: 'assigned', label: 'Accepted' },
+  { key: 'ontheway', label: 'On the way' },
+  { key: 'arrived', label: 'Arrived' },
+  { key: 'working', label: 'In progress' },
+  { key: 'done', label: 'Service completed' },
+];
+
+/** Post-acceptance steps for the owner live job sheet (map view). */
+export function buildActiveJobJourneySteps(request: HelpRequest): JourneyStep[] {
+  return journeyStepsForPhases(request, ACTIVE_JOB_JOURNEY_PHASES);
+}
+
 export function buildHelpJourneySteps(request: HelpRequest): JourneyStep[] {
   if (
     request.status === 'NO_MECHANIC_FOUND' ||
@@ -46,28 +83,10 @@ export function buildHelpJourneySteps(request: HelpRequest): JourneyStep[] {
   const phases: Array<{ key: PhaseKey; label: string }> = [
     { key: 'submitted', label: 'Request sent' },
     { key: 'finding', label: 'Finding mechanic' },
-    { key: 'assigned', label: 'Accepted' },
-    { key: 'ontheway', label: 'On the way' },
-    { key: 'arrived', label: 'Arrived' },
-    { key: 'working', label: 'In progress' },
-    { key: 'done', label: 'Service completed' },
+    ...ACTIVE_JOB_JOURNEY_PHASES,
   ];
 
-  const active = currentPhase(request);
-  const activeIndex = phases.findIndex((p) => p.key === active);
-
-  return phases.map((p, index) => {
-    let state: JourneyStepState = 'pending';
-    if (index < activeIndex) state = 'done';
-    else if (index === activeIndex) state = 'active';
-
-    const subtitle =
-      p.key === 'finding' && request.status === 'SEARCHING'
-        ? request.search_progress?.message
-        : undefined;
-
-    return { key: p.key, label: p.label, state, subtitle };
-  });
+  return journeyStepsForPhases(request, phases);
 }
 
 export function activeJourneyHeadline(request: HelpRequest): string {

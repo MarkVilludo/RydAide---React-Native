@@ -1,20 +1,11 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import * as Location from 'expo-location';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
-import { getApiErrorMessage } from '../../api/client';
-import type { DirectorySearchMeta } from '../../api/appConfig';
 import { searchMechanics, type MechanicResult } from '../../api/mechanics';
-import { DirectoryRadiusMap, type SearchCenter } from '../../components/DirectoryRadiusMap';
+import { DirectoryRadiusMap } from '../../components/DirectoryRadiusMap';
+import { DirectorySearchEmptyState } from '../../components/DirectorySearchEmptyState';
+import { directoryBrowseStyles } from '../../components/directoryBrowseStyles';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { MapSearchOverlay } from '../../components/MapSearchOverlay';
 import {
@@ -23,8 +14,16 @@ import {
   SearchRadiusSelector,
 } from '../../components/SearchRadiusSelector';
 import { useAppConfig } from '../../hooks/useAppConfig';
+import { useDirectoryMapSearch } from '../../hooks/useDirectoryMapSearch';
 import type { OwnerStackParamList } from '../../navigation/types';
 import type { MapDirectoryPin } from '../../types/mapPins';
+import {
+  availabilityDotColor,
+  availabilityLabel,
+  mapPinSnippetForMechanic,
+  mechanicListingMetaLine,
+} from '../../utils/directoryListing';
+import { openDirections } from '../../utils/mapsLinks';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'FindMechanic'>;
 
@@ -32,6 +31,7 @@ type Props = NativeStackScreenProps<OwnerStackParamList, 'FindMechanic'>;
 export function FindMechanicScreen({ navigation }: Props) {
   const emergency = false;
   const { config } = useAppConfig();
+  const emergencyOn = config?.features.emergency_assistance ?? false;
   const minRadius = config?.directory.min_radius_km ?? SEARCH_RADIUS_MIN_KM;
   const maxRadius = config?.directory.max_radius_km ?? SEARCH_RADIUS_MAX_KM;
   const defaultRadius = Math.min(
@@ -39,94 +39,36 @@ export function FindMechanicScreen({ navigation }: Props) {
     Math.max(minRadius, config?.directory.default_radius_km ?? 5),
   );
   const [radiusKm, setRadiusKm] = useState(defaultRadius);
-  const [center, setCenter] = useState<SearchCenter | null>(null);
-  const [locating, setLocating] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<MechanicResult[]>([]);
-  const [searchMeta, setSearchMeta] = useState<DirectorySearchMeta | null>(null);
-  const [searched, setSearched] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const searchGen = useRef(0);
 
-  const ensureLocationPermission = useCallback(async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Location required', 'Allow location to find nearby mechanics.');
-      return false;
-    }
-    return true;
-  }, []);
-
-  const goToMyLocation = useCallback(async () => {
-    setLocating(true);
-    try {
-      if (!(await ensureLocationPermission())) {
-        return;
-      }
-      const position = await Location.getCurrentPositionAsync({});
-      setCenter({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      });
-    } catch {
-      Alert.alert('Location error', 'Could not read GPS. Tap the map to pick a spot.');
-    } finally {
-      setLocating(false);
-    }
-  }, [ensureLocationPermission]);
-
-  useEffect(() => {
-    goToMyLocation();
-  }, [goToMyLocation]);
-
-  const runSearch = useCallback(async (opts?: { soft?: boolean }) => {
-    if (!center) return;
-    const soft = opts?.soft === true;
-    const gen = ++searchGen.current;
-    if (!soft) {
-      setLoading(true);
-      setSearched(true);
-    }
-    try {
-      // Directory search uses real mechanic coordinates — do not call dev nearby seed here
-      // (that API moves test providers to the tap point and makes every pin follow the search center).
+  const performSearch = useCallback(
+    async (center: { latitude: number; longitude: number }, radius_km: number) => {
       const { mechanics, search } = await searchMechanics({
         latitude: center.latitude,
         longitude: center.longitude,
         emergency,
-        radius_km: radiusKm,
+        radius_km,
       });
-      if (gen !== searchGen.current) return;
-      setResults(mechanics);
-      setSearchMeta(search);
-    } catch (error) {
-      if (gen === searchGen.current) {
-        Alert.alert('Search failed', getApiErrorMessage(error));
-      }
-    } finally {
-      if (gen === searchGen.current && !soft) {
-        setLoading(false);
-      }
-    }
-  }, [center, emergency, radiusKm]);
+      return { results: mechanics, search };
+    },
+    [emergency],
+  );
 
-  const onRefreshList = useCallback(async () => {
-    if (!center) return;
-    setRefreshing(true);
-    try {
-      await runSearch({ soft: true });
-    } finally {
-      setRefreshing(false);
-    }
-  }, [center, runSearch]);
-
-  useEffect(() => {
-    if (!center || locating) return;
-    const timer = setTimeout(() => {
-      runSearch();
-    }, 450);
-    return () => clearTimeout(timer);
-  }, [center, radiusKm, locating, runSearch]);
+  const {
+    center,
+    setCenter,
+    locating,
+    goToMyLocation,
+    loading,
+    results,
+    searchMeta,
+    searched,
+    refreshing,
+    onRefreshList,
+  } = useDirectoryMapSearch<MechanicResult>({
+    radiusKm,
+    locationDeniedMessage: 'Allow location to find nearby mechanics.',
+    performSearch,
+  });
 
   const mapPins = useMemo((): MapDirectoryPin[] => {
     if (!searched || loading) return [];
@@ -137,8 +79,8 @@ export function FindMechanicScreen({ navigation }: Props) {
         id: m.id,
         latitude: m.latitude!,
         longitude: m.longitude!,
-        title: 'Available',
-        snippet: m.distance_km != null ? `${m.distance_km} km` : undefined,
+        title: availabilityLabel(m.availability_status),
+        snippet: mapPinSnippetForMechanic(m),
         markerKeyPrefix: 'mechanic',
       }));
   }, [results, searched, loading]);
@@ -152,9 +94,14 @@ export function FindMechanicScreen({ navigation }: Props) {
           ? `${results.length} mechanic${results.length === 1 ? '' : 's'} within ${searchMeta.applied_radius_km} km`
           : 'Set location to search';
 
+  const needHelpParams = {
+    latitude: center?.latitude,
+    longitude: center?.longitude,
+  };
+
   return (
-    <View style={styles.root}>
-      <View style={styles.mapSection}>
+    <View style={directoryBrowseStyles.root}>
+      <View style={directoryBrowseStyles.mapSection}>
         <DirectoryRadiusMap
           center={center}
           radiusKm={radiusKm}
@@ -170,10 +117,10 @@ export function FindMechanicScreen({ navigation }: Props) {
         />
       </View>
 
-      <View style={styles.sheetArea}>
+      <View style={directoryBrowseStyles.sheetArea}>
         <GrabStyleBottomSheet>
-          <Text style={styles.sheetTitle}>Mechanics near you</Text>
-          <Text style={styles.count}>{countLabel}</Text>
+          <Text style={directoryBrowseStyles.sheetTitle}>Mechanics near you</Text>
+          <Text style={directoryBrowseStyles.count}>{countLabel}</Text>
 
           <SearchRadiusSelector
             valueKm={radiusKm}
@@ -183,17 +130,11 @@ export function FindMechanicScreen({ navigation }: Props) {
             radiusOptionsKm={config?.directory.radius_options_km}
           />
 
-          {config?.features.emergency_assistance && (
+          {emergencyOn && (
             <>
               <Pressable
                 style={styles.helpCta}
-                onPress={() =>
-                  navigation.navigate('NeedHelp', {
-                    emergency: true,
-                    latitude: center?.latitude,
-                    longitude: center?.longitude,
-                  })
-                }
+                onPress={() => navigation.navigate('NeedHelp', { emergency: true, ...needHelpParams })}
               >
                 <Text style={styles.helpCtaTitle}>Request roadside help</Text>
                 <Text style={styles.helpCtaSub}>
@@ -202,13 +143,7 @@ export function FindMechanicScreen({ navigation }: Props) {
               </Pressable>
               <Pressable
                 style={styles.serviceCta}
-                onPress={() =>
-                  navigation.navigate('NeedHelp', {
-                    emergency: false,
-                    latitude: center?.latitude,
-                    longitude: center?.longitude,
-                  })
-                }
+                onPress={() => navigation.navigate('NeedHelp', { emergency: false, ...needHelpParams })}
               >
                 <Text style={styles.serviceCtaText}>Schedule non-emergency service</Text>
               </Pressable>
@@ -218,7 +153,7 @@ export function FindMechanicScreen({ navigation }: Props) {
           {searched && !loading && searchMeta && results.length < searchMeta.min_results_target &&
             searchMeta.recommended_radius_km > searchMeta.applied_radius_km && (
               <Pressable onPress={() => setRadiusKm(searchMeta.recommended_radius_km)}>
-                <Text style={styles.recommend}>
+                <Text style={directoryBrowseStyles.recommend}>
                   Widen to {searchMeta.recommended_radius_km} km for more results
                 </Text>
               </Pressable>
@@ -227,8 +162,8 @@ export function FindMechanicScreen({ navigation }: Props) {
       </View>
 
       <FlatList
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
+        style={directoryBrowseStyles.list}
+        contentContainerStyle={directoryBrowseStyles.listContent}
         data={loading ? [] : results}
         keyExtractor={(item) => String(item.id)}
         refreshControl={
@@ -236,37 +171,52 @@ export function FindMechanicScreen({ navigation }: Props) {
         }
         ListEmptyComponent={
           searched && !loading ? (
-            <Text style={styles.empty}>
-              No verified mechanics in this area yet. Try a larger radius or request help to broadcast
-              to more providers.
-            </Text>
-          ) : null
+            <DirectorySearchEmptyState
+              kind="mechanic"
+              emergencyAssistanceEnabled={emergencyOn}
+              searchMeta={searchMeta}
+              onWidenRadius={setRadiusKm}
+              onRequestHelp={
+                emergencyOn
+                  ? () => navigation.navigate('NeedHelp', { emergency: true, ...needHelpParams })
+                  : undefined
+              }
+            />
+          ) : undefined
         }
-        renderItem={({ item, index }) => (
-          <View style={styles.card}>
-            <View style={styles.cardRow}>
-              <View style={styles.dot} />
-              <View style={styles.cardBody}>
-                <Text style={styles.cardTitle}>Provider #{index + 1}</Text>
-                <Text style={styles.cardMeta}>
-                  {item.distance_km != null ? `${item.distance_km} km away` : 'In your search area'}
-                  {item.emergency_available ? ' · Emergency OK' : ''}
-                </Text>
+        renderItem={({ item }) => {
+          const canDirections = item.latitude != null && item.longitude != null;
+          return (
+            <Pressable
+              style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+              onPress={() => {
+                if (canDirections) {
+                  openDirections(item.latitude!, item.longitude!);
+                }
+              }}
+              disabled={!canDirections}
+              accessibilityRole="button"
+              accessibilityLabel="Verified mobile mechanic. Tap for directions."
+            >
+              <View style={styles.cardRow}>
+                <View style={[styles.dot, { backgroundColor: availabilityDotColor(item.availability_status) }]} />
+                <View style={styles.cardBody}>
+                  <Text style={styles.cardTitle}>Verified mobile mechanic</Text>
+                  <Text style={styles.cardMeta}>{mechanicListingMetaLine(item)}</Text>
+                  {canDirections ? (
+                    <Text style={styles.cardActionHint}>Tap for directions</Text>
+                  ) : null}
+                </View>
               </View>
-            </View>
-          </View>
-        )}
+            </Pressable>
+          );
+        }}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#e2e8f0' },
-  mapSection: { height: 300, position: 'relative' },
-  sheetArea: { zIndex: 2 },
-  sheetTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
-  count: { fontSize: 15, color: '#0284c7', fontWeight: '600', marginTop: 4, marginBottom: 8 },
   helpCta: {
     marginTop: 16,
     backgroundColor: '#0f172a',
@@ -277,10 +227,6 @@ const styles = StyleSheet.create({
   helpCtaSub: { color: '#94a3b8', fontSize: 13, marginTop: 6, lineHeight: 18 },
   serviceCta: { marginTop: 10, paddingVertical: 12, alignItems: 'center' },
   serviceCtaText: { color: '#0284c7', fontWeight: '600', fontSize: 14 },
-  recommend: { color: '#0284c7', fontWeight: '600', marginTop: 12 },
-  list: { flex: 1, backgroundColor: '#f8fafc' },
-  listContent: { padding: 16, paddingBottom: 32 },
-  empty: { textAlign: 'center', color: '#64748b', lineHeight: 20, marginTop: 8 },
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -289,9 +235,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
+  cardPressed: { backgroundColor: '#f8fafc' },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#16a34a' },
+  dot: { width: 10, height: 10, borderRadius: 5 },
   cardBody: { flex: 1 },
   cardTitle: { fontSize: 16, fontWeight: '600' },
-  cardMeta: { color: '#64748b', marginTop: 2, fontSize: 14 },
+  cardMeta: { color: '#64748b', marginTop: 2, fontSize: 14, lineHeight: 20 },
+  cardActionHint: { color: '#0284c7', marginTop: 6, fontSize: 13, fontWeight: '600' },
 });

@@ -24,10 +24,11 @@ import type { MechanicStackParamList } from '../../navigation/types';
 import { getApiErrorMessage } from '../../api/client';
 import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 import {
-  isNativeStoreBillingAvailable,
+  isStoreBillingNativeAvailable,
   mechanicProMonthlyProductId,
   mechanicProYearlyProductId,
   purchaseMechanicPro,
+  STORE_BILLING_UNAVAILABLE_MESSAGE,
 } from '../../services/mechanicProStore';
 import { MECHANIC_PRO_SUBSCRIPTION_ID } from '../../constants/storeBilling';
 import { isMechanicProPlanCode } from '../../utils/mechanicProPricing';
@@ -128,9 +129,11 @@ export function MechanicSubscriptionScreen(_props: Props) {
     }
   };
 
+  const storeBillingReady = isStoreBillingNativeAvailable();
+
   const onSubscribe = async (overrideProductId?: string) => {
-    if (!isNativeStoreBillingAvailable()) {
-      Alert.alert('Not available', 'Subscriptions are available on the iOS and Android apps.');
+    if (!storeBillingReady) {
+      Alert.alert('Install RydAid app build', STORE_BILLING_UNAVAILABLE_MESSAGE);
       return;
     }
 

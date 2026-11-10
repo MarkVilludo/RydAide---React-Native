@@ -1,6 +1,14 @@
 import { api } from './client';
 import type { DirectorySearchMeta } from './appConfig';
 
+export interface MechanicIdentityVerification {
+  gov_id_type?: string;
+  gov_id_last4?: string;
+  submitted?: boolean;
+  submitted_at?: string | null;
+  rejection_reason?: string | null;
+}
+
 export interface MechanicResult {
   id: number;
   business_name: string;
@@ -15,6 +23,7 @@ export interface MechanicResult {
   emergency_available: boolean;
   is_verified: boolean;
   verification_status?: string;
+  identity_verification?: MechanicIdentityVerification;
   availability_status?: 'available' | 'busy' | 'offline';
   phone: string | null;
   mechanic_name?: string;

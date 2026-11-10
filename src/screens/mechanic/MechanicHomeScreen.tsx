@@ -85,6 +85,7 @@ export function MechanicHomeScreen({ navigation }: Props) {
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [subscriptionDashboard, setSubscriptionDashboard] = useState<MechanicSubscriptionDetails | null>(null);
   const [listingStatus, setListingStatus] = useState<string | null>(null);
+  const [verificationRejectionReason, setVerificationRejectionReason] = useState<string | null>(null);
   const [availability, setAvailability] = useState<'available' | 'offline' | 'busy'>('offline');
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
   const [summary, setSummary] = useState<Awaited<ReturnType<typeof fetchMechanicHelpQueues>>['summary'] | null>(
@@ -126,6 +127,7 @@ export function MechanicHomeScreen({ navigation }: Props) {
         fetchMyMechanicProfile()
           .then((p) => {
             setListingStatus(p?.verification_status ?? (p ? 'pending' : 'none'));
+            setVerificationRejectionReason(p?.identity_verification?.rejection_reason ?? null);
             setAvailability(p?.availability_status ?? 'offline');
             const lat = p?.latitude != null ? Number(p.latitude) : NaN;
             const lng = p?.longitude != null ? Number(p.longitude) : NaN;
@@ -185,6 +187,7 @@ export function MechanicHomeScreen({ navigation }: Props) {
 
   const verified = listingStatus === 'verified';
   const needsProfile = listingStatus === 'none' || listingStatus === null;
+  const verificationRejected = listingStatus === 'rejected';
   const acceptedRemaining =
     entitlements?.accepted_requests?.remaining ?? entitlements?.accepted_requests_remaining;
   const unlimitedAccepts =
@@ -360,24 +363,42 @@ export function MechanicHomeScreen({ navigation }: Props) {
 
           <View style={styles.sheet}>
             {emergencyOn && !verified ? (
-              <Pressable
-                style={styles.verifyStrip}
-                onPress={() => needsProfile && navigation.navigate('MechanicOnboarding')}
-              >
-                <Text style={styles.verifyText}>
-                  {needsProfile ? 'Complete profile to go online →' : 'Verification pending…'}
-                </Text>
-              </Pressable>
+              needsProfile || verificationRejected ? (
+                <Pressable
+                  style={[styles.verifyStrip, verificationRejected && styles.verifyStripRejected]}
+                  onPress={() => navigation.navigate('MechanicOnboarding')}
+                >
+                  <Text style={styles.verifyTitle}>
+                    {needsProfile ? 'Finish your mechanic profile' : 'Verification needs updates'}
+                  </Text>
+                  <Text style={styles.verifyBody}>
+                    {needsProfile
+                      ? 'Add your business details, services, and service area so we can review your listing. Your map pin and listing preview still work while you finish.'
+                      : verificationRejectionReason
+                        ? `We could not approve your listing yet: ${verificationRejectionReason} Open your profile, fix the issues, and resubmit.`
+                        : 'We could not approve your listing yet. Open your profile, fix the issues noted by support, and resubmit.'}
+                  </Text>
+                  <Text style={styles.verifyCta}>Open profile →</Text>
+                </Pressable>
+              ) : (
+                <View style={styles.verifyStrip}>
+                  <Text style={styles.verifyTitle}>Verification in progress</Text>
+                  <Text style={styles.verifyBody}>
+                    Our team is reviewing your business details. You can still update your listing and map pin. Going
+                    online and accepting roadside jobs unlocks after approval—usually within 1–2 business days.
+                  </Text>
+                </View>
+              )
             ) : null}
 
             {!emergencyOn ? (
               <View style={styles.offlineCard}>
-                <Text style={styles.offlineCardTitle}>Help dispatch is off</Text>
+                <Text style={styles.offlineCardTitle}>Roadside dispatch is not active yet</Text>
                 <Text style={styles.offlineMsg}>
-                  Your listing and map still work. Turn on emergency assistance in server or admin settings to receive roadside requests.
+                  What works today: your public mechanic listing, service map pin, and profile edits. When dispatch is enabled for your account, you will see incoming help offers here and can go online from this dashboard.
                 </Text>
                 <Pressable style={styles.offlineCta} onPress={() => navigation.navigate('MechanicOnboarding')}>
-                  <Text style={styles.offlineCtaText}>Edit your listing →</Text>
+                  <Text style={styles.offlineCtaText}>Update your listing →</Text>
                 </Pressable>
               </View>
             ) : (
@@ -417,11 +438,29 @@ export function MechanicHomeScreen({ navigation }: Props) {
                   </Pressable>
                 ) : null}
 
+                {atFreeLimit ? (
+                  <View style={styles.limitBanner}>
+                    <Text style={styles.limitTitle}>Incoming locked — free accepts used</Text>
+                    <Text style={styles.limitBody}>
+                      You have used all free help-request accepts. Subscribe to Mechanic Pro for unlimited accepts, or wait until your plan renews if you are already subscribed.
+                    </Text>
+                    <Pressable style={styles.limitCta} onPress={() => navigation.navigate('MechanicSubscription')}>
+                      <Text style={styles.limitCtaText}>Unlock with Mechanic Pro →</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+
                 <View style={styles.actionRow}>
                   <Pressable
                     style={[styles.incomingBtn, atFreeLimit && styles.incomingBtnOff]}
                     disabled={atFreeLimit}
                     onPress={() => openRequests('incoming')}
+                    accessibilityState={{ disabled: atFreeLimit }}
+                    accessibilityHint={
+                      atFreeLimit
+                        ? 'Subscribe to Mechanic Pro to accept more incoming requests'
+                        : undefined
+                    }
                   >
                     <Text style={styles.incomingCount}>{incomingCount}</Text>
                     <Text style={styles.incomingLabel}>Incoming</Text>
@@ -438,10 +477,10 @@ export function MechanicHomeScreen({ navigation }: Props) {
                   <View style={styles.statsRow}>
                     {(
                       [
-                        ['In', summary.incoming, 'incoming'],
+                        ['Incoming', summary.incoming, 'incoming'],
                         ['Active', summary.accepted_active, 'accepted_active'],
-                        ['Work', summary.in_progress, 'in_progress'],
-                        ['Done', summary.completed, 'completed'],
+                        ['Working', summary.in_progress, 'in_progress'],
+                        ['Completed', summary.completed, 'completed'],
                       ] as const
                     ).map(([label, value, tab]) => (
                       <Pressable key={tab} style={styles.statCell} onPress={() => openRequests(tab)}>
@@ -566,11 +605,16 @@ const styles = StyleSheet.create({
   },
   verifyStrip: {
     backgroundColor: '#fffbeb',
-    padding: 10,
+    padding: 12,
     borderRadius: 10,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#fde68a',
   },
-  verifyText: { color: '#b45309', fontWeight: '700', fontSize: 13 },
+  verifyStripRejected: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
+  verifyTitle: { color: '#92400e', fontWeight: '800', fontSize: 14 },
+  verifyBody: { color: '#78716c', fontSize: 13, lineHeight: 19, marginTop: 6 },
+  verifyCta: { marginTop: 8, color: '#b45309', fontWeight: '700', fontSize: 13 },
   offlineCard: {
     backgroundColor: '#f8fafc',
     borderRadius: 14,
@@ -668,7 +712,19 @@ const styles = StyleSheet.create({
     borderRightColor: '#f1f5f9',
   },
   statNum: { fontSize: 18, fontWeight: '800', color: '#0f172a' },
-  statLbl: { fontSize: 10, color: '#64748b', fontWeight: '600', marginTop: 2 },
+  statLbl: { fontSize: 9, color: '#64748b', fontWeight: '600', marginTop: 2, textAlign: 'center' },
+  limitBanner: {
+    backgroundColor: '#fff7ed',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+  },
+  limitTitle: { fontSize: 14, fontWeight: '800', color: '#9a3412' },
+  limitBody: { marginTop: 6, fontSize: 13, lineHeight: 19, color: '#78716c' },
+  limitCta: { marginTop: 10, alignSelf: 'flex-start' },
+  limitCtaText: { fontSize: 14, fontWeight: '700', color: '#0284c7' },
   proLink: { alignItems: 'center', paddingVertical: 8 },
   proLinkText: { color: '#0f172a', fontWeight: '700', fontSize: 13 },
   mapSection: {

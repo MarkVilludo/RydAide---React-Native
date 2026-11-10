@@ -204,13 +204,25 @@ export async function createHelpRequest(payload: CreateHelpRequestPayload): Prom
     form.append(`answers[${index}][question_id]`, String(a.question_id));
     form.append(`answers[${index}][answer]`, a.answer);
   });
-  payload.photoUris?.forEach((uri, index) => {
-    form.append(`photos[${index}]`, {
-      uri,
-      name: `help-photo-${index}.jpg`,
-      type: 'image/jpeg',
-    } as unknown as Blob);
-  });
+  if (payload.photoUris?.length) {
+    for (let index = 0; index < payload.photoUris.length; index++) {
+      const uri = payload.photoUris[index]!;
+      if (/^https?:\/\//i.test(uri)) {
+        const res = await fetch(uri);
+        if (!res.ok) {
+          throw new Error('Could not load a photo from your last request. Remove it or add a new one.');
+        }
+        const blob = await res.blob();
+        form.append(`photos[${index}]`, blob, `help-photo-${index}.jpg`);
+      } else {
+        form.append(`photos[${index}]`, {
+          uri,
+          name: `help-photo-${index}.jpg`,
+          type: 'image/jpeg',
+        } as unknown as Blob);
+      }
+    }
+  }
 
   const { data } = await api.post('/help-requests', form);
   return data.data.help_request;

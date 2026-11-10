@@ -6,8 +6,10 @@ import type { MechanicStackParamList } from '../../navigation/types';
 import { getApiErrorMessage } from '../../api/client';
 import { acceptHelpRequest, declineHelpRequest, fetchMechanicHelpQueues } from '../../api/mechanicHelp';
 import type { HelpRequest } from '../../api/helpRequests';
+import { MechanicDeclineOfferModal } from '../../components/MechanicDeclineOfferModal';
 import { useMechanicLiveLocation } from '../../context/MechanicLocationContext';
 import { formatDistanceKm, resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
+import { acceptLostRaceKind, incomingOfferUnavailableTitle } from '../../utils/incomingHelpOffer';
 import { vehicleTitle } from '../../utils/helpRequestUi';
 import { subscriptionRequiredMessage } from '../../utils/mechanicAcceptErrors';
 
@@ -20,6 +22,8 @@ export function MechanicIncomingScreen({ navigation }: Props) {
 
   const [incoming, setIncoming] = useState<HelpRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actingId, setActingId] = useState<number | null>(null);
+  const [declineTargetId, setDeclineTargetId] = useState<number | null>(null);
   const { coords, servicePin } = useMechanicLiveLocation();
   const distanceOrigin = servicePin ?? coords;
 
@@ -42,6 +46,7 @@ export function MechanicIncomingScreen({ navigation }: Props) {
   );
 
   const onAccept = async (id: number) => {
+    setActingId(id);
     try {
       const accepted = await acceptHelpRequest(id);
       navigation.replace('ActiveJob', {
@@ -57,17 +62,30 @@ export function MechanicIncomingScreen({ navigation }: Props) {
           { text: 'Subscribe', onPress: () => navigation.navigate('MechanicSubscription') },
         ]);
       } else {
-        Alert.alert('Accept failed', getApiErrorMessage(e));
+        const lost = acceptLostRaceKind(e);
+        if (lost) {
+          Alert.alert(incomingOfferUnavailableTitle(lost), 'Stay online for the next offer nearby.');
+          load();
+        } else {
+          Alert.alert('Could not accept', getApiErrorMessage(e));
+        }
       }
+    } finally {
+      setActingId(null);
     }
   };
 
-  const onDecline = async (id: number) => {
+  const submitDecline = async (reason?: string) => {
+    if (declineTargetId == null) return;
+    setActingId(declineTargetId);
     try {
-      await declineHelpRequest(id);
+      await declineHelpRequest(declineTargetId, reason);
+      setDeclineTargetId(null);
       load();
     } catch (e) {
       Alert.alert('Decline failed', getApiErrorMessage(e));
+    } finally {
+      setActingId(null);
     }
   };
 
@@ -76,6 +94,7 @@ export function MechanicIncomingScreen({ navigation }: Props) {
   }
 
   return (
+  <>
     <FlatList
       style={styles.list}
       data={incoming}
@@ -83,7 +102,7 @@ export function MechanicIncomingScreen({ navigation }: Props) {
       ListEmptyComponent={<Text style={styles.empty}>No incoming requests right now.</Text>}
       renderItem={({ item }) => (
         <View style={styles.card}>
-          {item.request_type === 'EMERGENCY' && <Text style={styles.emergency}>🚨 EMERGENCY</Text>}
+          {item.request_type === 'EMERGENCY' && <Text style={styles.emergency}>🚨 Emergency</Text>}
           {item.owner?.name && <Text style={styles.ownerName}>Owner: {item.owner.name}</Text>}
           <Text style={styles.title}>{item.problem_category?.name}</Text>
           {(() => {
@@ -99,16 +118,35 @@ export function MechanicIncomingScreen({ navigation }: Props) {
             <Text style={styles.detailsBtnText}>View full details</Text>
           </Pressable>
           <View style={styles.row}>
-            <Pressable style={styles.accept} onPress={() => onAccept(item.id)}>
-              <Text style={styles.acceptText}>ACCEPT</Text>
+            <Pressable
+              style={[styles.accept, actingId === item.id && styles.btnBusy]}
+              onPress={() => onAccept(item.id)}
+              disabled={actingId != null}
+            >
+              {actingId === item.id ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.acceptText}>Accept job</Text>
+              )}
             </Pressable>
-            <Pressable style={styles.decline} onPress={() => onDecline(item.id)}>
-              <Text style={styles.declineText}>DECLINE</Text>
+            <Pressable
+              style={styles.decline}
+              onPress={() => setDeclineTargetId(item.id)}
+              disabled={actingId != null}
+            >
+              <Text style={styles.declineText}>Decline</Text>
             </Pressable>
           </View>
         </View>
       )}
     />
+    <MechanicDeclineOfferModal
+      visible={declineTargetId != null}
+      busy={actingId != null}
+      onClose={() => setDeclineTargetId(null)}
+      onConfirm={submitDecline}
+    />
+  </>
   );
 }
 
@@ -124,9 +162,10 @@ const styles = StyleSheet.create({
   remarks: { color: '#475569', marginVertical: 8 },
   detailsBtn: { marginBottom: 10, paddingVertical: 8 },
   detailsBtnText: { color: '#0284c7', fontWeight: '600', textAlign: 'center' },
-  row: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  accept: { flex: 1, backgroundColor: '#16a34a', padding: 12, borderRadius: 8, alignItems: 'center' },
-  acceptText: { color: '#fff', fontWeight: '700' },
-  decline: { flex: 1, backgroundColor: '#f1f5f9', padding: 12, borderRadius: 8, alignItems: 'center' },
-  declineText: { color: '#334155', fontWeight: '600' },
+  row: { flexDirection: 'column', gap: 8, marginTop: 8 },
+  accept: { backgroundColor: '#16a34a', padding: 14, borderRadius: 10, alignItems: 'center' },
+  acceptText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  decline: { padding: 10, alignItems: 'center' },
+  declineText: { color: '#64748b', fontWeight: '700' },
+  btnBusy: { opacity: 0.85 },
 });

@@ -55,8 +55,8 @@ export async function acceptHelpRequest(id: number): Promise<HelpRequest> {
   return data.data.help_request;
 }
 
-export async function declineHelpRequest(id: number): Promise<void> {
-  await api.post(`/mechanic/help-requests/${id}/decline`);
+export async function declineHelpRequest(id: number, reason?: string): Promise<void> {
+  await api.post(`/mechanic/help-requests/${id}/decline`, reason ? { reason } : {});
 }
 
 export async function submitServiceQuote(

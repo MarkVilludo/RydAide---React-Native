@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,15 +17,31 @@ import type { HelpRequest } from '../../api/helpRequests';
 import { fetchMechanicHelpRequest, updateJobStatus } from '../../api/mechanicHelp';
 import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSummary';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
+import { JobLifecycleStepper } from '../../components/JobLifecycleStepper';
+import { JobStatusConfirmSheet } from '../../components/JobStatusConfirmSheet';
 import { JobWorkDurationText } from '../../components/JobWorkDurationText';
+import { PendingJobStatusBanner } from '../../components/PendingJobStatusBanner';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
+import { useAppConfig } from '../../hooks/useAppConfig';
 import { useDeviceLocation } from '../../hooks/useDeviceLocation';
+import { useLiveWorkElapsedSeconds } from '../../hooks/useLiveWorkElapsedSeconds';
 import { useMechanicDistanceOrigin } from '../../hooks/useMechanicDistanceOrigin';
 import { useMechanicLocationTracking } from '../../hooks/useMechanicLocationTracking';
 import { haversineDistanceKm, resolveMechanicToCustomerDistanceKm, resolveTrackingDistanceKm } from '../../utils/distanceKm';
 import type { MechanicStackParamList } from '../../navigation/types';
-import { jobStatusLabelOf, jobStatusOf, vehicleTitle } from '../../utils/helpRequestUi';
+import {
+  digitsFromPhpInput,
+  formatPhpAmount,
+  formatPhpInputDisplay,
+  jobStatusLabelOf,
+  jobStatusOf,
+  parsePhpDigits,
+  vehicleTitle,
+} from '../../utils/helpRequestUi';
+import { formatJobWorkDuration } from '../../utils/jobWorkDuration';
+
+const STATUS_UNDO_SECONDS = 4;
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'ActiveJob'>;
 
@@ -41,6 +57,24 @@ function headerTitle(jobStatus: string, justAccepted: boolean) {
   return map[jobStatus] ?? jobStatus;
 }
 
+const STATUS_CONFIRM: Record<string, { title: string; message: string; confirm: string }> = {
+  ON_THE_WAY: {
+    title: 'Start journey?',
+    message: 'The owner will see that you are on the way. You can cancel here if you tapped by mistake.',
+    confirm: 'Start journey',
+  },
+  ARRIVED: {
+    title: 'Mark arrived?',
+    message: 'Confirm you are at the customer location. The owner gets an arrival notice.',
+    confirm: 'Mark arrived',
+  },
+  IN_PROGRESS: {
+    title: 'Start repair?',
+    message: 'Confirm you have begun work on the vehicle.',
+    confirm: 'Start job',
+  },
+};
+
 export function MechanicActiveJobScreen({ route, navigation }: Props) {
   const { helpRequestId, justAccepted = false, initialRequest } = route.params;
   const [request, setRequest] = useState<HelpRequest | null>(initialRequest ?? null);
@@ -48,9 +82,17 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
   const [connectionLost, setConnectionLost] = useState(false);
   const [acting, setActing] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
+  const [completeStep, setCompleteStep] = useState<'form' | 'summary'>('form');
   const [photosOpen, setPhotosOpen] = useState(false);
   const [servicePerformed, setServicePerformed] = useState('');
-  const [finalAmount, setFinalAmount] = useState('');
+  const [finalAmountDigits, setFinalAmountDigits] = useState('');
+  const [statusConfirmTarget, setStatusConfirmTarget] = useState<string | null>(null);
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [pendingUndoSeconds, setPendingUndoSeconds] = useState(0);
+  const pendingStatusRef = useRef<string | null>(null);
+
+  const { config } = useAppConfig();
+  const emergencyOn = config?.features.emergency_assistance ?? false;
 
   const { origin } = useMechanicDistanceOrigin('live');
 
@@ -130,6 +172,9 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
       setConnectionLost(false);
       if (status === 'COMPLETED') {
         setCompleteOpen(false);
+        setCompleteStep('form');
+        setFinalAmountDigits('');
+        setServicePerformed('');
         navigation.replace('MechanicRequestDetail', { helpRequestId });
       }
     } catch (e) {
@@ -140,13 +185,92 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
     }
   };
 
-  const startJourney = () => setStatus('ON_THE_WAY');
+  const queueStatusUpdate = useCallback((status: string) => {
+    pendingStatusRef.current = status;
+    setPendingStatus(status);
+    setPendingUndoSeconds(STATUS_UNDO_SECONDS);
+  }, []);
+
+  const clearPendingStatus = useCallback(() => {
+    pendingStatusRef.current = null;
+    setPendingStatus(null);
+    setPendingUndoSeconds(0);
+  }, []);
+
+  useEffect(() => {
+    if (pendingStatus == null || pendingUndoSeconds <= 0) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setPendingUndoSeconds((s) => s - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [pendingStatus, pendingUndoSeconds]);
+
+  useEffect(() => {
+    if (pendingStatus == null || pendingUndoSeconds > 0 || acting) {
+      return;
+    }
+    const status = pendingStatusRef.current;
+    clearPendingStatus();
+    if (status) {
+      void setStatus(status);
+    }
+  }, [pendingStatus, pendingUndoSeconds, acting, clearPendingStatus]);
+
+  const requestStatusChange = (status: string) => {
+    if (emergencyOn) {
+      setStatusConfirmTarget(status);
+      return;
+    }
+    void setStatus(status);
+  };
+
+  const onStatusConfirmSheetConfirm = () => {
+    const target = statusConfirmTarget;
+    setStatusConfirmTarget(null);
+    if (!target) return;
+    queueStatusUpdate(target);
+  };
+
+  const statusConfirmMeta = statusConfirmTarget ? STATUS_CONFIRM[statusConfirmTarget] : null;
+
+  const workElapsedSeconds = useLiveWorkElapsedSeconds(request?.job, jobStatus);
+  const workDurationSummary =
+    workElapsedSeconds != null ? formatJobWorkDuration(workElapsedSeconds) : null;
+
+  const statusChangeLocked = acting || pendingStatus != null;
+
+  const startJourney = () => requestStatusChange('ON_THE_WAY');
+
+  const openCompleteForm = () => {
+    setCompleteStep('form');
+    setCompleteOpen(true);
+  };
+
+  const closeCompleteModal = () => {
+    setCompleteOpen(false);
+    setCompleteStep('form');
+  };
+
+  const parsedFinalAmount = parsePhpDigits(finalAmountDigits);
+  const finalAmountDisplay = formatPhpInputDisplay(finalAmountDigits);
 
   const startNavigation = () => {
     if (!request) return;
     Linking.openURL(
       `https://www.google.com/maps/dir/?api=1&destination=${request.latitude},${request.longitude}`,
     ).catch(() => {});
+  };
+
+  const submitCompletion = () => {
+    if (parsedFinalAmount == null || !servicePerformed.trim()) {
+      return;
+    }
+    void setStatus('COMPLETED', {
+      service_performed: servicePerformed.trim(),
+      final_service_amount_php: parsedFinalAmount,
+    });
   };
 
   if (loading && !request) {
@@ -218,6 +342,18 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
           {request.remarks ? ` · ${request.remarks}` : ''}
         </Text>
 
+        {emergencyOn && jobStatus !== 'COMPLETED' ? (
+          <JobLifecycleStepper currentStatus={jobStatus} />
+        ) : null}
+
+        {emergencyOn && pendingStatus && pendingUndoSeconds > 0 ? (
+          <PendingJobStatusBanner
+            message={`Updating to “${headerTitle(pendingStatus, false)}”`}
+            secondsLeft={pendingUndoSeconds}
+            onUndo={clearPendingStatus}
+          />
+        ) : null}
+
         <ActiveJobLocationSummary
           tracking={tracking}
           mechanicPermissionDenied={permissionDenied && shareLiveWithCustomer}
@@ -242,7 +378,7 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
 
         <View style={styles.actions}>
           {jobStatus === 'ACCEPTED' && (
-            <Pressable style={styles.primaryBtn} disabled={acting} onPress={startJourney}>
+            <Pressable style={styles.primaryBtn} disabled={statusChangeLocked} onPress={startJourney}>
               <Text style={styles.primaryBtnText}>Start journey</Text>
             </Pressable>
           )}
@@ -253,20 +389,24 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
               </Pressable>
               <Pressable
                 style={[styles.primaryBtn, styles.actionHalf]}
-                disabled={acting}
-                onPress={() => setStatus('ARRIVED')}
+                disabled={statusChangeLocked}
+                onPress={() => requestStatusChange('ARRIVED')}
               >
                 <Text style={styles.primaryBtnText}>Arrived</Text>
               </Pressable>
             </View>
           )}
           {jobStatus === 'ARRIVED' && (
-            <Pressable style={styles.primaryBtn} disabled={acting} onPress={() => setStatus('IN_PROGRESS')}>
+            <Pressable
+              style={styles.primaryBtn}
+              disabled={statusChangeLocked}
+              onPress={() => requestStatusChange('IN_PROGRESS')}
+            >
               <Text style={styles.primaryBtnText}>Start job</Text>
             </Pressable>
           )}
           {jobStatus === 'IN_PROGRESS' && (
-            <Pressable style={styles.primaryBtn} disabled={acting} onPress={() => setCompleteOpen(true)}>
+            <Pressable style={styles.primaryBtn} disabled={statusChangeLocked} onPress={openCompleteForm}>
               <Text style={styles.primaryBtnText}>Complete job</Text>
             </Pressable>
           )}
@@ -288,39 +428,98 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
       <Modal visible={completeOpen} transparent animationType="slide">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Complete job</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Service performed (required)"
-              value={servicePerformed}
-              onChangeText={setServicePerformed}
-              multiline
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Final service amount (PHP, agreed with customer)"
-              keyboardType="number-pad"
-              value={finalAmount}
-              onChangeText={setFinalAmount}
-            />
-            <Pressable
-              style={styles.primaryBtn}
-              disabled={acting || !servicePerformed.trim() || !finalAmount.trim()}
-              onPress={() =>
-                setStatus('COMPLETED', {
-                  service_performed: servicePerformed.trim(),
-                  final_service_amount_php: Number(finalAmount),
-                })
-              }
-            >
-              <Text style={styles.primaryBtnText}>Submit</Text>
-            </Pressable>
-            <Pressable onPress={() => setCompleteOpen(false)}>
-              <Text style={styles.cancel}>Cancel</Text>
-            </Pressable>
+            {completeStep === 'form' ? (
+              <>
+                <Text style={styles.modalTitle}>Complete job</Text>
+                <Text style={styles.modalHint}>
+                  {emergencyOn
+                    ? 'Enter what you did and the amount agreed with the customer. You will review a summary before submitting.'
+                    : 'Enter what you did and the final amount agreed with the customer.'}
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Service performed (required)"
+                  value={servicePerformed}
+                  onChangeText={setServicePerformed}
+                  multiline
+                />
+                <Text style={styles.fieldLabel}>Final amount</Text>
+                <TextInput
+                  style={[styles.input, styles.amountInput]}
+                  placeholder="₱0"
+                  keyboardType="number-pad"
+                  value={finalAmountDisplay}
+                  onChangeText={(t) => setFinalAmountDigits(digitsFromPhpInput(t))}
+                />
+                <Pressable
+                  style={styles.primaryBtn}
+                  disabled={!servicePerformed.trim() || parsedFinalAmount == null}
+                  onPress={() => (emergencyOn ? setCompleteStep('summary') : void submitCompletion())}
+                >
+                  <Text style={styles.primaryBtnText}>
+                    {emergencyOn ? 'Review summary' : 'Submit completion'}
+                  </Text>
+                </Pressable>
+                <Pressable onPress={closeCompleteModal}>
+                  <Text style={styles.cancel}>Cancel</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>Confirm completion</Text>
+                <Text style={styles.modalHint}>This amount is used for commissions and the customer receipt.</Text>
+                <View style={styles.summaryBox}>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Customer</Text>
+                    <Text style={styles.summaryValue}>{request.owner?.name ?? 'Customer'}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Vehicle</Text>
+                    <Text style={styles.summaryValue}>{vehicleTitle(request)}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Service</Text>
+                    <Text style={styles.summaryValue}>{servicePerformed.trim()}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Amount</Text>
+                    <Text style={styles.summaryAmount}>
+                      {formatPhpAmount(parsedFinalAmount) ?? '—'}
+                    </Text>
+                  </View>
+                  {workDurationSummary ? (
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>Duration</Text>
+                      <Text style={styles.summaryValue}>{workDurationSummary}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Pressable
+                  style={styles.primaryBtn}
+                  disabled={acting || parsedFinalAmount == null || !servicePerformed.trim()}
+                  onPress={submitCompletion}
+                >
+                  <Text style={styles.primaryBtnText}>Submit completion</Text>
+                </Pressable>
+                <Pressable onPress={() => setCompleteStep('form')}>
+                  <Text style={styles.link}>← Edit details</Text>
+                </Pressable>
+              </>
+            )}
           </View>
         </View>
       </Modal>
+
+      {statusConfirmMeta ? (
+        <JobStatusConfirmSheet
+          visible={statusConfirmTarget != null}
+          title={statusConfirmMeta.title}
+          message={statusConfirmMeta.message}
+          confirmLabel={statusConfirmMeta.confirm}
+          onConfirm={onStatusConfirmSheetConfirm}
+          onCancel={() => setStatusConfirmTarget(null)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -375,7 +574,23 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     maxHeight: '80%',
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
+  modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
+  modalHint: { fontSize: 13, color: '#64748b', lineHeight: 18, marginBottom: 12 },
+  fieldLabel: { fontSize: 12, fontWeight: '700', color: '#64748b', marginBottom: 4 },
   input: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 12, minHeight: 80, marginBottom: 12 },
+  amountInput: { minHeight: 48, fontSize: 18, fontWeight: '700', color: '#0f172a' },
+  summaryBox: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 10,
+  },
+  summaryRow: { gap: 2 },
+  summaryLabel: { fontSize: 11, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' },
+  summaryValue: { fontSize: 15, fontWeight: '600', color: '#334155' },
+  summaryAmount: { fontSize: 22, fontWeight: '800', color: '#16a34a' },
   cancel: { textAlign: 'center', marginTop: 12, color: '#64748b' },
 });

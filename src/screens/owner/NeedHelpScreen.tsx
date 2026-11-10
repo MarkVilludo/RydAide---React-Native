@@ -31,6 +31,7 @@ import { useEnsureNearbyProviders } from '../../hooks/useEnsureNearbyProviders';
 import type { OwnerStackParamList } from '../../navigation/types';
 import { NeedHelpVehicleStep } from './NeedHelpVehicleStep';
 import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
+import { needHelpInitialStep } from '../../utils/needHelpDraft';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'NeedHelp'>;
 
@@ -38,27 +39,66 @@ type Step = 'vehicle' | 'problem' | 'location' | 'review';
 
 const STEPS: Step[] = ['vehicle', 'problem', 'location', 'review'];
 
+const STEP_TITLES: Record<Step, string> = {
+  vehicle: 'Vehicle',
+  problem: 'Problem',
+  location: 'Location',
+  review: 'Review',
+};
+
+const ANSWER_OPTIONS = [
+  { value: 'yes', label: 'Yes' },
+  { value: 'no', label: 'No' },
+  { value: 'unsure', label: 'Unsure' },
+] as const;
+
+function formatAnswerLabel(value: string): string {
+  return ANSWER_OPTIONS.find((o) => o.value === value)?.label ?? value;
+}
+
+function minRemarksLength(emergency: boolean): number {
+  return emergency ? 2 : 10;
+}
+
 export function NeedHelpScreen({ navigation, route }: Props) {
-  const emergency = route.params?.emergency ?? true;
+  const draft = route.params;
+  const emergency = draft?.emergency ?? true;
   const insets = useSafeAreaInsets();
   const footerBottomPad = stickyFooterBottomPadding(insets);
-  const { config } = useAppConfig();
+  const { config, loading: configLoading } = useAppConfig();
   const submitLock = useRef(false);
-  const [step, setStep] = useState<Step>('vehicle');
-  const [vehicleDescription, setVehicleDescription] = useState('');
+  const preservePrefillAnswers = useRef(
+    Boolean(draft?.fromFailedMatch && draft.answers && draft.answers.length > 0),
+  );
+
+  React.useEffect(() => {
+    if (configLoading || config == null) return;
+    if (!config.features.emergency_assistance) {
+      navigation.replace('OwnerHome');
+    }
+  }, [config, configLoading, navigation]);
+  const [step, setStep] = useState<Step>(() => needHelpInitialStep(draft));
+  const [vehicleDescription, setVehicleDescription] = useState(draft?.vehicleDescription ?? '');
+  const [vehicleId, setVehicleId] = useState<number | null>(null);
 
   const [categories, setCategories] = useState<ProblemCategory[]>([]);
-  const [categoryId, setCategoryId] = useState<number | null>(null);
-  const [remarks, setRemarks] = useState('');
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
+  const [categoryId, setCategoryId] = useState<number | null>(draft?.problemCategoryId ?? null);
+  const [remarks, setRemarks] = useState(draft?.remarks ?? '');
   const [questions, setQuestions] = useState<Array<{ id: number; question_text: string }>>([]);
-  const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [photoUris, setPhotoUris] = useState<string[]>([]);
+  const [answers, setAnswers] = useState<Record<number, string>>(() => {
+    const initial = draft?.answers;
+    if (!initial?.length) return {};
+    return Object.fromEntries(initial.map((a) => [a.question_id, a.answer]));
+  });
+  const [photoUris, setPhotoUris] = useState<string[]>(draft?.photoUris ?? []);
 
-  const [lat, setLat] = useState<number | null>(route.params?.latitude ?? null);
-  const [lng, setLng] = useState<number | null>(route.params?.longitude ?? null);
-  const [landmark, setLandmark] = useState('');
+  const [lat, setLat] = useState<number | null>(draft?.latitude ?? null);
+  const [lng, setLng] = useState<number | null>(draft?.longitude ?? null);
+  const [landmark, setLandmark] = useState(draft?.landmark ?? '');
   const [locating, setLocating] = useState(false);
-  const [address, setAddress] = useState('');
+  const [address, setAddress] = useState(draft?.addressText ?? '');
 
   const [submitting, setSubmitting] = useState(false);
   const [mapRecenterKey, setMapRecenterKey] = useState(0);
@@ -67,9 +107,17 @@ export function NeedHelpScreen({ navigation, route }: Props) {
   useEnsureNearbyProviders(lat, lng, config?.features.dynamic_nearby_seed === true);
 
   const reloadCategories = React.useCallback(() => {
-    fetchProblemCategories()
-      .then(setCategories)
-      .catch(() => setCategories([]));
+    setCategoriesLoading(true);
+    setCategoriesError(null);
+    return fetchProblemCategories()
+      .then((list) => {
+        setCategories(list);
+      })
+      .catch((err) => {
+        setCategories([]);
+        setCategoriesError(getApiErrorMessage(err));
+      })
+      .finally(() => setCategoriesLoading(false));
   }, []);
 
   React.useEffect(() => {
@@ -95,6 +143,10 @@ export function NeedHelpScreen({ navigation, route }: Props) {
     fetchCategoryQuestions(categoryId)
       .then(setQuestions)
       .catch(() => setQuestions([]));
+    if (preservePrefillAnswers.current) {
+      preservePrefillAnswers.current = false;
+      return;
+    }
     setAnswers({});
   }, [categoryId]);
 
@@ -145,13 +197,6 @@ export function NeedHelpScreen({ navigation, route }: Props) {
     void captureLocation();
   }, []);
 
-  React.useEffect(() => {
-    if (step !== 'location') {
-      return;
-    }
-    void captureLocation();
-  }, [step]);
-
   const onCenterChange = (center: { latitude: number; longitude: number }) => {
     setLat(center.latitude);
     setLng(center.longitude);
@@ -159,12 +204,14 @@ export function NeedHelpScreen({ navigation, route }: Props) {
   };
 
   const vehicleValid = () => {
+    if (vehicleId != null) return true;
     const line = vehicleDescription.trim();
     const main = line.split(' · ')[0]?.trim() ?? line;
     return main.length >= 2;
   };
 
-  const problemValid = () => categoryId != null && remarks.trim().length >= 10;
+  const remarksMin = minRemarksLength(emergency);
+  const problemValid = () => categoryId != null && remarks.trim().length >= remarksMin;
 
   const locationValid = () => lat != null && lng != null;
 
@@ -174,7 +221,10 @@ export function NeedHelpScreen({ navigation, route }: Props) {
       return;
     }
     if (step === 'problem' && !problemValid()) {
-      Alert.alert('Problem', 'Pick a category and describe what happened (10+ characters).');
+      Alert.alert(
+        'Problem',
+        `Pick a category and describe what happened (${remarksMin}+ characters).`,
+      );
       return;
     }
     if (step === 'location' && !locationValid()) {
@@ -194,15 +244,20 @@ export function NeedHelpScreen({ navigation, route }: Props) {
     if (prev) setStep(prev);
   };
 
-  const pickPhotos = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow photo access to attach images of the problem.');
-      return;
-    }
+  const appendPickedPhotos = (uris: string[]) => {
+    if (uris.length === 0) return;
+    setPhotoUris((prev) => [...prev, ...uris].slice(0, 2));
+  };
+
+  const pickPhotosFromLibrary = async () => {
     const remaining = 2 - photoUris.length;
     if (remaining <= 0) {
       Alert.alert('Limit reached', 'You can attach up to 2 photos.');
+      return;
+    }
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to attach images of the problem.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -212,8 +267,39 @@ export function NeedHelpScreen({ navigation, route }: Props) {
       quality: 0.8,
     });
     if (!result.canceled && result.assets.length > 0) {
-      setPhotoUris((prev) => [...prev, ...result.assets.map((a) => a.uri)].slice(0, 2));
+      appendPickedPhotos(result.assets.map((a) => a.uri));
     }
+  };
+
+  const takePhoto = async () => {
+    if (photoUris.length >= 2) {
+      Alert.alert('Limit reached', 'You can attach up to 2 photos.');
+      return;
+    }
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow camera access to take a photo of the problem.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]?.uri) {
+      appendPickedPhotos([result.assets[0].uri]);
+    }
+  };
+
+  const pickPhotos = () => {
+    if (photoUris.length >= 2) {
+      Alert.alert('Limit reached', 'You can attach up to 2 photos.');
+      return;
+    }
+    Alert.alert('Add photo', 'Attach a picture of the problem (optional).', [
+      { text: 'Take photo', onPress: () => void takePhoto() },
+      { text: 'Choose from library', onPress: () => void pickPhotosFromLibrary() },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const submit = async () => {
@@ -225,29 +311,15 @@ export function NeedHelpScreen({ navigation, route }: Props) {
     submitLock.current = true;
     setSubmitting(true);
     try {
-      let submitLat = lat;
-      let submitLng = lng;
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const pos = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          submitLat = pos.coords.latitude;
-          submitLng = pos.coords.longitude;
-        }
-      } catch {
-        /* use map pin */
-      }
-
       const addressText = [landmark.trim(), address].filter(Boolean).join(' · ') || address;
       const helpRequest = await createHelpRequest({
+        ...(vehicleId != null ? { vehicle_id: vehicleId } : {}),
         vehicle_description: vehicleDescription.trim().slice(0, 255),
         problem_category_id: categoryId,
         request_type: emergency ? 'EMERGENCY' : 'SERVICE',
         remarks: remarks.trim(),
-        latitude: submitLat,
-        longitude: submitLng,
+        latitude: lat,
+        longitude: lng,
         address_text: addressText || undefined,
         answers: Object.entries(answers).map(([question_id, answer]) => ({
           question_id: Number(question_id),
@@ -265,13 +337,25 @@ export function NeedHelpScreen({ navigation, route }: Props) {
   };
 
   const selectedCategory = categories.find((c) => c.id === categoryId);
+  const addressToSend =
+    [landmark.trim(), address].filter(Boolean).join(' · ') ||
+    (lat != null && lng != null ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : '');
 
   return (
     <View style={styles.root}>
-      <View style={styles.progressRow}>
-        {STEPS.map((s, i) => (
-          <View key={s} style={[styles.progressDot, i <= stepIndex && styles.progressDotOn]} />
-        ))}
+      <View style={styles.progressHeader}>
+        <Text style={styles.progressCaption} accessibilityRole="header">
+          Step {stepIndex + 1} of {STEPS.length} · {STEP_TITLES[step]}
+        </Text>
+        <View style={styles.progressRow}>
+          {STEPS.map((s, i) => (
+            <View
+              key={s}
+              style={[styles.progressDot, i <= stepIndex && styles.progressDotOn]}
+              accessibilityLabel={`${STEP_TITLES[s]}${i === stepIndex ? ', current' : i < stepIndex ? ', completed' : ''}`}
+            />
+          ))}
+        </View>
       </View>
 
       <ScrollView
@@ -283,34 +367,54 @@ export function NeedHelpScreen({ navigation, route }: Props) {
         }
       >
         {step === 'vehicle' && (
-          <NeedHelpVehicleStep value={vehicleDescription} onChange={setVehicleDescription} />
+          <NeedHelpVehicleStep
+            value={vehicleDescription}
+            onChange={setVehicleDescription}
+            vehicleId={vehicleId}
+            onVehicleIdChange={setVehicleId}
+          />
         )}
 
         {step === 'problem' && (
           <>
             <Text style={styles.title}>What happened?</Text>
-            <View style={styles.chips}>
-              {categories.map((c) => (
-                <Pressable
-                  key={c.id}
-                  style={[styles.chip, categoryId === c.id && styles.chipOn]}
-                  onPress={() => setCategoryId(c.id)}
-                >
-                  <Text style={categoryId === c.id ? styles.chipOnText : undefined}>{c.name}</Text>
+            {categoriesLoading ? (
+              <ActivityIndicator style={{ marginVertical: 8 }} />
+            ) : categoriesError ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>Could not load problem categories. {categoriesError}</Text>
+                <Pressable style={styles.retryBtn} onPress={() => void reloadCategories()}>
+                  <Text style={styles.retryBtnText}>Retry</Text>
                 </Pressable>
-              ))}
-            </View>
+              </View>
+            ) : categories.length === 0 ? (
+              <Text style={styles.meta}>No categories available. Pull to refresh or tap Retry.</Text>
+            ) : (
+              <View style={styles.chips}>
+                {categories.map((c) => (
+                  <Pressable
+                    key={c.id}
+                    style={[styles.chip, categoryId === c.id && styles.chipOn]}
+                    onPress={() => setCategoryId(c.id)}
+                  >
+                    <Text style={categoryId === c.id ? styles.chipOnText : undefined}>{c.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
             {questions.map((q) => (
               <View key={q.id} style={{ marginTop: 12 }}>
                 <Text style={styles.subLabel}>{q.question_text}</Text>
                 <View style={styles.chips}>
-                  {['yes', 'no', 'unsure'].map((opt) => (
+                  {ANSWER_OPTIONS.map((opt) => (
                     <Pressable
-                      key={opt}
-                      style={[styles.chip, answers[q.id] === opt && styles.chipOn]}
-                      onPress={() => setAnswers((prev) => ({ ...prev, [q.id]: opt }))}
+                      key={opt.value}
+                      style={[styles.chip, answers[q.id] === opt.value && styles.chipOn]}
+                      onPress={() => setAnswers((prev) => ({ ...prev, [q.id]: opt.value }))}
                     >
-                      <Text style={answers[q.id] === opt ? styles.chipOnText : undefined}>{opt}</Text>
+                      <Text style={answers[q.id] === opt.value ? styles.chipOnText : undefined}>
+                        {opt.label}
+                      </Text>
                     </Pressable>
                   ))}
                 </View>
@@ -320,7 +424,7 @@ export function NeedHelpScreen({ navigation, route }: Props) {
             <TextInput
               style={styles.input}
               multiline
-              placeholder="Describe the problem (10+ characters)…"
+              placeholder={`Describe the problem (${remarksMin}+ characters)…`}
               value={remarks}
               onChangeText={setRemarks}
             />
@@ -353,21 +457,51 @@ export function NeedHelpScreen({ navigation, route }: Props) {
               value={landmark}
               onChangeText={setLandmark}
             />
-            {address ? <Text style={styles.meta}>{address}</Text> : null}
+            <View style={styles.addressSentBox}>
+              <Text style={styles.addressSentLabel}>Address we will send</Text>
+              <Text style={styles.addressSentValue}>{addressToSend || 'Move the map to set your location.'}</Text>
+            </View>
           </>
         )}
 
         {step === 'review' && lat != null && lng != null && (
           <>
             <Text style={styles.title}>Review & request</Text>
+            <Text style={styles.reviewIntro}>Tap any section to change it before you send.</Text>
             <GrabStyleBottomSheet>
-              <ReviewRow label="Vehicle" value={vehicleDescription.trim() || '—'} />
-              <ReviewRow label="Problem" value={selectedCategory?.name ?? '—'} />
-              <ReviewRow label="Details" value={remarks} />
               <ReviewRow
-                label="Location"
-                value={[landmark, address].filter(Boolean).join(' · ') || `${lat.toFixed(4)}, ${lng.toFixed(4)}`}
+                label="Vehicle"
+                value={vehicleDescription.trim() || '—'}
+                onEdit={() => setStep('vehicle')}
               />
+              <ReviewRow
+                label="Problem"
+                value={selectedCategory?.name ?? '—'}
+                onEdit={() => setStep('problem')}
+              />
+              <ReviewRow label="Details" value={remarks || '—'} onEdit={() => setStep('problem')} />
+              {questions.length > 0 ? (
+                <View style={styles.reviewAnswersBlock}>
+                  <Text style={styles.reviewLabel}>Your answers</Text>
+                  {questions.map((q) => (
+                    <Pressable key={q.id} onPress={() => setStep('problem')} accessibilityRole="button">
+                      <Text style={styles.reviewAnswerQ}>{q.question_text}</Text>
+                      <Text style={styles.reviewAnswerA}>
+                        {answers[q.id] ? formatAnswerLabel(answers[q.id]) : '—'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+              {photoUris.length > 0 ? (
+                <View style={styles.reviewPhotosBlock}>
+                  <Pressable onPress={() => setStep('problem')} accessibilityRole="button">
+                    <Text style={styles.reviewLabel}>Photos</Text>
+                  </Pressable>
+                  <HelpRequestPhotoGallery localUris={photoUris} compact />
+                </View>
+              ) : null}
+              <ReviewRow label="Location" value={addressToSend} onEdit={() => setStep('location')} />
               <HelpRequestMap
                 request={{ latitude: lat, longitude: lng, title: 'You' }}
                 height={140}
@@ -430,18 +564,42 @@ export function NeedHelpScreen({ navigation, route }: Props) {
   );
 }
 
-function ReviewRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.reviewRow}>
+function ReviewRow({
+  label,
+  value,
+  onEdit,
+}: {
+  label: string;
+  value: string;
+  onEdit?: () => void;
+}) {
+  const inner = (
+    <>
       <Text style={styles.reviewLabel}>{label}</Text>
       <Text style={styles.reviewValue}>{value}</Text>
-    </View>
+      {onEdit ? <Text style={styles.reviewTapHint}>Tap to edit</Text> : null}
+    </>
   );
+  if (onEdit) {
+    return (
+      <Pressable
+        style={styles.reviewRowPressable}
+        onPress={onEdit}
+        accessibilityRole="button"
+        accessibilityLabel={`Edit ${label}`}
+      >
+        {inner}
+      </Pressable>
+    );
+  }
+  return <View style={styles.reviewRow}>{inner}</View>;
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f8fafc' },
-  progressRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingTop: 8 },
+  progressHeader: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
+  progressCaption: { fontSize: 13, fontWeight: '700', color: '#475569', marginBottom: 8 },
+  progressRow: { flexDirection: 'row', gap: 6 },
   progressDot: { flex: 1, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0' },
   progressDotOn: { backgroundColor: '#0284c7' },
   scroll: { flex: 1 },
@@ -487,9 +645,51 @@ const styles = StyleSheet.create({
   secondaryBtnText: { color: '#0284c7', fontWeight: '600' },
   meta: { marginTop: 8, color: '#64748b' },
   reviewRow: { marginBottom: 10 },
+  reviewRowPressable: {
+    marginBottom: 10,
+    padding: 10,
+    marginHorizontal: -10,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+  },
+  reviewIntro: { fontSize: 14, color: '#64748b', marginBottom: 12, marginTop: -8 },
   reviewLabel: { fontSize: 12, color: '#64748b', fontWeight: '600', textTransform: 'uppercase' },
   reviewValue: { fontSize: 15, color: '#0f172a', marginTop: 2, lineHeight: 20 },
+  reviewTapHint: { fontSize: 12, color: '#0284c7', fontWeight: '600', marginTop: 4 },
+  reviewAnswersBlock: { marginBottom: 12, gap: 8 },
+  reviewAnswerQ: { fontSize: 13, color: '#475569', marginTop: 6 },
+  reviewAnswerA: { fontSize: 15, color: '#0f172a', fontWeight: '600', marginTop: 2 },
+  reviewPhotosBlock: { marginBottom: 12 },
   reviewHint: { marginTop: 12, color: '#64748b', fontSize: 13, lineHeight: 18 },
+  errorBox: {
+    padding: 12,
+    backgroundColor: '#fef2f2',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    marginBottom: 12,
+  },
+  errorText: { color: '#b91c1c', fontSize: 14, marginBottom: 8 },
+  retryBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#b91c1c',
+  },
+  retryBtnText: { color: '#b91c1c', fontWeight: '700' },
+  addressSentBox: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  addressSentLabel: { fontSize: 12, fontWeight: '700', color: '#64748b', textTransform: 'uppercase' },
+  addressSentValue: { fontSize: 15, color: '#0f172a', marginTop: 4, lineHeight: 20 },
   footer: {
     flexDirection: 'row',
     gap: 12,

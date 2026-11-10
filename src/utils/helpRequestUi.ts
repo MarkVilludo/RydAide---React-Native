@@ -40,3 +40,29 @@ export function formatRequestDate(iso?: string | null): string {
     minute: '2-digit',
   });
 }
+
+export function formatPhpAmount(amount: number | null | undefined): string | null {
+  if (amount == null || !Number.isFinite(amount)) {
+    return null;
+  }
+  return `₱${Math.round(amount).toLocaleString('en-PH')}`;
+}
+
+/** Keep digits only from user input. */
+export function digitsFromPhpInput(text: string): string {
+  return text.replace(/\D/g, '');
+}
+
+export function parsePhpDigits(digits: string): number | null {
+  if (!digits) return null;
+  const n = Number(digits);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Display while typing (digits string → ₱1,234). */
+export function formatPhpInputDisplay(digits: string): string {
+  if (!digits) return '';
+  const n = Number(digits);
+  if (!Number.isFinite(n)) return '';
+  return `₱${n.toLocaleString('en-PH')}`;
+}

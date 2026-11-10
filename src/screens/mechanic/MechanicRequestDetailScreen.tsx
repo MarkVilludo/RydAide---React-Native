@@ -2,7 +2,6 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   Pressable,
   ScrollView,
@@ -11,13 +10,8 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { getApiErrorMessage } from '../../api/client';
 import type { HelpRequest } from '../../api/helpRequests';
-import {
-  acceptHelpRequest,
-  declineHelpRequest,
-  fetchMechanicHelpRequest,
-} from '../../api/mechanicHelp';
+import { fetchMechanicHelpRequest } from '../../api/mechanicHelp';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
@@ -27,16 +21,37 @@ import { resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { formatRequestDate, isActiveJobStatus, jobStatusLabelOf, jobStatusOf, vehicleTitle } from '../../utils/helpRequestUi';
 import { jobWorkDurationLabel } from '../../utils/jobWorkDuration';
-import { subscriptionRequiredMessage } from '../../utils/mechanicAcceptErrors';
+import { MechanicDeclineOfferModal } from '../../components/MechanicDeclineOfferModal';
+import { MechanicIncomingOfferFooter } from '../../components/MechanicIncomingOfferFooter';
+import { MechanicOfferUnavailableState } from '../../components/MechanicOfferUnavailableState';
+import { useMechanicIncomingOfferActions } from '../../hooks/useMechanicIncomingOfferActions';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'MechanicRequestDetail'>;
+
+const INCOMING_FOOTER_SPACE = 132;
 
 export function MechanicRequestDetailScreen({ route, navigation }: Props) {
   const { helpRequestId } = route.params;
   const [request, setRequest] = useState<HelpRequest | null>(null);
   const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState(false);
   const { origin, permissionDenied, servicePinManual } = useMechanicDistanceOrigin('service_pin');
+
+  const {
+    acting,
+    declineOpen,
+    setDeclineOpen,
+    unavailable,
+    onAccept,
+    submitDecline,
+    applyLoadedRequest,
+  } = useMechanicIncomingOfferActions({
+    helpRequestId,
+    navigation,
+    origin,
+    onRequestLoaded: setRequest,
+    watchOfferAvailability: false,
+    includeEndedOffers: false,
+  });
 
   const distanceKm = useMemo(
     () => (request ? resolveMechanicToCustomerDistanceKm(request, origin) : null),
@@ -46,10 +61,10 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
   const load = useCallback(() => {
     setLoading(true);
     fetchMechanicHelpRequest(helpRequestId, origin ?? undefined)
-      .then(setRequest)
-      .catch(() => setRequest(null))
+      .then((r) => applyLoadedRequest(r))
+      .catch(() => applyLoadedRequest(null))
       .finally(() => setLoading(false));
-  }, [helpRequestId, origin?.latitude, origin?.longitude]);
+  }, [helpRequestId, origin?.latitude, origin?.longitude, applyLoadedRequest]);
 
   useFocusEffect(useCallback(() => load(), [load]));
 
@@ -69,43 +84,6 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
   const isDeclined = request?.mechanic_dispatch?.response === 'declined';
   const isIncomingOffer = canAccept;
 
-  const onAccept = async () => {
-    setActing(true);
-    try {
-      const accepted = await acceptHelpRequest(helpRequestId);
-      navigation.replace('ActiveJob', {
-        helpRequestId,
-        justAccepted: true,
-        initialRequest: accepted,
-      });
-    } catch (e) {
-      const subMsg = subscriptionRequiredMessage(e);
-      if (subMsg) {
-        Alert.alert('Mechanic Pro required', subMsg, [
-          { text: 'Not now', style: 'cancel' },
-          { text: 'Subscribe', onPress: () => navigation.navigate('MechanicSubscription') },
-        ]);
-      } else {
-        Alert.alert('Accept failed', getApiErrorMessage(e));
-      }
-      load();
-    } finally {
-      setActing(false);
-    }
-  };
-
-  const onDecline = async () => {
-    setActing(true);
-    try {
-      await declineHelpRequest(helpRequestId);
-      navigation.goBack();
-    } catch (e) {
-      Alert.alert('Decline failed', getApiErrorMessage(e));
-    } finally {
-      setActing(false);
-    }
-  };
-
   const openMaps = () => {
     if (!request) return;
     Linking.openURL(
@@ -113,8 +91,20 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
     ).catch(() => {});
   };
 
+  const goBackIncoming = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('MechanicRequests', { tab: 'incoming' });
+  };
+
   if (loading && !request) {
     return <ActivityIndicator style={{ marginTop: 40 }} />;
+  }
+
+  if (unavailable) {
+    return <MechanicOfferUnavailableState kind={unavailable} onGoBack={goBackIncoming} />;
   }
 
   if (!request) {
@@ -129,7 +119,11 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
   const workDurationLabel = job ? jobWorkDurationLabel(job) : null;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <View style={styles.root}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, canAccept && { paddingBottom: INCOMING_FOOTER_SPACE }]}
+    >
       {request.request_type === 'EMERGENCY' && <Text style={styles.emergency}>Emergency request</Text>}
       {isIncomingOffer ? (
         <>
@@ -241,21 +235,24 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
         <Text style={styles.muted}>Declined {formatRequestDate(request.mechanic_dispatch.responded_at)}</Text>
       )}
 
-      {canAccept && (
-        <View style={styles.actions}>
-          <Pressable style={styles.accept} onPress={onAccept} disabled={acting}>
-            {acting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.acceptText}>Accept job</Text>
-            )}
-          </Pressable>
-          <Pressable style={styles.decline} onPress={onDecline} disabled={acting}>
-            <Text style={styles.declineText}>Decline</Text>
-          </Pressable>
-        </View>
-      )}
     </ScrollView>
+
+      {canAccept ? (
+        <>
+          <MechanicIncomingOfferFooter
+            acting={acting}
+            onAccept={onAccept}
+            onDecline={() => setDeclineOpen(true)}
+          />
+          <MechanicDeclineOfferModal
+            visible={declineOpen}
+            busy={acting}
+            onClose={() => setDeclineOpen(false)}
+            onConfirm={submitDecline}
+          />
+        </>
+      ) : null}
+    </View>
   );
 }
 
@@ -274,7 +271,8 @@ function TimelineRow({ label, value }: { label: string; value?: string | null })
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
+  root: { flex: 1, backgroundColor: '#f8fafc' },
+  container: { flex: 1 },
   content: { padding: 16, paddingBottom: 32 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   muted: { color: '#64748b' },
@@ -296,11 +294,6 @@ const styles = StyleSheet.create({
   link: { color: '#0284c7', fontWeight: '600', marginTop: 8 },
   timeline: { marginTop: 4, color: '#334155' },
   workDuration: { fontSize: 16, fontWeight: '800', color: '#166534', marginBottom: 8 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 20 },
-  accept: { flex: 1, backgroundColor: '#16a34a', padding: 14, borderRadius: 10, alignItems: 'center' },
-  acceptText: { color: '#fff', fontWeight: '800' },
-  decline: { flex: 1, backgroundColor: '#f1f5f9', padding: 14, borderRadius: 10, alignItems: 'center' },
-  declineText: { fontWeight: '700' },
   incomingTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
   distance: { fontSize: 16, fontWeight: '700', color: '#0284c7', marginTop: 4 },
 });

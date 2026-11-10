@@ -14,6 +14,15 @@ export type OwnerStackParamList = {
     emergency?: boolean;
     latitude?: number;
     longitude?: number;
+    vehicleDescription?: string;
+    problemCategoryId?: number;
+    remarks?: string;
+    landmark?: string;
+    addressText?: string;
+    answers?: Array<{ question_id: number; answer: string }>;
+    photoUris?: string[];
+    /** Opened from a failed dispatch — prefill fields and jump to review when possible. */
+    fromFailedMatch?: boolean;
   };
   ActiveHelpRequest: { helpRequestId: number };
   HelpRequestHistory: undefined;

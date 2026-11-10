@@ -62,6 +62,18 @@ const config = {
   },
   plugins: [
     [
+      'expo-build-properties',
+      {
+        android: {
+          // SDK 58 release APKs: R8 strips WorkManager/Room no-arg constructors (expo-notifications).
+          extraProguardRules: [
+            '-keep class * extends androidx.room.RoomDatabase { <init>(); }',
+            '-keep class * extends androidx.work.InputMerger { <init>(); }',
+          ].join('\n'),
+        },
+      },
+    ],
+    [
       'expo-notifications',
       {
         icon: './assets/notification-icon.png',

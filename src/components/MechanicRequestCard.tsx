@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { HelpRequest } from '../api/helpRequests';
 import { formatDistanceKm, resolveMechanicToCustomerDistanceKm } from '../utils/distanceKm';
+import { formatTimeAgo } from '../utils/formatTimeAgo';
 import {
   formatRequestDate,
   formatStarRating,
@@ -39,27 +40,42 @@ export function MechanicRequestCard({
   const distanceLabel = formatDistanceKm(distanceKm);
   const workTimeLabel =
     jobStatusOf(request) === 'COMPLETED' ? jobWorkDurationLabel(request.job) : null;
+  const arrivalLabel = highlightDistance
+    ? formatTimeAgo(request.created_at)
+    : formatRequestDate(request.created_at);
 
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed, highlightDistance && styles.cardIncoming]}
       onPress={onPress}
     >
+      {highlightDistance ? (
+        <View style={styles.incomingMeta}>
+          {distanceLabel ? (
+            <Text style={styles.incomingDistance}>{distanceLabel} away</Text>
+          ) : (
+            <Text style={styles.incomingDistanceMuted}>Distance unavailable</Text>
+          )}
+          <Text style={styles.incomingDot}>·</Text>
+          <Text style={styles.incomingAgo}>{arrivalLabel}</Text>
+        </View>
+      ) : null}
+
       <View style={styles.topRow}>
         <View style={styles.titleBlock}>
           {isEmergency ? <Text style={styles.emergencyTag}>Emergency</Text> : null}
           <Text style={styles.problem}>{request.problem_category?.name ?? 'Help request'}</Text>
           <Text style={styles.vehicle}>{vehicleTitle(request)}</Text>
         </View>
-        {distanceLabel ? (
+        {!highlightDistance && distanceLabel ? (
           <View style={styles.distanceBadge}>
             <Text style={styles.distanceValue}>{distanceLabel}</Text>
           </View>
-        ) : (
+        ) : !highlightDistance ? (
           <View style={styles.distanceBadgeMuted}>
             <Text style={styles.distanceMutedText}>—</Text>
           </View>
-        )}
+        ) : null}
       </View>
 
       {request.remarks ? (
@@ -97,7 +113,7 @@ export function MechanicRequestCard({
           <Text style={styles.status}>{statusLabel}</Text>
           {workTimeLabel ? <Text style={styles.workTime}>{workTimeLabel}</Text> : null}
         </View>
-        <Text style={styles.date}>{formatRequestDate(request.created_at)}</Text>
+        <Text style={styles.date}>{arrivalLabel}</Text>
       </View>
     </Pressable>
   );
@@ -115,6 +131,17 @@ const styles = StyleSheet.create({
   },
   cardPressed: { backgroundColor: '#f8fafc' },
   cardIncoming: { borderColor: '#bae6fd' },
+  incomingMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 10,
+  },
+  incomingDistance: { fontSize: 15, fontWeight: '800', color: '#0369a1' },
+  incomingDistanceMuted: { fontSize: 14, fontWeight: '700', color: '#94a3b8' },
+  incomingDot: { color: '#cbd5e1', fontWeight: '700' },
+  incomingAgo: { fontSize: 14, fontWeight: '700', color: '#475569' },
   topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   titleBlock: { flex: 1, minWidth: 0 },
   emergencyTag: {
