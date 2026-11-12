@@ -68,13 +68,15 @@ const config = {
       'expo-build-properties',
       {
         android: {
-          // SDK 58 release APKs: R8 strips WorkManager/Room no-arg constructors (expo-notifications).
-          // Incomplete keeps still crash right after login when push registration starts.
+          // SDK 58 + AGP 9 R8 full mode strips reflective no-arg constructors.
+          // `{ *; }` alone is NOT enough — must keep `<init>()` or WorkManager crashes
+          // at cold start: Failed to create WorkDatabase / InitializationProvider.
+          // See https://github.com/expo/expo/issues/52173
           extraProguardRules: [
-            '-keep class * extends androidx.room.RoomDatabase { *; }',
-            '-keep class * extends androidx.work.Worker { *; }',
-            '-keep class * extends androidx.work.InputMerger { *; }',
-            '-keep class * extends androidx.work.ListenableWorker { *; }',
+            '-keep class * extends androidx.room.RoomDatabase { <init>(); }',
+            '-keep class * extends androidx.work.InputMerger { <init>(); }',
+            '-keep class * extends androidx.work.Worker { <init>(); }',
+            '-keep class * extends androidx.work.ListenableWorker { <init>(); }',
             '-keep class androidx.work.** { *; }',
             '-keep class androidx.room.** { *; }',
             '-dontwarn androidx.work.**',
