@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -10,10 +11,14 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getApiErrorMessage } from '../../api/client';
+import { BrandLogo } from '../../components/BrandLogo';
+import {
+  KeyboardAwareScrollView,
+  type KeyboardAwareScrollViewRef,
+} from '../../components/KeyboardAwareScrollView';
 import { useAuth } from '../../context/AuthContext';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import type { AuthStackParamList } from '../../navigation/types';
-import { BrandLogo } from '../../components/BrandLogo';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
@@ -21,12 +26,20 @@ export function RegisterScreen({ navigation }: Props) {
   const { signUp } = useAuth();
   const { config } = useAppConfig();
   const requireVerification = config?.auth?.require_email_verification !== false;
+  const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [role, setRole] = useState<'owner' | 'mechanic'>('owner');
   const [submitting, setSubmitting] = useState(false);
+
+  const scrollFieldIntoView = () => {
+    // Let the keyboard finish opening, then bring lower fields above it.
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, Platform.OS === 'android' ? 250 : 100);
+  };
 
   const onSubmit = async () => {
     setSubmitting(true);
@@ -46,7 +59,12 @@ export function RegisterScreen({ navigation }: Props) {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAwareScrollView
+      ref={scrollRef}
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      extraBottomPadding={Platform.OS === 'android' ? 220 : 140}
+    >
       <BrandLogo width={176} style={styles.logo} />
       <Text style={styles.title}>Create account</Text>
       {requireVerification ? (
@@ -68,28 +86,46 @@ export function RegisterScreen({ navigation }: Props) {
         </Pressable>
       </View>
 
-      <TextInput style={styles.input} placeholder="Full name" value={name} onChangeText={setName} />
+      <TextInput
+        style={styles.input}
+        placeholder="Full name"
+        value={name}
+        onChangeText={setName}
+        returnKeyType="next"
+      />
       <TextInput
         style={styles.input}
         placeholder="Email"
         autoCapitalize="none"
         keyboardType="email-address"
+        autoComplete="email"
+        textContentType="emailAddress"
         value={email}
         onChangeText={setEmail}
+        returnKeyType="next"
       />
       <TextInput
         style={styles.input}
         placeholder="Password"
         secureTextEntry
+        autoComplete="new-password"
+        textContentType="newPassword"
         value={password}
         onChangeText={setPassword}
+        returnKeyType="next"
+        onFocus={scrollFieldIntoView}
       />
       <TextInput
         style={styles.input}
         placeholder="Confirm password"
         secureTextEntry
+        autoComplete="new-password"
+        textContentType="newPassword"
         value={confirm}
         onChangeText={setConfirm}
+        returnKeyType="done"
+        onFocus={scrollFieldIntoView}
+        onSubmitEditing={() => void onSubmit()}
       />
 
       <Pressable style={styles.primaryButton} onPress={onSubmit} disabled={submitting}>
@@ -103,12 +139,14 @@ export function RegisterScreen({ navigation }: Props) {
       <Pressable onPress={() => navigation.goBack()}>
         <Text style={styles.link}>Back to sign in</Text>
       </Pressable>
-    </View>
+    </KeyboardAwareScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: '#f8fafc' },
+  scroll: { flex: 1, backgroundColor: '#f8fafc' },
+  // Top-aligned (not centered) so the form can scroll when the keyboard opens.
+  content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 32, paddingBottom: 24 },
   logo: { marginBottom: 12, alignSelf: 'center' },
   title: { fontSize: 24, fontWeight: '600', marginBottom: 8, color: '#0f172a', textAlign: 'center' },
   subtitle: { color: '#64748b', marginBottom: 16, lineHeight: 20 },
@@ -141,5 +179,5 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   primaryText: { color: '#fff', fontWeight: '600' },
-  link: { color: '#0284c7', textAlign: 'center', marginTop: 20 },
+  link: { color: '#0284c7', textAlign: 'center', marginTop: 20, marginBottom: 12 },
 });

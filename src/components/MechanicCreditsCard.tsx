@@ -10,6 +10,9 @@ type Props = {
   isPro: boolean;
   proMonthlyPrice: number;
   proYearlyPrice?: number;
+  /** Localized store labels when IAP products loaded — preferred over CMS ₱. */
+  storeMonthlyDisplay?: string | null;
+  storeYearlyDisplay?: string | null;
   onSubscribe: () => void;
 };
 
@@ -20,13 +23,18 @@ export function MechanicCreditsCard({
   isPro,
   proMonthlyPrice,
   proYearlyPrice,
+  storeMonthlyDisplay,
+  storeYearlyDisplay,
   onSubscribe,
 }: Props) {
   const total = dashboard?.free_credits.total ?? entitlementsTotal ?? 5;
   const remaining = dashboard?.free_credits.remaining ?? entitlementsRemaining ?? total;
   const billingStatus = dashboard?.billing_status;
 
-  const priceLine = formatProPriceLine(dashboard, proMonthlyPrice, proYearlyPrice);
+  const priceLine = formatProPriceLine(dashboard, proMonthlyPrice, proYearlyPrice, {
+    monthly: storeMonthlyDisplay,
+    yearly: storeYearlyDisplay,
+  });
   const activeSuffix = billingIntervalLabel(dashboard);
 
   const showAmount = isPro || billingStatus === 'ACTIVE';

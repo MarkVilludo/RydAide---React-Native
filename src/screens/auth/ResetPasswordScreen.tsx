@@ -6,11 +6,11 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getApiErrorMessage } from '../../api/client';
 import { resetPassword } from '../../api/auth';
+import { KeyboardAwareScrollView } from '../../components/KeyboardAwareScrollView';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ResetPassword'>;
@@ -54,7 +54,11 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAwareScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      extraBottomPadding={32}
+    >
       <Text style={styles.title}>Reset password</Text>
       <Text style={styles.subtitle}>
         Paste the token from your reset email, or reset via the link in the email in your browser.
@@ -65,8 +69,11 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
         placeholder="Email"
         autoCapitalize="none"
         keyboardType="email-address"
+        autoComplete="email"
+        textContentType="emailAddress"
         value={email}
         onChangeText={setEmail}
+        returnKeyType="next"
       />
       <TextInput
         style={styles.input}
@@ -74,20 +81,28 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
         autoCapitalize="none"
         value={token}
         onChangeText={setToken}
+        returnKeyType="next"
       />
       <TextInput
         style={styles.input}
         placeholder="New password"
         secureTextEntry
+        autoComplete="new-password"
+        textContentType="newPassword"
         value={password}
         onChangeText={setPassword}
+        returnKeyType="next"
       />
       <TextInput
         style={styles.input}
         placeholder="Confirm new password"
         secureTextEntry
+        autoComplete="new-password"
+        textContentType="newPassword"
         value={confirm}
         onChangeText={setConfirm}
+        returnKeyType="done"
+        onSubmitEditing={() => void onSubmit()}
       />
 
       <Pressable style={styles.primaryButton} onPress={onSubmit} disabled={submitting}>
@@ -101,12 +116,13 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
       <Pressable onPress={() => navigation.navigate('Login')}>
         <Text style={styles.link}>Back to sign in</Text>
       </Pressable>
-    </View>
+    </KeyboardAwareScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: '#f8fafc' },
+  scroll: { flex: 1, backgroundColor: '#f8fafc' },
+  content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 48, paddingBottom: 24 },
   title: { fontSize: 24, fontWeight: '600', color: '#0f172a' },
   subtitle: { color: '#64748b', marginBottom: 20, marginTop: 8, lineHeight: 20 },
   input: {

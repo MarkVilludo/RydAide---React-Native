@@ -71,6 +71,95 @@ export function isNativeStoreBillingAvailable(): boolean {
   return Platform.OS === 'ios' || Platform.OS === 'android';
 }
 
+export type StoreProductPrice = {
+  productId: string;
+  /** Localized label from the store (e.g. "₱99.00"). */
+  displayPrice: string;
+  /** Numeric major units when provided — used for savings math. */
+  price: number | null;
+  currency: string | null;
+};
+
+export type MechanicProStorePrices = {
+  monthly: StoreProductPrice | null;
+  yearly: StoreProductPrice | null;
+};
+
+function normalizeStoreProduct(raw: Record<string, unknown>, fallbackId: string): StoreProductPrice | null {
+  const productId =
+    (typeof raw.id === 'string' && raw.id) ||
+    (typeof raw.productId === 'string' && raw.productId) ||
+    fallbackId;
+  const offers = Array.isArray(raw.subscriptionOffers)
+    ? (raw.subscriptionOffers as Array<Record<string, unknown>>)
+    : [];
+  const firstOffer = offers[0];
+  const displayPrice =
+    (typeof raw.displayPrice === 'string' && raw.displayPrice.trim()) ||
+    (typeof raw.localizedPrice === 'string' && raw.localizedPrice.trim()) ||
+    (typeof firstOffer?.displayPrice === 'string' && firstOffer.displayPrice.trim()) ||
+    '';
+  if (!displayPrice) {
+    return null;
+  }
+  const priceFromOffer =
+    typeof firstOffer?.price === 'number' && Number.isFinite(firstOffer.price) ? firstOffer.price : null;
+  const price =
+    typeof raw.price === 'number' && Number.isFinite(raw.price) ? raw.price : priceFromOffer;
+  const currency =
+    (typeof raw.currency === 'string' && raw.currency.trim()) ||
+    (typeof firstOffer?.currency === 'string' && firstOffer.currency.trim()) ||
+    null;
+  return { productId, displayPrice, price, currency };
+}
+
+/**
+ * Load localized subscription prices from App Store / Play (source of truth for billing UI).
+ * Returns nulls when IAP is unavailable (Expo Go, sideload without billing, missing SKUs).
+ */
+export async function fetchMechanicProStorePrices(opts: {
+  monthlyProductId: string;
+  yearlyProductId?: string;
+}): Promise<MechanicProStorePrices> {
+  const empty: MechanicProStorePrices = { monthly: null, yearly: null };
+  const IAP = await loadIapModule();
+  if (!IAP) {
+    return empty;
+  }
+
+  const monthlyId = opts.monthlyProductId.trim();
+  const yearlyId = opts.yearlyProductId?.trim() || '';
+  const skus = [monthlyId, yearlyId].filter(Boolean);
+  if (skus.length === 0) {
+    return empty;
+  }
+
+  try {
+    await IAP.initConnection();
+  } catch {
+    return empty;
+  }
+
+  try {
+    const products = await IAP.fetchProducts({ skus, type: 'subs' });
+    const byId = new Map<string, StoreProductPrice>();
+    for (const item of products ?? []) {
+      const normalized = normalizeStoreProduct(item as unknown as Record<string, unknown>, '');
+      if (normalized?.productId) {
+        byId.set(normalized.productId, normalized);
+      }
+    }
+    return {
+      monthly: monthlyId ? byId.get(monthlyId) ?? null : null,
+      yearly: yearlyId ? byId.get(yearlyId) ?? null : null,
+    };
+  } catch {
+    return empty;
+  } finally {
+    void IAP.endConnection();
+  }
+}
+
 function normalizePurchase(purchase: Purchase, fallbackProductId: string) {
   const productId =
     (typeof purchase.productId === 'string' && purchase.productId) ||

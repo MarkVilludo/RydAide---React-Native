@@ -7,16 +7,16 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getApiErrorMessage } from '../../api/client';
+import { BrandLogo } from '../../components/BrandLogo';
+import { KeyboardAwareScrollView } from '../../components/KeyboardAwareScrollView';
 import { API_ORIGIN, API_URL, apiEnvironment } from '../../config';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import { useAuth } from '../../context/AuthContext';
 import { confirmBeforeDeleteAccountFlow } from '../../utils/deleteAccountConfirm';
 import type { AuthStackParamList } from '../../navigation/types';
-import { BrandLogo } from '../../components/BrandLogo';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
@@ -41,7 +41,11 @@ export function LoginScreen({ navigation }: Props) {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAwareScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      extraBottomPadding={32}
+    >
       <BrandLogo width={200} style={styles.logo} />
       <Text style={styles.subtitle}>Sign in to continue</Text>
 
@@ -50,15 +54,22 @@ export function LoginScreen({ navigation }: Props) {
         placeholder="Email"
         autoCapitalize="none"
         keyboardType="email-address"
+        autoComplete="email"
+        textContentType="emailAddress"
         value={email}
         onChangeText={setEmail}
+        returnKeyType="next"
       />
       <TextInput
         style={styles.input}
         placeholder="Password"
         secureTextEntry
+        autoComplete="password"
+        textContentType="password"
         value={password}
         onChangeText={setPassword}
+        returnKeyType="done"
+        onSubmitEditing={() => void onSubmit()}
       />
 
       <Pressable style={styles.primaryButton} onPress={onSubmit} disabled={submitting}>
@@ -92,13 +103,14 @@ export function LoginScreen({ navigation }: Props) {
           API ({apiEnvironment()}): {API_URL}
         </Text>
       ) : null}
-    </View>
+    </KeyboardAwareScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: '#f8fafc' },
-  logo: { marginBottom: 8 },
+  scroll: { flex: 1, backgroundColor: '#f8fafc' },
+  content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 48, paddingBottom: 24 },
+  logo: { marginBottom: 8, alignSelf: 'center' },
   subtitle: { textAlign: 'center', color: '#64748b', marginBottom: 24, marginTop: 8 },
   input: {
     backgroundColor: '#fff',

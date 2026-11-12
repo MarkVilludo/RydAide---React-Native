@@ -34,7 +34,12 @@ import { useAuth } from '../../context/AuthContext';
 import { useMechanicLiveLocation } from '../../context/MechanicLocationContext';
 import { mechanicQueueFetchCoords, useServicePinMaxOffsetKm } from '../../hooks/useMechanicDistanceOrigin';
 import { useAppConfig } from '../../hooks/useAppConfig';
+import { useMechanicProStorePrices } from '../../hooks/useMechanicProStorePrices';
 import type { MechanicStackParamList } from '../../navigation/types';
+import {
+  mechanicProMonthlyProductId,
+  mechanicProYearlyProductId,
+} from '../../services/mechanicProStore';
 import { jobStatusLabelOf, vehicleTitle } from '../../utils/helpRequestUi';
 import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 
@@ -77,8 +82,22 @@ export function MechanicHomeScreen({ navigation }: Props) {
   const { config } = useAppConfig();
   const emergencyOn = config?.features?.emergency_assistance ?? false;
   const subscriptionsOn = config?.features?.mechanic_subscriptions ?? false;
-  const proMonthlyPrice = config?.mechanic_monetization?.pro_monthly_price_php ?? 99;
+  const proMonthlyPrice = config?.mechanic_monetization?.pro_monthly_price_php ?? 299;
   const proYearlyPrice = config?.mechanic_monetization?.pro_yearly_price_php;
+  const monthlyProductId =
+    (Platform.OS === 'ios'
+      ? config?.mechanic_monetization?.store_product_ids?.ios
+      : config?.mechanic_monetization?.store_product_ids?.android
+    )?.trim() || mechanicProMonthlyProductId();
+  const yearlyProductId =
+    (Platform.OS === 'ios'
+      ? config?.mechanic_monetization?.store_product_ids?.ios_yearly
+      : config?.mechanic_monetization?.store_product_ids?.android_yearly
+    )?.trim() || mechanicProYearlyProductId();
+  const { storePrices } = useMechanicProStorePrices(
+    monthlyProductId,
+    yearlyProductId || undefined,
+  );
 
   const pageOpacity = useRef(new Animated.Value(0)).current;
 
@@ -499,6 +518,8 @@ export function MechanicHomeScreen({ navigation }: Props) {
                     isPro={isPro}
                     proMonthlyPrice={proMonthlyPrice}
                     proYearlyPrice={proYearlyPrice}
+                    storeMonthlyDisplay={storePrices.monthly?.displayPrice}
+                    storeYearlyDisplay={storePrices.yearly?.displayPrice}
                     onSubscribe={() => navigation.navigate('MechanicSubscription')}
                   />
                 ) : null}

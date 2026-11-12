@@ -32,15 +32,16 @@ import {
   purchaseMechanicPro,
   STORE_BILLING_UNAVAILABLE_MESSAGE,
 } from '../../services/mechanicProStore';
+import { useMechanicProStorePrices } from '../../hooks/useMechanicProStorePrices';
 import { MECHANIC_PRO_SUBSCRIPTION_ID } from '../../constants/storeBilling';
-import { isMechanicProPlanCode } from '../../utils/mechanicProPricing';
+import { isMechanicProPlanCode, resolvePriceLabel } from '../../utils/mechanicProPricing';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'MechanicSubscription'>;
 
 export function MechanicSubscriptionScreen(_props: Props) {
   const { config } = useAppConfig();
-  const proMonthlyPrice = config?.mechanic_monetization.pro_monthly_price_php ?? 99;
-  const proYearlyPrice = config?.mechanic_monetization.pro_yearly_price_php;
+  const cmsMonthlyPrice = config?.mechanic_monetization.pro_monthly_price_php ?? 299;
+  const cmsYearlyPrice = config?.mechanic_monetization.pro_yearly_price_php;
   const monthlyStoreId =
     Platform.OS === 'ios'
       ? config?.mechanic_monetization.store_product_ids?.ios
@@ -57,12 +58,27 @@ export function MechanicSubscriptionScreen(_props: Props) {
   const resolvedYearlyId = yearlyStoreId?.trim() || fallbackYearly;
   const yearlyAvailable = resolvedYearlyId.length > 0;
 
+  const { storePrices } = useMechanicProStorePrices(
+    resolvedMonthlyId,
+    yearlyAvailable ? resolvedYearlyId : undefined,
+  );
+
+  const monthlyLabel =
+    resolvePriceLabel(storePrices.monthly?.displayPrice, cmsMonthlyPrice) ?? `₱${cmsMonthlyPrice}`;
+  const yearlyLabel = resolvePriceLabel(storePrices.yearly?.displayPrice, cmsYearlyPrice);
+  const pricesFromStore = Boolean(storePrices.monthly?.displayPrice || storePrices.yearly?.displayPrice);
+
+  const proMonthlyPrice = storePrices.monthly?.price ?? cmsMonthlyPrice;
+  const proYearlyPrice = storePrices.yearly?.price ?? cmsYearlyPrice;
+
   const yearlySavingsPct = useMemo(() => {
     if (!proYearlyPrice || !proMonthlyPrice || proMonthlyPrice <= 0 || proYearlyPrice <= 0) return null;
     const full = proMonthlyPrice * 12;
     if (full <= proYearlyPrice) return null;
     return Math.round(((full - proYearlyPrice) / full) * 100);
   }, [proMonthlyPrice, proYearlyPrice]);
+
+  const showYearlyPlans = yearlyAvailable && yearlyLabel != null;
 
   const [dashboard, setDashboard] = useState<MechanicSubscriptionDetails | null>(null);
   const [history, setHistory] = useState<PaymentHistoryItem[]>([]);
@@ -164,7 +180,7 @@ export function MechanicSubscriptionScreen(_props: Props) {
     }
     Alert.alert(
       'Upgrade to yearly',
-      `Your store will charge the yearly rate (about ₱${proYearlyPrice ?? '—'}/yr). Any unused time on your monthly plan may be credited by ${Platform.OS === 'ios' ? 'Apple' : 'Google'}.`,
+      `Your store will charge the yearly rate (${yearlyLabel ?? 'see store price'}). Any unused time on your monthly plan may be credited by ${Platform.OS === 'ios' ? 'Apple' : 'Google'}.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Continue', onPress: () => void onSubscribe(resolvedYearlyId) },
@@ -218,15 +234,21 @@ export function MechanicSubscriptionScreen(_props: Props) {
         entitlementsRemaining={dashboard?.free_credits.remaining}
         entitlementsTotal={dashboard?.free_credits.total}
         isPro={isPro}
-        proMonthlyPrice={proMonthlyPrice}
-        proYearlyPrice={proYearlyPrice}
+        proMonthlyPrice={cmsMonthlyPrice}
+        proYearlyPrice={cmsYearlyPrice}
+        storeMonthlyDisplay={storePrices.monthly?.displayPrice}
+        storeYearlyDisplay={storePrices.yearly?.displayPrice}
         onSubscribe={() => void onSubscribe()}
       />
 
-      {yearlyAvailable && proYearlyPrice != null && proYearlyPrice > 0 ? (
+      {showYearlyPlans ? (
         <View style={styles.pricingSection}>
           <Text style={styles.pricingSectionTitle}>Pricing options</Text>
-          <Text style={styles.pricingSectionHint}>Amounts match your admin settings; the store may show local pricing.</Text>
+          <Text style={styles.pricingSectionHint}>
+            {pricesFromStore
+              ? 'Prices from Google Play / App Store — what you will be charged.'
+              : 'Showing admin estimates until store prices load (use an EAS / Play install for live billing prices).'}
+          </Text>
           <View style={styles.planRow}>
             <Pressable
               style={[styles.planCard, billingCycle === 'month' && styles.planCardOn, onMonthlyPlan && isPro && styles.planCardCurrent]}
@@ -234,7 +256,7 @@ export function MechanicSubscriptionScreen(_props: Props) {
               disabled={isPro}
             >
               <Text style={styles.planCardTitle}>Monthly</Text>
-              <Text style={styles.planCardPrice}>₱{proMonthlyPrice}</Text>
+              <Text style={styles.planCardPrice}>{monthlyLabel}</Text>
               <Text style={styles.planCardUnit}>per month</Text>
               {onMonthlyPlan && isPro ? <Text style={styles.planBadge}>Current plan</Text> : null}
             </Pressable>
@@ -244,7 +266,7 @@ export function MechanicSubscriptionScreen(_props: Props) {
               disabled={isPro}
             >
               <Text style={styles.planCardTitle}>Yearly</Text>
-              <Text style={styles.planCardPrice}>₱{proYearlyPrice}</Text>
+              <Text style={styles.planCardPrice}>{yearlyLabel}</Text>
               <Text style={styles.planCardUnit}>per year</Text>
               {yearlySavingsPct != null ? (
                 <Text style={styles.planSavings}>Save ~{yearlySavingsPct}% vs 12× monthly</Text>
@@ -257,7 +279,10 @@ export function MechanicSubscriptionScreen(_props: Props) {
         <View style={styles.pricingSection}>
           <Text style={styles.pricingSectionTitle}>Mechanic Pro</Text>
           <Text style={styles.pricingSectionHint}>
-            ₱{proMonthlyPrice}/month. {yearlyAvailable ? 'Yearly CMS price not set — add it in admin.' : 'Add a yearly plan and store SKUs to offer yearly billing.'}
+            {monthlyLabel}/month.{' '}
+            {yearlyAvailable
+              ? 'Yearly price not available yet — set the yearly SKU in the store and admin.'
+              : 'Add a yearly plan and store SKUs to offer yearly billing.'}
           </Text>
         </View>
       )}
@@ -270,7 +295,7 @@ export function MechanicSubscriptionScreen(_props: Props) {
         >
           <Text style={styles.upgradeBtnTitle}>Upgrade to yearly</Text>
           <Text style={styles.upgradeBtnSub}>
-            {proYearlyPrice != null ? `About ₱${proYearlyPrice}/yr in the store` : 'See Play / App Store for price'}
+            {yearlyLabel != null ? `${yearlyLabel}/yr in the store` : 'See Play / App Store for price'}
           </Text>
         </Pressable>
       ) : null}
@@ -283,14 +308,14 @@ export function MechanicSubscriptionScreen(_props: Props) {
         </View>
       ) : null}
 
-      {!isPro && yearlyAvailable ? (
+      {!isPro && showYearlyPlans ? (
         <View style={styles.cycleRow}>
           <Pressable
             style={[styles.cycleChip, billingCycle === 'month' && styles.cycleChipOn]}
             onPress={() => setBillingCycle('month')}
           >
             <Text style={[styles.cycleChipText, billingCycle === 'month' && styles.cycleChipTextOn]}>Monthly</Text>
-            <Text style={[styles.cycleSub, billingCycle === 'month' && styles.cycleSubOn]}>₱{proMonthlyPrice}/mo</Text>
+            <Text style={[styles.cycleSub, billingCycle === 'month' && styles.cycleSubOn]}>{monthlyLabel}/mo</Text>
           </Pressable>
           <Pressable
             style={[styles.cycleChip, billingCycle === 'year' && styles.cycleChipOn]}
@@ -298,7 +323,7 @@ export function MechanicSubscriptionScreen(_props: Props) {
           >
             <Text style={[styles.cycleChipText, billingCycle === 'year' && styles.cycleChipTextOn]}>Yearly</Text>
             <Text style={[styles.cycleSub, billingCycle === 'year' && styles.cycleSubOn]}>
-              ₱{proYearlyPrice ?? '—'}/yr
+              {yearlyLabel ?? '—'}/yr
             </Text>
           </Pressable>
         </View>
@@ -343,8 +368,11 @@ export function MechanicSubscriptionScreen(_props: Props) {
 
       <View style={styles.note}>
         <Text style={styles.noteText}>
-          Store product ID: {productIdForPurchase}. Price in the store may differ from CMS amounts. Use sandbox testers
-          for TestFlight/internal builds.
+          Store product ID: {productIdForPurchase}.{' '}
+          {pricesFromStore
+            ? 'Displayed prices come from the store.'
+            : 'Live store prices appear after install from Play / TestFlight with products configured.'}{' '}
+          Use sandbox testers for TestFlight/internal builds.
           {!yearlyAvailable ? ' Yearly billing appears when yearly product IDs are set on the server and in the app env.' : ''}
         </Text>
       </View>

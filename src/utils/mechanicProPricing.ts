@@ -10,10 +10,23 @@ export function billingIntervalLabel(dashboard: MechanicSubscriptionDetails | nu
   return '/month';
 }
 
+export function formatPhpAmount(amount: number): string {
+  return `₱${amount}`;
+}
+
+/** Prefer store localized label; otherwise format CMS ₱ amount. */
+export function resolvePriceLabel(storeDisplay: string | null | undefined, cmsAmount: number | null | undefined): string | null {
+  const fromStore = storeDisplay?.trim();
+  if (fromStore) return fromStore;
+  if (cmsAmount != null && cmsAmount > 0) return formatPhpAmount(cmsAmount);
+  return null;
+}
+
 export function formatProPriceLine(
   dashboard: MechanicSubscriptionDetails | null | undefined,
   proMonthlyPrice: number,
   proYearlyPrice?: number,
+  storeLabels?: { monthly?: string | null; yearly?: string | null },
 ): string {
   if (dashboard && isMechanicProPlanCode(dashboard.plan_code)) {
     const iv = dashboard.billing_interval?.toLowerCase();
@@ -23,9 +36,10 @@ export function formatProPriceLine(
     }
     return `₱${amt}/month`;
   }
-  const y = proYearlyPrice != null && proYearlyPrice > 0;
-  if (y) {
-    return `From ₱${proMonthlyPrice}/mo or ₱${proYearlyPrice}/yr`;
+  const monthly = resolvePriceLabel(storeLabels?.monthly, proMonthlyPrice) ?? formatPhpAmount(proMonthlyPrice);
+  const yearly = resolvePriceLabel(storeLabels?.yearly, proYearlyPrice);
+  if (yearly) {
+    return `From ${monthly}/mo or ${yearly}/yr`;
   }
-  return `₱${proMonthlyPrice}/month`;
+  return `${monthly}/month`;
 }
