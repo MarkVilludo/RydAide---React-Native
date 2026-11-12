@@ -1,5 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Linking,
   Pressable,
@@ -20,6 +20,7 @@ import { MechanicOfferUnavailableState } from '../../components/MechanicOfferUna
 import { useMechanicIncomingOfferActions } from '../../hooks/useMechanicIncomingOfferActions';
 import { useMechanicDistanceOrigin } from '../../hooks/useMechanicDistanceOrigin';
 import { resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
+import { formatElapsedSeconds } from '../../utils/formatElapsed';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { vehicleTitle } from '../../utils/helpRequestUi';
 
@@ -103,6 +104,25 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
 
   const isEmergency = request.request_type === 'EMERGENCY';
   const showActions = request.status === 'SEARCHING' && request.mechanic_dispatch?.response !== 'declined';
+  const [acceptSecondsLeft, setAcceptSecondsLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!showActions || !request.expires_at) {
+      setAcceptSecondsLeft(null);
+      return;
+    }
+    const expiresMs = new Date(request.expires_at).getTime();
+    const tick = () => {
+      if (Number.isNaN(expiresMs)) {
+        setAcceptSecondsLeft(null);
+        return;
+      }
+      setAcceptSecondsLeft(Math.max(0, Math.floor((expiresMs - Date.now()) / 1000)));
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [showActions, request.expires_at]);
 
   return (
     <View style={styles.root}>
@@ -111,6 +131,12 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
         contentContainerStyle={[styles.content, showActions && { paddingBottom: FOOTER_SPACE }]}
       >
         {isEmergency && <Text style={styles.emergency}>🚨 New emergency request</Text>}
+
+        {acceptSecondsLeft != null ? (
+          <Text style={styles.acceptWindow}>
+            Accept within {formatElapsedSeconds(acceptSecondsLeft)}
+          </Text>
+        ) : null}
 
         <MechanicCustomerDistance
           distanceKm={distanceKm}
@@ -193,6 +219,19 @@ const styles = StyleSheet.create({
   muted: { color: '#64748b', textAlign: 'center' },
   link: { color: '#0284c7', marginTop: 12, fontWeight: '600' },
   emergency: { color: '#dc2626', fontWeight: '800', fontSize: 15, marginBottom: 8 },
+  acceptWindow: {
+    color: '#b45309',
+    fontWeight: '700',
+    fontSize: 14,
+    marginBottom: 10,
+    backgroundColor: '#fffbeb',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
   ownerName: { fontSize: 16, fontWeight: '600', color: '#334155', marginBottom: 6 },
   vehicle: { fontSize: 22, fontWeight: '700', color: '#0f172a' },
   mileage: { color: '#64748b', marginTop: 4, marginBottom: 12 },

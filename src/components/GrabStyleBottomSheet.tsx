@@ -8,12 +8,15 @@ type Props = {
   bottomInset?: number;
   /** Android system nav is hidden (immersive) — use minimal bottom pad only. */
   immersiveBottom?: boolean;
+  /** Stretch to fill remaining parent height (single-viewport screens). */
+  fill?: boolean;
 };
 
 export function GrabStyleBottomSheet({
   children,
   bottomInset = 0,
   immersiveBottom = false,
+  fill = false,
 }: Props) {
   const insets = useSafeAreaInsets();
   const systemBottom = immersiveBottom
@@ -25,7 +28,13 @@ export function GrabStyleBottomSheet({
         : 0;
 
   return (
-    <View style={[styles.sheet, { paddingBottom: 24 + systemBottom + bottomInset }]}>
+    <View
+      style={[
+        styles.sheet,
+        fill && styles.sheetFill,
+        { paddingBottom: (fill ? 12 : 24) + systemBottom + bottomInset },
+      ]}
+    >
       <View style={styles.handle} />
       {children}
     </View>
@@ -48,6 +57,9 @@ const styles = StyleSheet.create({
     elevation: 8,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+  },
+  sheetFill: {
+    flex: 1,
   },
   handle: {
     alignSelf: 'center',

@@ -88,7 +88,11 @@ export function HelpRequestMap({
   const [latitudeDelta, setLatitudeDelta] = useState(fallbackRegion.latitudeDelta);
   const [tracksMarkers, setTracksMarkers] = useState(true);
 
-  const iconSize = useMemo(() => mapMarkerIconSizePx(latitudeDelta), [latitudeDelta]);
+  // Detail screens (Request details) use a tighter zoom — keep pins smaller so they don't dominate.
+  const iconSize = useMemo(
+    () => mapMarkerIconSizePx(latitudeDelta, zoomPreset === 'detail' ? 0.85 : 1),
+    [latitudeDelta, zoomPreset],
+  );
 
   const scheduleTrackReset = useCallback(() => {
     if (trackResetTimer.current) {

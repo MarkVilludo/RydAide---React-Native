@@ -11,6 +11,11 @@ import { statusBarTopInset } from '../utils/screenInsets';
 type Props = ScrollViewProps & {
   /** Extra scroll content padding when forms (e.g. review comment) sit at the bottom. */
   extraBottomPadding?: number;
+  /**
+   * avoid (default): iOS KeyboardAvoidingView + inset adjust (can lift the page).
+   * scroll: do not shift the layout — screens scroll the focused field into view themselves.
+   */
+  keyboardMode?: 'avoid' | 'scroll';
 };
 
 /** Approximate stack header height under transparent nav bars (iOS keyboard offset). */
@@ -24,7 +29,7 @@ export type KeyboardAwareScrollViewRef = {
 
 export const KeyboardAwareScrollView = forwardRef<KeyboardAwareScrollViewRef, Props>(
   function KeyboardAwareScrollView(
-    { style, contentContainerStyle, extraBottomPadding = 0, ...rest },
+    { style, contentContainerStyle, extraBottomPadding = 0, keyboardMode = 'avoid', ...rest },
     ref,
   ) {
     const scrollRef = useRef<ScrollViewInstance | null>(null);
@@ -41,48 +46,38 @@ export const KeyboardAwareScrollView = forwardRef<KeyboardAwareScrollViewRef, Pr
       [],
     );
 
-    const keyboardVerticalOffset =
-      Platform.OS === 'ios' ? statusBarTopInset() + IOS_KEYBOARD_HEADER_OFFSET : 0;
+    const scrollView = (
+      <ScrollView
+        ref={scrollRef}
+        style={style}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={keyboardMode === 'avoid'}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          contentContainerStyle,
+          extraBottomPadding > 0 && { paddingBottom: extraBottomPadding },
+        ]}
+        {...rest}
+      />
+    );
 
-    // Android uses softwareKeyboardLayoutMode: "resize" — avoid height-based KAV
-    // (it fights window resize). iOS still needs padding behavior.
-    const avoiding =
-      Platform.OS === 'ios' ? (
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior="padding"
-          keyboardVerticalOffset={keyboardVerticalOffset}
-        >
-          <ScrollView
-            ref={scrollRef}
-            style={style}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            automaticallyAdjustKeyboardInsets
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={[
-              contentContainerStyle,
-              extraBottomPadding > 0 && { paddingBottom: extraBottomPadding },
-            ]}
-            {...rest}
-          />
-        </KeyboardAvoidingView>
-      ) : (
-        <ScrollView
-          ref={scrollRef}
-          style={style}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          automaticallyAdjustKeyboardInsets
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            contentContainerStyle,
-            extraBottomPadding > 0 && { paddingBottom: extraBottomPadding },
-          ]}
-          {...rest}
-        />
-      );
+    if (keyboardMode === 'scroll' || Platform.OS !== 'ios') {
+      // Android uses softwareKeyboardLayoutMode: "resize". Auth screens use scroll mode
+      // so the form is not lifted — only the ScrollView moves the focused field.
+      return scrollView;
+    }
 
-    return avoiding;
+    const keyboardVerticalOffset = statusBarTopInset() + IOS_KEYBOARD_HEADER_OFFSET;
+
+    return (
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior="padding"
+        keyboardVerticalOffset={keyboardVerticalOffset}
+      >
+        {scrollView}
+      </KeyboardAvoidingView>
+    );
   },
 );

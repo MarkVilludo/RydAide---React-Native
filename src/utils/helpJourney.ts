@@ -38,12 +38,7 @@ function journeyStepsForPhases(
     if (index < activeIndex) state = 'done';
     else if (index === activeIndex) state = 'active';
 
-    const subtitle =
-      p.key === 'finding' && request.status === 'SEARCHING'
-        ? request.search_progress?.message
-        : undefined;
-
-    return { key: p.key, label: p.label, state, subtitle };
+    return { key: p.key, label: p.label, state };
   });
 }
 
@@ -91,7 +86,7 @@ export function buildHelpJourneySteps(request: HelpRequest): JourneyStep[] {
 
 export function activeJourneyHeadline(request: HelpRequest): string {
   if (request.status === 'SEARCHING') {
-    return 'Finding a mechanic nearby…';
+    return 'Finding a mechanic';
   }
   const job = jobStatusOf(request);
   switch (job) {

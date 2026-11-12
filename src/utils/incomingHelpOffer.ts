@@ -8,6 +8,9 @@ export function acceptLostRaceKind(error: unknown): IncomingOfferUnavailable | n
   if (msg.includes('already been accepted') || msg.includes('another mechanic')) {
     return 'taken';
   }
+  if (msg.includes('expired')) {
+    return 'ended';
+  }
   if (msg.includes('no longer available')) {
     return 'taken';
   }

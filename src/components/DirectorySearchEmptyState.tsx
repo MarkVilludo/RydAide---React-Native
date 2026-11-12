@@ -24,11 +24,8 @@ export function DirectorySearchEmptyState({
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.title}>No verified {label} here yet</Text>
-      <Text style={styles.body}>
-        Increase the search radius or drag the map pin to another spot, then wait a moment for results
-        to refresh.
-      </Text>
+      <Text style={styles.title}>No verified {label} nearby</Text>
+      <Text style={styles.body}>Widen the radius or move the map pin to search another area.</Text>
       {canWiden && onWidenRadius ? (
         <Pressable
           style={styles.action}

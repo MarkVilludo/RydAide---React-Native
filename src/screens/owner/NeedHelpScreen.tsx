@@ -327,7 +327,10 @@ export function NeedHelpScreen({ navigation, route }: Props) {
         })),
         photoUris: photoUris.length > 0 ? photoUris : undefined,
       });
-      navigation.replace('ActiveHelpRequest', { helpRequestId: helpRequest.id });
+      navigation.replace('ActiveHelpRequest', {
+        helpRequestId: helpRequest.id,
+        initialRequest: helpRequest,
+      });
     } catch (error) {
       submitLock.current = false;
       Alert.alert('Could not submit', getApiErrorMessage(error));

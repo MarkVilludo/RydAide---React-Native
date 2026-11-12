@@ -68,6 +68,7 @@ function OwnerStackNavigator() {
       <Stack.Screen
         name="ActiveHelpRequest"
         component={ActiveHelpRequestScreen}
+        getId={({ params }) => String(params.helpRequestId)}
         options={{ title: '', headerShadowVisible: false, headerTransparent: true }}
       />
       <Stack.Screen name="FindMechanic" component={FindMechanicScreen} options={{ title: 'Nearby mechanics' }} />

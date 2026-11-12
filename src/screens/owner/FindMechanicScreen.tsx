@@ -89,10 +89,10 @@ export function FindMechanicScreen({ navigation }: Props) {
     loading && !searched
       ? 'Getting your location…'
       : loading
-        ? 'Updating results…'
+        ? 'Updating…'
         : searched && searchMeta
-          ? `${results.length} mechanic${results.length === 1 ? '' : 's'} within ${searchMeta.applied_radius_km} km`
-          : 'Set location to search';
+          ? `${results.length} within ${searchMeta.applied_radius_km} km`
+          : 'Move the map to search';
 
   const needHelpParams = {
     latitude: center?.latitude,
@@ -136,16 +136,14 @@ export function FindMechanicScreen({ navigation }: Props) {
                 style={styles.helpCta}
                 onPress={() => navigation.navigate('NeedHelp', { emergency: true, ...needHelpParams })}
               >
-                <Text style={styles.helpCtaTitle}>Request roadside help</Text>
-                <Text style={styles.helpCtaSub}>
-                  Pick your vehicle, problem, and location — we dispatch verified mechanics near you.
-                </Text>
+                <Text style={styles.helpCtaTitle}>Need help now?</Text>
+                <Text style={styles.helpCtaSub}>We’ll notify verified mechanics near you.</Text>
               </Pressable>
               <Pressable
                 style={styles.serviceCta}
                 onPress={() => navigation.navigate('NeedHelp', { emergency: false, ...needHelpParams })}
               >
-                <Text style={styles.serviceCtaText}>Schedule non-emergency service</Text>
+                <Text style={styles.serviceCtaText}>Book non-emergency service</Text>
               </Pressable>
             </>
           )}

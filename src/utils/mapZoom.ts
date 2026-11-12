@@ -18,26 +18,29 @@ const PRESETS: Record<
     fitPadding: { top: 64, right: 48, bottom: 64, left: 48 },
   },
   detail: {
-    singleDelta: 0.02,
-    minDualDelta: 0.018,
-    coordPad: 0.012,
+    // Slightly wider than before so owner/customer pins don't fill the map at open.
+    singleDelta: 0.028,
+    minDualDelta: 0.022,
+    coordPad: 0.014,
     fitPadding: { top: 48, right: 36, bottom: 48, left: 36 },
   },
 };
 
-/** Reference zoom used to scale marker icons (≈ neighborhood block). */
+/** Reference zoom used to scale marker icons (≈ neighborhood / detail map). */
 export const MAP_MARKER_REF_LATITUDE_DELTA = 0.022;
 
-const MARKER_BASE_PX = 44;
-const MARKER_MIN_PX = 34;
-const MARKER_MAX_PX = 58;
+/** Tuned so default/detail request maps show readable pins without covering the map. */
+const MARKER_BASE_PX = 30;
+const MARKER_MIN_PX = 24;
+const MARKER_MAX_PX = 36;
 
 /**
- * Larger icons when zoomed out, slightly smaller when zoomed in — stays readable on screen.
+ * Slightly larger icons when zoomed out, smaller when zoomed in.
+ * Kept compact so Request Details does not force users to zoom out.
  */
-export function mapMarkerIconSizePx(latitudeDelta: number): number {
+export function mapMarkerIconSizePx(latitudeDelta: number, sizeScale = 1): number {
   const delta = Math.max(latitudeDelta, 0.003);
-  const scale = Math.sqrt(delta / MAP_MARKER_REF_LATITUDE_DELTA);
+  const scale = Math.sqrt(delta / MAP_MARKER_REF_LATITUDE_DELTA) * sizeScale;
   const size = Math.round(MARKER_BASE_PX * scale);
   return Math.min(MARKER_MAX_PX, Math.max(MARKER_MIN_PX, size));
 }

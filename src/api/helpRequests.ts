@@ -117,9 +117,25 @@ export interface HelpRequest {
   address_text: string | null;
   current_wave: number;
   created_at?: string;
+  search_started_at?: string | null;
   accepted_at?: string | null;
   completed_at?: string | null;
   cancelled_at?: string | null;
+  expires_at?: string | null;
+  expired_at?: string | null;
+  owner_wait?: {
+    expires_at?: string | null;
+    extension_prompted_at?: string | null;
+    extended_at?: string | null;
+    extension_count: number;
+    max_extensions: number;
+    initial_wait_seconds: number;
+    extension_seconds: number;
+    initial_wait_ends_at?: string | null;
+    can_extend: boolean;
+    needs_extension_decision: boolean;
+    is_extended: boolean;
+  } | null;
   vehicle_description?: string | null;
   problem_category?: ProblemCategory;
   owner?: HelpRequestOwner;
@@ -152,6 +168,8 @@ export interface HelpRequest {
     mechanics_awaiting_response: number;
     mechanics_declined: number;
     progress_percent: number;
+    /** Seconds each notified wave has to accept before search widens. */
+    accept_timeout_seconds?: number;
     message: string;
   } | null;
   review?: { rating: number; comment?: string | null; created_at?: string };
@@ -245,6 +263,11 @@ export async function fetchHelpRequest(id: number): Promise<HelpRequest> {
 
 export async function cancelHelpRequest(id: number): Promise<void> {
   await api.post(`/help-requests/${id}/cancel`);
+}
+
+export async function extendHelpRequest(id: number): Promise<HelpRequest> {
+  const { data } = await api.post(`/help-requests/${id}/extend`);
+  return data.data.help_request;
 }
 
 export async function respondToHelpRequestQuote(

@@ -24,7 +24,11 @@ export type OwnerStackParamList = {
     /** Opened from a failed dispatch — prefill fields and jump to review when possible. */
     fromFailedMatch?: boolean;
   };
-  ActiveHelpRequest: { helpRequestId: number };
+  ActiveHelpRequest: {
+    helpRequestId: number;
+    /** Fresh create payload so the wait countdown starts correctly before the first poll. */
+    initialRequest?: import('../api/helpRequests').HelpRequest;
+  };
   HelpRequestHistory: undefined;
   HelpRequestDetail: { helpRequestId: number };
   FindShop: undefined;

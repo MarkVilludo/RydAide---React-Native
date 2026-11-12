@@ -13,6 +13,7 @@ import { getApiErrorMessage } from '../../api/client';
 import { CenteredLoading } from '../../components/CenteredLoading';
 import {
   cancelHelpRequest,
+  extendHelpRequest,
   fetchHelpRequest,
   submitHelpRequestReview,
   type HelpRequest,
@@ -29,7 +30,6 @@ import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGaller
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { HelpJourneyTimeline } from '../../components/HelpJourneyTimeline';
 import { HelpRequestSearchingHero } from '../../components/HelpRequestSearchingHero';
-import { HelpSearchProgressCard } from '../../components/HelpSearchProgressCard';
 import { MapSearchOverlay } from '../../components/MapSearchOverlay';
 import { JobWorkDurationText } from '../../components/JobWorkDurationText';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
@@ -69,12 +69,16 @@ function liveDistanceKmForRequest(request: HelpRequest | null): number | null {
 }
 
 export function ActiveHelpRequestScreen({ route, navigation }: Props) {
-  const { helpRequestId } = route.params;
-  const [request, setRequest] = useState<HelpRequest | null>(null);
+  const { helpRequestId, initialRequest } = route.params;
+  const [request, setRequest] = useState<HelpRequest | null>(() =>
+    initialRequest?.id === helpRequestId ? initialRequest : null,
+  );
   const [connectionLost, setConnectionLost] = useState(false);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [photosOpen, setPhotosOpen] = useState(false);
   const cancelLock = useRef(false);
+  const extendPromptShown = useRef(false);
+  const extendLock = useRef(false);
   const reviewScrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const scrollReviewIntoView = useCallback(() => {
     requestAnimationFrame(() => {
@@ -84,6 +88,18 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
 
   const pollMs =
     (request?.job_status ?? request?.job?.status) === 'IN_PROGRESS' ? 1000 : 2000;
+
+  // Always drop previous request data when opening a different HELP request (cancel → new).
+  useEffect(() => {
+    cancelLock.current = false;
+    extendPromptShown.current = false;
+    extendLock.current = false;
+    setConnectionLost(false);
+    const seed = route.params.initialRequest;
+    setRequest(seed?.id === helpRequestId ? seed : null);
+    // Only re-seed when the HELP request id changes — not on every params object identity change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: helpRequestId is the reset signal
+  }, [helpRequestId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +129,61 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
       if (timer) clearInterval(timer);
     };
   }, [helpRequestId, pollMs]);
+
+  useEffect(() => {
+    if (!request || request.status !== 'SEARCHING') {
+      extendPromptShown.current = false;
+      return;
+    }
+    if (!request.owner_wait?.needs_extension_decision || extendPromptShown.current) {
+      return;
+    }
+    extendPromptShown.current = true;
+    const extensionMinutes = Math.max(
+      1,
+      Math.round((request.owner_wait.extension_seconds || 300) / 60),
+    );
+    Alert.alert(
+      'Still no mechanic',
+      `Nobody accepted yet. Add ${extensionMinutes} more minute${extensionMinutes === 1 ? '' : 's'}, or cancel this request.`,
+      [
+        {
+          text: 'Cancel request',
+          style: 'destructive',
+          onPress: async () => {
+            if (cancelLock.current) return;
+            cancelLock.current = true;
+            try {
+              await cancelHelpRequest(helpRequestId);
+              const updated = await fetchHelpRequest(helpRequestId);
+              setRequest(updated);
+            } catch (e) {
+              cancelLock.current = false;
+              extendPromptShown.current = false;
+              Alert.alert('Cancel failed', getApiErrorMessage(e));
+            }
+          },
+        },
+        {
+          text: `Extend ${extensionMinutes} min`,
+          onPress: async () => {
+            if (extendLock.current) return;
+            extendLock.current = true;
+            try {
+              const updated = await extendHelpRequest(helpRequestId);
+              setRequest(updated);
+            } catch (e) {
+              extendPromptShown.current = false;
+              Alert.alert('Could not extend', getApiErrorMessage(e));
+            } finally {
+              extendLock.current = false;
+            }
+          },
+        },
+      ],
+      { cancelable: false },
+    );
+  }, [request, helpRequestId]);
 
   const journeySteps = useMemo(() => (request ? buildHelpJourneySteps(request) : []), [request]);
   const activeJobJourneySteps = useMemo(
@@ -285,6 +356,57 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
     );
   }
 
+  if (searching) {
+    return (
+      <View style={styles.root}>
+        <View style={styles.mapHalf}>
+          <HelpRequestMap
+            request={{
+              latitude: request.latitude,
+              longitude: request.longitude,
+              title: 'You',
+            }}
+            requestPinLabel="You"
+            fill
+            showMyLocation={false}
+          />
+          <MapSearchOverlay
+            visible
+            message="Looking nearby"
+            submessage={
+              request.search_progress?.mechanics_notified_total
+                ? `${request.search_progress.mechanics_notified_total} notified`
+                : undefined
+            }
+          />
+        </View>
+
+        <View style={styles.detailsHalf}>
+          <GrabStyleBottomSheet fill bottomInset={canCancel ? 72 : 0}>
+            <Text style={styles.headlineSearching}>Finding a mechanic</Text>
+            {request.problem_category?.name ? (
+              <Text style={styles.problemSearching} numberOfLines={1}>
+                {request.problem_category.name}
+              </Text>
+            ) : null}
+            <View style={styles.searchingHeroWrap}>
+              <HelpRequestSearchingHero
+                key={`wait-${request.id}-${request.expires_at ?? request.owner_wait?.expires_at ?? ''}`}
+                startedAt={
+                  request.search_started_at ?? request.created_at ?? new Date().toISOString()
+                }
+                expiresAt={request.expires_at ?? request.owner_wait?.expires_at}
+                isExtended={!!request.owner_wait?.is_extended}
+                progress={request.search_progress}
+              />
+            </View>
+          </GrabStyleBottomSheet>
+          {canCancel ? <CancelHelpRequestButton fixedFooter onPress={confirmCancel} /> : null}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.root}>
       <View style={styles.mapWrap}>
@@ -298,25 +420,14 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
             requestPinLabel="You"
             height={280}
           />
-          {searching && (
-            <MapSearchOverlay
-              visible
-              message="Finding a mechanic"
-              submessage={
-                request.search_progress
-                  ? `${request.search_progress.mechanics_notified_total} notified · ${request.search_progress.mechanics_awaiting_response} waiting`
-                  : 'Contacting providers near you'
-              }
-            />
-          )}
         </View>
       </View>
 
       <KeyboardAwareScrollView
         ref={reviewScrollRef}
         style={styles.sheetScroll}
-        extraBottomPadding={completed ? 160 : canCancel ? 8 : 0}
-        contentContainerStyle={[styles.sheetScrollContent, canCancel && styles.sheetScrollWithFooter]}
+        extraBottomPadding={completed ? 160 : 0}
+        contentContainerStyle={styles.sheetScrollContent}
       >
         <GrabStyleBottomSheet>
           <Text style={styles.headline}>{activeJourneyHeadline(request)}</Text>
@@ -326,46 +437,34 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
 
           <HelpJourneyTimeline steps={journeySteps} compact />
 
-          {canCancel ? (
-            <Text style={styles.cancelHint}>
-              Still looking for a mechanic. You can cancel below if you no longer need help.
-            </Text>
-          ) : null}
-
-          {searching ? (
-            <HelpRequestSearchingHero startedAt={request.created_at ?? new Date().toISOString()} />
-          ) : null}
-
-          {searching && request.search_progress ? (
-            <HelpSearchProgressCard progress={request.search_progress} />
-          ) : null}
-
           {(failedMatch || cancelled) && (
             <View style={styles.terminalCard}>
               <Text style={styles.terminalTitle}>{request.status_label ?? request.status}</Text>
               <Text style={styles.terminalBody}>
                 {failedMatch
-                  ? 'No mechanic accepted in time. Your vehicle, problem, photos, and pin are saved — send the request again or browse nearby mechanics.'
-                  : 'This request was cancelled.'}
+                  ? request.status === 'EXPIRED'
+                    ? 'No mechanic accepted in time. You can send a new request anytime.'
+                    : 'No mechanic accepted in time. Try again or browse nearby listings.'
+                  : 'This request was cancelled. You can send a new one anytime.'}
               </Text>
-              {failedMatch && (
-                <View style={styles.terminalActions}>
-                  <Pressable
-                    style={styles.retryBtn}
-                    onPress={() =>
-                      navigation.replace('NeedHelp', needHelpParamsFromHelpRequest(request))
-                    }
-                  >
-                    <Text style={styles.retryBtnText}>Try again</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.browseBtn}
-                    onPress={() => navigation.navigate('FindMechanic')}
-                  >
-                    <Text style={styles.browseBtnText}>Browse nearby mechanics</Text>
-                  </Pressable>
-                </View>
-              )}
+              <View style={styles.terminalActions}>
+                <Pressable
+                  style={styles.retryBtn}
+                  onPress={() =>
+                    navigation.replace('NeedHelp', needHelpParamsFromHelpRequest(request))
+                  }
+                >
+                  <Text style={styles.retryBtnText}>
+                    {cancelled ? 'Request help again' : 'Try again'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={styles.browseBtn}
+                  onPress={() => navigation.navigate('FindMechanic')}
+                >
+                  <Text style={styles.browseBtnText}>Browse nearby mechanics</Text>
+                </Pressable>
+              </View>
             </View>
           )}
 
@@ -389,7 +488,7 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
             />
           )}
 
-          {!searching && !completed && (
+          {!completed && (
             <>
               <Text style={styles.summaryText}>{vehicleTitle(request)}</Text>
               <Text style={styles.remarks}>{request.remarks}</Text>
@@ -399,8 +498,6 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
           <HelpRequestPhotoGallery media={request.media} title="Problem photos" compact />
         </GrabStyleBottomSheet>
       </KeyboardAwareScrollView>
-
-      {canCancel ? <CancelHelpRequestButton fixedFooter onPress={confirmCancel} /> : null}
     </View>
   );
 }
@@ -421,21 +518,24 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 10,
   },
-  cancelHint: {
-    marginTop: 10,
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#475569',
-    backgroundColor: '#fef2f2',
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    borderRadius: 10,
-    padding: 10,
-  },
   workTime: { marginTop: 4 },
   workTimeLive: { color: '#b45309' },
   mapWrap: { height: 280, backgroundColor: '#cbd5e1' },
   mapPlaceholder: { flex: 1, position: 'relative' },
+  mapHalf: {
+    flex: 1,
+    backgroundColor: '#cbd5e1',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  detailsHalf: {
+    flex: 1,
+    backgroundColor: '#fff',
+    position: 'relative',
+  },
+  searchingHeroWrap: { flex: 1, marginTop: 4, minHeight: 0 },
+  headlineSearching: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
+  problemSearching: { fontSize: 14, color: '#64748b', marginTop: 2, marginBottom: 4 },
   personRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 10 },
   personBlock: { flex: 1, minWidth: 0 },
   personName: { fontSize: 17, fontWeight: '700', color: '#0f172a' },
