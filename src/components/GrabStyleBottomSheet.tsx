@@ -10,6 +10,8 @@ type Props = {
   immersiveBottom?: boolean;
   /** Stretch to fill remaining parent height (single-viewport screens). */
   fill?: boolean;
+  /** No overlap / radius / handle — sits flush under a map half. */
+  flush?: boolean;
 };
 
 export function GrabStyleBottomSheet({
@@ -17,6 +19,7 @@ export function GrabStyleBottomSheet({
   bottomInset = 0,
   immersiveBottom = false,
   fill = false,
+  flush = false,
 }: Props) {
   const insets = useSafeAreaInsets();
   const systemBottom = immersiveBottom
@@ -32,10 +35,11 @@ export function GrabStyleBottomSheet({
       style={[
         styles.sheet,
         fill && styles.sheetFill,
-        { paddingBottom: (fill ? 12 : 24) + systemBottom + bottomInset },
+        flush && styles.sheetFlush,
+        { paddingBottom: (fill || flush ? 12 : 24) + systemBottom + bottomInset },
       ]}
     >
-      <View style={styles.handle} />
+      {!flush ? <View style={styles.handle} /> : null}
       {children}
     </View>
   );
@@ -60,6 +64,17 @@ const styles = StyleSheet.create({
   },
   sheetFill: {
     flex: 1,
+  },
+  sheetFlush: {
+    marginTop: 0,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderWidth: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    shadowOpacity: 0,
+    elevation: 0,
+    paddingTop: 14,
   },
   handle: {
     alignSelf: 'center',

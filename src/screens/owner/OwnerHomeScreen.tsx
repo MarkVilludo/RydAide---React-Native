@@ -1,15 +1,14 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { DrawerActions, useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
   Easing,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,21 +18,107 @@ import type { OwnerStackParamList } from '../../navigation/types';
 import { pickPrimaryOwnerLiveHelpRequest } from '../../utils/helpRequestStatus';
 import { jobStatusLabelOf, vehicleTitle } from '../../utils/helpRequestUi';
 import { BrandLogo } from '../../components/BrandLogo';
-import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'OwnerHome'>;
 
-function PulseRadar() {
+const HOW_IT_WORKS = [
+  {
+    key: 'pin',
+    icon: '📍',
+    title: 'Drop your pin',
+    line: 'Share location and vehicle details.',
+  },
+  {
+    key: 'match',
+    icon: '🔧',
+    title: 'Match nearby',
+    line: 'Verified mechanics get notified fast.',
+  },
+  {
+    key: 'track',
+    icon: '📡',
+    title: 'Track live',
+    line: 'Follow the request until help arrives.',
+  },
+] as const;
+
+const HOW_IT_WORKS_INTERVAL_MS = 3200;
+
+type LayoutTokens = {
+  compact: boolean;
+  dense: boolean;
+  tall: boolean;
+  padX: number;
+  bodyPadTop: number;
+  bodyPadBottom: number;
+  logoWidth: number;
+  radarSize: number;
+  titleSize: number;
+  howLineSize: number;
+  howPadV: number;
+  ctaPadV: number;
+  ctaTitleSize: number;
+  secondaryPadV: number;
+  ctaGap: number;
+  sectionGap: number;
+  heroPadX: number;
+  heroPadTop: number;
+  heroPadBottom: number;
+  heroRadius: number;
+  showRadar: boolean;
+};
+
+function useOwnerHomeLayout(): LayoutTokens {
+  const { width, height } = useWindowDimensions();
+  const usable = Math.max(480, height);
+
+  return useMemo(() => {
+    const dense = usable < 680;
+    const compact = usable < 760;
+    const tall = usable >= 860;
+    const padX = Math.max(12, Math.min(18, Math.round(width * 0.04)));
+
+    return {
+      compact,
+      dense,
+      tall,
+      padX,
+      bodyPadTop: dense ? 4 : 8,
+      bodyPadBottom: dense ? 8 : 12,
+      logoWidth: dense ? 96 : compact ? 104 : 112,
+      radarSize: dense ? 72 : compact ? 88 : tall ? 120 : 100,
+      titleSize: dense ? 24 : compact ? 26 : tall ? 32 : 28,
+      howLineSize: dense ? 13 : 14,
+      howPadV: dense ? 10 : tall ? 14 : 12,
+      ctaPadV: dense ? 14 : compact ? 15 : 17,
+      ctaTitleSize: dense ? 16 : 17,
+      secondaryPadV: dense ? 12 : 14,
+      ctaGap: dense ? 10 : 12,
+      sectionGap: dense ? 14 : tall ? 22 : 18,
+      heroPadX: dense ? 16 : tall ? 24 : 20,
+      heroPadTop: dense ? 18 : tall ? 28 : 22,
+      heroPadBottom: dense ? 16 : tall ? 22 : 18,
+      heroRadius: dense ? 20 : 24,
+      showRadar: usable >= 600,
+    };
+  }, [usable, width]);
+}
+
+function PulseRadar({ size }: { size: number }) {
   const rings = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
+  const breath = useRef(new Animated.Value(0)).current;
+  const ringSize = Math.round(size * 0.9);
+  const outer = Math.max(14, Math.round(size * 0.2));
+  const inner = Math.max(6, Math.round(outer * 0.45));
 
   useEffect(() => {
     const animations = rings.map((value, index) =>
       Animated.loop(
         Animated.sequence([
-          Animated.delay(index * 700),
+          Animated.delay(index * 520),
           Animated.timing(value, {
             toValue: 1,
-            duration: 2400,
+            duration: 2000,
             easing: Easing.out(Easing.cubic),
             useNativeDriver: true,
           }),
@@ -46,117 +131,458 @@ function PulseRadar() {
       ),
     );
     animations.forEach((a) => a.start());
-    return () => animations.forEach((a) => a.stop());
-  }, [rings]);
+
+    const breathe = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breath, {
+          toValue: 1,
+          duration: 1400,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(breath, {
+          toValue: 0,
+          duration: 1400,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    breathe.start();
+
+    return () => {
+      animations.forEach((a) => a.stop());
+      breathe.stop();
+    };
+  }, [breath, rings]);
+
+  const coreScale = breath.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
 
   return (
-    <View style={radarStyles.wrap} pointerEvents="none">
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }} pointerEvents="none">
       {rings.map((value, i) => {
-        const scale = value.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1.35] });
-        const opacity = value.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0, 0.55, 0] });
+        const scale = value.interpolate({ inputRange: [0, 1], outputRange: [0.28, 1.28] });
+        const opacity = value.interpolate({ inputRange: [0, 0.12, 1], outputRange: [0, 0.5, 0] });
         return (
           <Animated.View
             key={i}
-            style={[radarStyles.ring, { transform: [{ scale }], opacity }]}
+            style={{
+              position: 'absolute',
+              width: ringSize,
+              height: ringSize,
+              borderRadius: ringSize / 2,
+              borderWidth: 2,
+              borderColor: '#38bdf8',
+              transform: [{ scale }],
+              opacity,
+            }}
           />
         );
       })}
-      <View style={radarStyles.dotOuter}>
-        <View style={radarStyles.dotInner} />
+      <Animated.View
+        style={{
+          width: outer,
+          height: outer,
+          borderRadius: outer / 2,
+          backgroundColor: 'rgba(56, 189, 248, 0.32)',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transform: [{ scale: coreScale }],
+        }}
+      >
+        <View
+          style={{
+            width: inner,
+            height: inner,
+            borderRadius: inner / 2,
+            backgroundColor: '#38bdf8',
+          }}
+        />
+      </Animated.View>
+    </View>
+  );
+}
+
+function HowItWorksCarousel({
+  lineSize,
+  padV,
+  dense,
+}: {
+  lineSize: number;
+  padV: number;
+  dense: boolean;
+}) {
+  const [index, setIndex] = useState(0);
+  const [autoToken, setAutoToken] = useState(0);
+  const opacity = useRef(new Animated.Value(1)).current;
+  const translateX = useRef(new Animated.Value(0)).current;
+  const iconScale = useRef(new Animated.Value(1)).current;
+  const iconPulse = useRef(new Animated.Value(0)).current;
+  const progress = useRef(new Animated.Value(0)).current;
+  const transitioning = useRef(false);
+  const active = HOW_IT_WORKS[index] ?? HOW_IT_WORKS[0]!;
+  const iconSize = dense ? 36 : 44;
+
+  const bumpIcon = useCallback(() => {
+    iconScale.setValue(0.82);
+    Animated.spring(iconScale, {
+      toValue: 1,
+      friction: 5,
+      tension: 140,
+      useNativeDriver: true,
+    }).start();
+  }, [iconScale]);
+
+  const goTo = useCallback(
+    (nextIndex: number, direction: 1 | -1 = 1) => {
+      if (transitioning.current) return;
+      const normalized = ((nextIndex % HOW_IT_WORKS.length) + HOW_IT_WORKS.length) % HOW_IT_WORKS.length;
+      if (normalized === index) return;
+
+      transitioning.current = true;
+      progress.stopAnimation();
+      progress.setValue(0);
+
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 0, duration: 140, useNativeDriver: true }),
+        Animated.timing(translateX, {
+          toValue: direction > 0 ? -18 : 18,
+          duration: 140,
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (!finished) {
+          transitioning.current = false;
+          return;
+        }
+        setIndex(normalized);
+        translateX.setValue(direction > 0 ? 18 : -18);
+        bumpIcon();
+        Animated.parallel([
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 260,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(translateX, {
+            toValue: 0,
+            duration: 260,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          transitioning.current = false;
+        });
+      });
+    },
+    [bumpIcon, index, opacity, progress, translateX],
+  );
+
+  const manualGo = useCallback(
+    (nextIndex: number, direction: 1 | -1 = 1) => {
+      setAutoToken((t) => t + 1);
+      goTo(nextIndex, direction);
+    },
+    [goTo],
+  );
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(iconPulse, {
+          toValue: 1,
+          duration: 1100,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(iconPulse, {
+          toValue: 0,
+          duration: 1100,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [iconPulse]);
+
+  useEffect(() => {
+    progress.setValue(0);
+    const fill = Animated.timing(progress, {
+      toValue: 1,
+      duration: HOW_IT_WORKS_INTERVAL_MS,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    });
+    fill.start(({ finished }) => {
+      if (finished) goTo(index + 1, 1);
+    });
+    return () => fill.stop();
+  }, [autoToken, goTo, index, progress]);
+
+  const ringScale = iconPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] });
+  const ringOpacity = iconPulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] });
+  const progressWidth = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
+
+  return (
+    <View
+      style={[
+        howStyles.box,
+        {
+          paddingTop: padV,
+          paddingBottom: dense ? 8 : 10,
+          paddingHorizontal: dense ? 10 : 12,
+        },
+      ]}
+    >
+      <View style={[howStyles.header, { marginBottom: dense ? 8 : 10 }]}>
+        <Text style={howStyles.heading}>How it works</Text>
+        <Text style={howStyles.count}>
+          {index + 1}/{HOW_IT_WORKS.length}
+        </Text>
+      </View>
+
+      <View style={[howStyles.stepper, { marginBottom: dense ? 8 : 12 }]}>
+        {HOW_IT_WORKS.map((slide, i) => {
+          const activeStep = i === index;
+          const done = i < index;
+          return (
+            <React.Fragment key={slide.key}>
+              {i > 0 ? (
+                <View style={[howStyles.connector, (done || activeStep) && howStyles.connectorOn]} />
+              ) : null}
+              <Pressable
+                onPress={() => manualGo(i, i > index ? 1 : -1)}
+                style={[
+                  howStyles.stepOrb,
+                  dense && howStyles.stepOrbDense,
+                  activeStep && howStyles.stepOrbActive,
+                  done && howStyles.stepOrbDone,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Step ${i + 1}: ${slide.title}`}
+                hitSlop={6}
+              >
+                <Text style={[howStyles.stepOrbIcon, dense && { fontSize: 12 }]}>{slide.icon}</Text>
+              </Pressable>
+            </React.Fragment>
+          );
+        })}
+      </View>
+
+      <View style={howStyles.slideRow}>
+        <Pressable
+          onPress={() => manualGo(index - 1, -1)}
+          style={({ pressed }) => [howStyles.navBtn, pressed && howStyles.navBtnPressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Previous step"
+          hitSlop={8}
+        >
+          <Text style={howStyles.navIcon}>‹</Text>
+        </Pressable>
+
+        <Animated.View
+          style={[
+            howStyles.slide,
+            {
+              minHeight: dense ? 56 : 68,
+              opacity,
+              transform: [{ translateX }],
+            },
+          ]}
+        >
+          <View style={{ width: iconSize, height: iconSize, alignItems: 'center', justifyContent: 'center' }}>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                howStyles.iconRing,
+                {
+                  width: iconSize + 10,
+                  height: iconSize + 10,
+                  borderRadius: (iconSize + 10) / 2,
+                  opacity: ringOpacity,
+                  transform: [{ scale: ringScale }],
+                },
+              ]}
+            />
+            <Animated.View
+              style={[
+                howStyles.iconOrb,
+                {
+                  width: iconSize,
+                  height: iconSize,
+                  borderRadius: iconSize / 2,
+                  transform: [{ scale: iconScale }],
+                },
+              ]}
+            >
+              <Text style={{ fontSize: dense ? 18 : 22 }}>{active.icon}</Text>
+            </Animated.View>
+          </View>
+
+          <View style={howStyles.copy}>
+            <Text style={[howStyles.title, dense && { fontSize: 14 }]} numberOfLines={1}>
+              {active.title}
+            </Text>
+            <Text
+              style={[howStyles.line, { fontSize: lineSize, lineHeight: lineSize + 4 }]}
+              numberOfLines={2}
+            >
+              {active.line}
+            </Text>
+          </View>
+        </Animated.View>
+
+        <Pressable
+          onPress={() => manualGo(index + 1, 1)}
+          style={({ pressed }) => [howStyles.navBtn, pressed && howStyles.navBtnPressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Next step"
+          hitSlop={8}
+        >
+          <Text style={howStyles.navIcon}>›</Text>
+        </Pressable>
+      </View>
+
+      <View style={howStyles.progressTrack}>
+        <Animated.View style={[howStyles.progressFill, { width: progressWidth }]} />
       </View>
     </View>
   );
 }
 
-const radarStyles = StyleSheet.create({
-  wrap: { width: 120, height: 120, alignItems: 'center', justifyContent: 'center', marginVertical: 8 },
-  ring: {
-    position: 'absolute',
-    width: 112,
-    height: 112,
-    borderRadius: 56,
-    borderWidth: 2,
-    borderColor: '#38bdf8',
+const howStyles = StyleSheet.create({
+  box: {
+    width: '100%',
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.22)',
+    overflow: 'hidden',
   },
-  dotOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(56, 189, 248, 0.35)',
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  heading: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  count: { color: '#64748b', fontSize: 11, fontWeight: '600' },
+  stepper: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dotInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#38bdf8' },
-});
-
-function FeatureChip({
-  icon,
-  label,
-  variant = 'onDark',
-}: {
-  icon: string;
-  label: string;
-  variant?: 'onDark' | 'onLight';
-}) {
-  return (
-    <View
-      style={[
-        chipStyles.chip,
-        variant === 'onLight' ? chipStyles.chipOnLight : chipStyles.chipOnDark,
-      ]}
-    >
-      <Text style={chipStyles.icon}>{icon}</Text>
-      <Text style={[chipStyles.label, variant === 'onLight' && chipStyles.labelOnLight]}>{label}</Text>
-    </View>
-  );
-}
-
-const chipStyles = StyleSheet.create({
-  chip: {
-    flex: 1,
-    minWidth: 96,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    alignItems: 'center',
+  connector: {
+    width: 22,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: 'rgba(148, 163, 184, 0.25)',
+    marginHorizontal: 4,
   },
-  chipOnDark: { backgroundColor: 'rgba(15, 23, 42, 0.35)' },
-  chipOnLight: { backgroundColor: 'rgba(15, 23, 42, 0.06)' },
-  icon: { fontSize: 18, marginBottom: 4 },
-  label: { fontSize: 11, fontWeight: '600', color: '#cbd5e1', textAlign: 'center', lineHeight: 14 },
-  labelOnLight: { color: '#334155' },
+  connectorOn: { backgroundColor: 'rgba(56, 189, 248, 0.55)' },
+  stepOrb: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(148, 163, 184, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepOrbDense: { width: 26, height: 26, borderRadius: 13 },
+  stepOrbActive: {
+    backgroundColor: 'rgba(56, 189, 248, 0.22)',
+    borderColor: '#38bdf8',
+  },
+  stepOrbDone: {
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderColor: 'rgba(56, 189, 248, 0.45)',
+  },
+  stepOrbIcon: { fontSize: 13 },
+  slideRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  navBtn: {
+    width: 28,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  navBtnPressed: { backgroundColor: 'rgba(255, 255, 255, 0.06)' },
+  navIcon: { color: '#94a3b8', fontSize: 26, fontWeight: '600', lineHeight: 28 },
+  slide: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconRing: {
+    position: 'absolute',
+    backgroundColor: '#38bdf8',
+  },
+  iconOrb: {
+    backgroundColor: 'rgba(56, 189, 248, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  copy: { flex: 1, minWidth: 0 },
+  title: { color: '#f8fafc', fontSize: 15, fontWeight: '800', marginBottom: 2 },
+  line: { color: '#cbd5e1', fontWeight: '500' },
+  progressTrack: {
+    marginTop: 10,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(148, 163, 184, 0.18)',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
+    backgroundColor: '#38bdf8',
+  },
 });
 
-function ActionCard({
-  title,
-  subtitle,
-  emoji,
-  accent,
-  onPress,
-  delay,
+function FadeIn({
+  children,
+  delay = 0,
+  style,
 }: {
-  title: string;
-  subtitle: string;
-  emoji: string;
-  accent: string;
-  onPress: () => void;
-  delay: number;
+  children: React.ReactNode;
+  delay?: number;
+  style?: object;
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(16)).current;
+  const translateY = useRef(new Animated.Value(14)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
-        duration: 450,
+        duration: 420,
         delay,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(translateY, {
         toValue: 0,
-        duration: 450,
+        duration: 420,
         delay,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
@@ -165,44 +591,20 @@ function ActionCard({
   }, [delay, opacity, translateY]);
 
   return (
-    <Animated.View style={{ flex: 1, opacity, transform: [{ translateY }] }}>
-      <Pressable
-        style={({ pressed }) => [actionStyles.card, { borderLeftColor: accent }, pressed && actionStyles.cardPressed]}
-        onPress={onPress}
-      >
-        <Text style={actionStyles.emoji}>{emoji}</Text>
-        <Text style={actionStyles.title}>{title}</Text>
-        <Text style={actionStyles.subtitle}>{subtitle}</Text>
-      </Pressable>
+    <Animated.View style={[{ opacity, transform: [{ translateY }] }, style]}>
+      {children}
     </Animated.View>
   );
 }
-
-const actionStyles = StyleSheet.create({
-  card: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderLeftWidth: 4,
-    minHeight: 118,
-  },
-  cardPressed: { opacity: 0.92, transform: [{ scale: 0.98 }] },
-  emoji: { fontSize: 28, marginBottom: 8 },
-  title: { fontSize: 16, fontWeight: '700', color: '#0f172a', marginBottom: 4 },
-  subtitle: { fontSize: 13, color: '#64748b', lineHeight: 18 },
-});
 
 export function OwnerHomeScreen({ navigation }: Props) {
   const { config } = useAppConfig();
   const emergencyOn = config?.features?.emergency_assistance ?? false;
   const [activeRequest, setActiveRequest] = useState<HelpRequest | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const resumePrompted = useRef(false);
-  const heroOpacity = useRef(new Animated.Value(0)).current;
-  const heroY = useRef(new Animated.Value(20)).current;
+  const ctaPulse = useRef(new Animated.Value(1)).current;
+  const hasActiveBanner = Boolean(emergencyOn && activeRequest);
+  const layout = useOwnerHomeLayout();
 
   const openActiveRequest = useCallback(
     (request: HelpRequest) => {
@@ -211,8 +613,7 @@ export function OwnerHomeScreen({ navigation }: Props) {
     [navigation],
   );
 
-  const load = useCallback(async (showRefresh = false) => {
-    if (showRefresh) setRefreshing(true);
+  const load = useCallback(async () => {
     try {
       const live = emergencyOn
         ? pickPrimaryOwnerLiveHelpRequest(await fetchHelpRequests())
@@ -220,8 +621,6 @@ export function OwnerHomeScreen({ navigation }: Props) {
       setActiveRequest(live);
     } catch {
       setActiveRequest(null);
-    } finally {
-      if (showRefresh) setRefreshing(false);
     }
   }, [emergencyOn]);
 
@@ -241,27 +640,33 @@ export function OwnerHomeScreen({ navigation }: Props) {
   }, [activeRequest, emergencyOn, openActiveRequest]);
 
   useEffect(() => {
-    heroOpacity.setValue(0);
-    heroY.setValue(20);
-    Animated.parallel([
-      Animated.timing(heroOpacity, {
-        toValue: 1,
-        duration: 550,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(heroY, {
-        toValue: 0,
-        duration: 550,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [heroOpacity, heroY]);
+    if (!emergencyOn || hasActiveBanner) {
+      ctaPulse.setValue(1);
+      return;
+    }
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(ctaPulse, {
+          toValue: 1.025,
+          duration: 1100,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(ctaPulse, {
+          toValue: 1,
+          duration: 1100,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [ctaPulse, emergencyOn, hasActiveBanner]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingHorizontal: layout.padX }]}>
         <Pressable
           style={styles.menuBtn}
           onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
@@ -270,154 +675,164 @@ export function OwnerHomeScreen({ navigation }: Props) {
         >
           <Text style={styles.menuIcon}>☰</Text>
         </Pressable>
-        <BrandLogo width={108} />
+        <BrandLogo width={layout.logoWidth} />
         <View style={styles.topBarSpacer} />
       </View>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        alwaysBounceVertical={Platform.OS === 'ios'}
-        refreshControl={
-          <RydAidRefreshControl refreshing={refreshing} onRefresh={() => void load(true)} title="Pull to refresh" />
-        }
+
+      <View
+        style={[
+          styles.body,
+          {
+            paddingHorizontal: layout.padX,
+            paddingBottom: layout.bodyPadBottom,
+            paddingTop: layout.bodyPadTop,
+          },
+        ]}
       >
-        {emergencyOn && activeRequest ? (
-          <Pressable
-            style={styles.activeRow}
-            onPress={() => openActiveRequest(activeRequest)}
-            accessibilityRole="button"
-            accessibilityLabel="Open active help request"
-          >
-            <Text style={styles.activeLabel} numberOfLines={2}>
-              Active help · {vehicleTitle(activeRequest)} · {jobStatusLabelOf(activeRequest)}
-            </Text>
-            <Text style={styles.activeGo}>Open →</Text>
-          </Pressable>
-        ) : null}
-
-        {!emergencyOn ? (
-          <>
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Find nearby</Text>
-              <Text style={styles.sectionSub}>
-                Browse verified mechanics and repair shops by location and search radius.
-              </Text>
-              <View style={styles.actionRow}>
-                <ActionCard
-                  emoji="🔧"
-                  title="Mechanics"
-                  subtitle="Mobile & on-call pros around you"
-                  accent="#0284c7"
-                  delay={120}
-                  onPress={() => navigation.navigate('FindMechanic')}
-                />
-                <ActionCard
-                  emoji="🏪"
-                  title="Shops"
-                  subtitle="Verified garages & service centers"
-                  accent="#7c3aed"
-                  delay={200}
-                  onPress={() => navigation.navigate('FindShop')}
-                />
-              </View>
-            </View>
-
-            {config?.rollout.area_label ? (
-              <View style={styles.rolloutBanner}>
-                <Text style={styles.rolloutTitle}>Growing in {config.rollout.area_label}</Text>
-                <Text style={styles.rolloutBody}>
-                  Search any location — results show verified providers within your chosen radius only.
-                </Text>
-              </View>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <Animated.View
-              style={[styles.hero, { opacity: heroOpacity, transform: [{ translateY: heroY }] }]}
+        {emergencyOn ? (
+          <FadeIn delay={80} style={styles.heroGrow}>
+            <View
+              style={[
+                styles.hero,
+                {
+                  paddingHorizontal: layout.heroPadX,
+                  paddingTop: layout.heroPadTop,
+                  paddingBottom: layout.heroPadBottom,
+                  borderRadius: layout.heroRadius,
+                },
+              ]}
             >
-              <View style={styles.heroTopRow}>
-                <View style={styles.badge}>
-                  <View style={styles.badgeDot} />
-                  <Text style={styles.badgeText}>Roadside & emergency ready</Text>
-                </View>
-              </View>
-
-              <Text style={styles.heroTitle}>Help when you're stuck</Text>
-              <Text style={styles.heroSub}>
-                Tell us where you are and what happened — we match you with verified mechanics who can respond fast.
-              </Text>
-
-              <Pressable
-                style={({ pressed }) => [styles.primaryHelpCta, pressed && styles.primaryHelpCtaPressed]}
-                onPress={() => navigation.navigate('NeedHelp', { emergency: true })}
-                accessibilityRole="button"
-                accessibilityLabel="Get help now"
-              >
-                <Text style={styles.primaryHelpCtaTitle}>Get help now</Text>
-                <Text style={styles.primaryHelpCtaSub}>Roadside & emergency dispatch to mechanics near you</Text>
-              </Pressable>
-
-              <Pressable
-                style={({ pressed }) => [styles.secondaryHelpCta, pressed && styles.secondaryHelpCtaPressed]}
-                onPress={() => navigation.navigate('NeedHelp', { emergency: false })}
-                accessibilityRole="button"
-                accessibilityLabel="Book a service"
-              >
-                <Text style={styles.secondaryHelpCtaText}>Book a service</Text>
-              </Pressable>
-
-              <View style={styles.heroVisualRow}>
-                <PulseRadar />
-                <View style={styles.heroBullets}>
-                  <Text style={styles.bullet}>• Share your location & vehicle details</Text>
-                  <Text style={styles.bullet}>• Match with providers in your search radius</Text>
-                  <Text style={styles.bullet}>• Track your request in the app</Text>
-                </View>
-              </View>
-
-              <View style={styles.chipRow}>
-                <FeatureChip icon="📍" label="Near you" />
-                <FeatureChip icon="✓" label="Verified" />
-                <FeatureChip icon="⚡" label="Fast dispatch" />
-              </View>
-            </Animated.View>
-
-            {config?.rollout.area_label ? (
-              <View style={styles.rolloutBanner}>
-                <Text style={styles.rolloutTitle}>Growing in {config.rollout.area_label}</Text>
-                <Text style={styles.rolloutBody}>
-                  Search any location — results show verified providers within your chosen radius only.
+              <View style={[styles.heroTop, { gap: layout.dense ? 8 : 12 }]}>
+                {layout.showRadar ? <PulseRadar size={layout.radarSize} /> : null}
+                <Text style={[styles.heroTitle, { fontSize: layout.titleSize }]}>
+                  {hasActiveBanner ? 'Help in progress' : 'Need help?'}
                 </Text>
               </View>
-            ) : null}
 
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Or browse the directory</Text>
-              <View style={styles.actionRow}>
-                <ActionCard
-                  emoji="🔧"
-                  title="Mechanics"
-                  subtitle="Mobile & on-call pros around you"
-                  accent="#0284c7"
-                  delay={280}
-                  onPress={() => navigation.navigate('FindMechanic')}
-                />
-                <ActionCard
-                  emoji="🏪"
-                  title="Shops"
-                  subtitle="Verified garages & service centers"
-                  accent="#7c3aed"
-                  delay={380}
-                  onPress={() => navigation.navigate('FindShop')}
-                />
+              <View style={[styles.heroMid, { marginVertical: layout.sectionGap }]}>
+                {hasActiveBanner && activeRequest ? (
+                  <Pressable
+                    style={[styles.activeCard, { paddingVertical: layout.howPadV + 4 }]}
+                    onPress={() => openActiveRequest(activeRequest)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open active help request"
+                  >
+                    <View style={styles.activeCardHeader}>
+                      <View style={styles.activeLiveDot} />
+                      <Text style={styles.activeCardEyebrow}>Active request</Text>
+                    </View>
+                    <Text style={styles.activeCardVehicle} numberOfLines={1}>
+                      {vehicleTitle(activeRequest)}
+                    </Text>
+                    <Text style={styles.activeCardStatus} numberOfLines={1}>
+                      {jobStatusLabelOf(activeRequest)}
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <HowItWorksCarousel
+                    lineSize={layout.howLineSize}
+                    padV={layout.howPadV}
+                    dense={layout.dense}
+                  />
+                )}
+              </View>
+
+              <View style={[styles.ctaBlock, { gap: layout.ctaGap }]}>
+                {!hasActiveBanner && config?.rollout.area_label && !layout.dense ? (
+                  <Text style={styles.rolloutLineOnDark}>Live in {config.rollout.area_label}</Text>
+                ) : null}
+
+                {hasActiveBanner && activeRequest ? (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.primaryHelpCta,
+                      styles.continueCta,
+                      { paddingVertical: layout.ctaPadV },
+                      pressed && styles.primaryHelpCtaPressed,
+                    ]}
+                    onPress={() => openActiveRequest(activeRequest)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue active help request"
+                  >
+                    <Text style={[styles.primaryHelpCtaTitle, { fontSize: layout.ctaTitleSize }]}>
+                      Continue request
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Animated.View style={{ transform: [{ scale: ctaPulse }] }}>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.primaryHelpCta,
+                        { paddingVertical: layout.ctaPadV },
+                        pressed && styles.primaryHelpCtaPressed,
+                      ]}
+                      onPress={() => navigation.navigate('NeedHelp', { emergency: true })}
+                      accessibilityRole="button"
+                      accessibilityLabel="Get help now"
+                    >
+                      <Text style={[styles.primaryHelpCtaTitle, { fontSize: layout.ctaTitleSize }]}>
+                        Get help now
+                      </Text>
+                    </Pressable>
+                  </Animated.View>
+                )}
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.secondaryHelpCta,
+                    { paddingVertical: layout.secondaryPadV },
+                    pressed && styles.secondaryHelpCtaPressed,
+                  ]}
+                  onPress={() => navigation.navigate('NeedHelp', { emergency: false })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Book a service"
+                >
+                  <Text style={styles.secondaryHelpCtaText}>Book a service</Text>
+                </Pressable>
               </View>
             </View>
-          </>
+          </FadeIn>
+        ) : (
+          <FadeIn delay={80} style={styles.heroQuiet}>
+            <View style={styles.quietInner}>
+              <Text style={[styles.quietTitle, { fontSize: layout.titleSize + 2 }]}>Find nearby</Text>
+              {config?.rollout.area_label ? (
+                <Text style={styles.quietArea}>{config.rollout.area_label}</Text>
+              ) : null}
+              <View style={[styles.quietActions, { marginTop: layout.sectionGap + 8 }]}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.quietBtn,
+                    styles.quietBtnPrimary,
+                    { paddingVertical: layout.ctaPadV },
+                    pressed && styles.quietBtnPressed,
+                  ]}
+                  onPress={() => navigation.navigate('FindMechanic')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Find mechanics"
+                >
+                  <Text style={styles.quietBtnEmoji}>🔧</Text>
+                  <Text style={[styles.quietBtnText, styles.quietBtnTextOnDark]}>Mechanics</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.quietBtn,
+                    styles.quietBtnSecondary,
+                    { paddingVertical: layout.secondaryPadV },
+                    pressed && styles.quietBtnPressed,
+                  ]}
+                  onPress={() => navigation.navigate('FindShop')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Find shops"
+                >
+                  <Text style={styles.quietBtnEmoji}>🏪</Text>
+                  <Text style={styles.quietBtnText}>Shops</Text>
+                </Pressable>
+              </View>
+            </View>
+          </FadeIn>
         )}
-
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -428,92 +843,149 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
     paddingBottom: 4,
   },
   menuBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   topBarSpacer: { width: 44 },
-  menuBtnPlaceholder: { width: 44 },
   menuIcon: { fontSize: 24, color: '#0f172a' },
-  scroll: { flex: 1 },
-  scrollContent: { padding: 20, paddingTop: 8, paddingBottom: 32 },
-  sectionSub: { fontSize: 14, color: '#64748b', lineHeight: 20, marginBottom: 12, marginTop: -4 },
-  primaryHelpCta: {
-    marginTop: 16,
-    backgroundColor: '#0284c7',
+  body: {
+    flex: 1,
+    minHeight: 0,
+  },
+  activeCard: {
+    width: '100%',
+    backgroundColor: 'rgba(2, 132, 199, 0.18)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  activeCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  activeLiveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#4ade80',
+  },
+  activeCardEyebrow: {
+    color: '#7dd3fc',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  activeCardVehicle: {
+    color: '#f8fafc',
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  activeCardStatus: {
+    color: '#cbd5e1',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  heroGrow: { flex: 1, minHeight: 0 },
+  hero: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+    overflow: 'hidden',
+    minHeight: 0,
+  },
+  heroTop: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexShrink: 0,
+    width: '100%',
+  },
+  heroMid: {
+    flex: 1,
+    minHeight: 0,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  heroQuiet: {
+    flex: 1,
+    minHeight: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quietInner: {
+    width: '100%',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  quietTitle: {
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: -0.6,
+    textAlign: 'center',
+  },
+  quietArea: {
+    marginTop: 10,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+    textAlign: 'center',
+  },
+  quietActions: {
+    width: '100%',
+    maxWidth: 400,
+    gap: 12,
+  },
+  quietBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
     borderRadius: 14,
-    paddingVertical: 16,
     paddingHorizontal: 18,
   },
-  primaryHelpCtaPressed: { opacity: 0.92 },
-  primaryHelpCtaTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
-  primaryHelpCtaSub: { color: '#e0f2fe', fontSize: 13, marginTop: 6, lineHeight: 18 },
+  quietBtnPrimary: { backgroundColor: '#0284c7' },
+  quietBtnSecondary: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0' },
+  quietBtnPressed: { opacity: 0.9 },
+  quietBtnEmoji: { fontSize: 20 },
+  quietBtnText: { fontSize: 16, fontWeight: '700', color: '#0f172a' },
+  quietBtnTextOnDark: { color: '#fff' },
+  heroTitle: {
+    color: '#f8fafc',
+    fontWeight: '800',
+    letterSpacing: -0.6,
+    textAlign: 'center',
+  },
+  ctaBlock: { width: '100%', flexShrink: 0 },
+  rolloutLineOnDark: {
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#94a3b8',
+    letterSpacing: 0.2,
+    marginBottom: 4,
+  },
+  primaryHelpCta: {
+    backgroundColor: '#0284c7',
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+  },
+  continueCta: { backgroundColor: '#0ea5e9' },
+  primaryHelpCtaPressed: { opacity: 0.9 },
+  primaryHelpCtaTitle: { color: '#fff', fontWeight: '800' },
   secondaryHelpCta: {
-    marginTop: 10,
-    paddingVertical: 14,
     paddingHorizontal: 18,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.45)',
+    borderColor: 'rgba(148, 163, 184, 0.4)',
     alignItems: 'center',
   },
   secondaryHelpCtaPressed: { backgroundColor: 'rgba(255, 255, 255, 0.06)' },
   secondaryHelpCtaText: { color: '#e0f2fe', fontWeight: '700', fontSize: 15 },
-  activeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0284c7',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    marginBottom: 16,
-    gap: 10,
-  },
-  activeLabel: { flex: 1, color: '#fff', fontWeight: '600', fontSize: 14, lineHeight: 19 },
-  activeGo: { color: '#e0f2fe', fontWeight: '800', fontSize: 14 },
-  hero: {
-    backgroundColor: '#0f172a',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 20,
-    overflow: 'hidden',
-  },
-  heroTopRow: { flexDirection: 'row', marginBottom: 12 },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    gap: 6,
-  },
-  badgeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e' },
-  badgeText: { color: '#e0f2fe', fontSize: 12, fontWeight: '600' },
-  heroTitle: { color: '#f8fafc', fontSize: 26, fontWeight: '800', letterSpacing: -0.5, marginBottom: 8 },
-  heroSub: { color: '#94a3b8', fontSize: 14, lineHeight: 21, marginBottom: 4 },
-  heroVisualRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
-  heroBullets: { flex: 1, paddingRight: 4 },
-  bullet: { color: '#cbd5e1', fontSize: 12, lineHeight: 18, marginBottom: 4 },
-  chipRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  rolloutBanner: {
-    backgroundColor: '#e0f2fe',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#bae6fd',
-  },
-  rolloutTitle: { fontWeight: '700', color: '#0369a1', marginBottom: 4 },
-  rolloutBody: { color: '#0c4a6e', fontSize: 13, lineHeight: 19 },
-  section: { marginBottom: 20 },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#64748b',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 10,
-  },
-  actionRow: { flexDirection: 'row', gap: 10 },
 });

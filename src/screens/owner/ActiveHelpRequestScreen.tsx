@@ -30,7 +30,6 @@ import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGaller
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { HelpJourneyTimeline } from '../../components/HelpJourneyTimeline';
 import { HelpRequestSearchingHero } from '../../components/HelpRequestSearchingHero';
-import { MapSearchOverlay } from '../../components/MapSearchOverlay';
 import { JobWorkDurationText } from '../../components/JobWorkDurationText';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import type { OwnerStackParamList } from '../../navigation/types';
@@ -370,19 +369,10 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
             fill
             showMyLocation={false}
           />
-          <MapSearchOverlay
-            visible
-            message="Looking nearby"
-            submessage={
-              request.search_progress?.mechanics_notified_total
-                ? `${request.search_progress.mechanics_notified_total} notified`
-                : undefined
-            }
-          />
         </View>
 
         <View style={styles.detailsHalf}>
-          <GrabStyleBottomSheet fill bottomInset={canCancel ? 72 : 0}>
+          <GrabStyleBottomSheet fill flush bottomInset={canCancel ? 72 : 0}>
             <Text style={styles.headlineSearching}>Finding a mechanic</Text>
             {request.problem_category?.name ? (
               <Text style={styles.problemSearching} numberOfLines={1}>
@@ -527,11 +517,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#cbd5e1',
     position: 'relative',
     overflow: 'hidden',
+    marginBottom: 0,
   },
   detailsHalf: {
     flex: 1,
     backgroundColor: '#fff',
     position: 'relative',
+    marginTop: 0,
   },
   searchingHeroWrap: { flex: 1, marginTop: 4, minHeight: 0 },
   headlineSearching: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
