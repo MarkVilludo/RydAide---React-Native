@@ -1,7 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Linking,
   Modal,
@@ -11,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { getApiErrorMessage } from '../../api/client';
+import { CenteredLoading } from '../../components/CenteredLoading';
 import {
   cancelHelpRequest,
   fetchHelpRequest,
@@ -124,11 +124,10 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
 
   if (!request) {
     return (
-      <View style={styles.loadingWrap}>
-        <ActivityIndicator size="large" color="#0284c7" />
-        <Text style={styles.loadingText}>Loading your request…</Text>
-        {connectionLost && <Text style={styles.connectionLost}>Connection lost</Text>}
-      </View>
+      <CenteredLoading
+        message={connectionLost ? 'Connection lost — retrying…' : 'Loading your request…'}
+        style={connectionLost ? styles.loadingError : undefined}
+      />
     );
   }
 
@@ -408,9 +407,7 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#e2e8f0' },
-  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
-  loadingText: { color: '#64748b' },
-  connectionLost: { color: '#dc2626' },
+  loadingError: { backgroundColor: '#fef2f2' },
   mapArea: { flex: 1, backgroundColor: '#cbd5e1' },
   sheetHeadline: { fontSize: 18, fontWeight: '800', color: '#0284c7', marginTop: 8 },
   plansChangeHint: {

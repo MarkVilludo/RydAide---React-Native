@@ -1,7 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Linking,
   Pressable,
   ScrollView,
@@ -12,6 +11,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import type { HelpRequest } from '../../api/helpRequests';
 import { fetchMechanicHelpRequest } from '../../api/mechanicHelp';
+import { CenteredLoading } from '../../components/CenteredLoading';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { MechanicCustomerDistance } from '../../components/MechanicCustomerDistance';
 import { MechanicDeclineOfferModal } from '../../components/MechanicDeclineOfferModal';
@@ -83,7 +83,7 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
   };
 
   if (loading && !request) {
-    return <ActivityIndicator style={{ marginTop: 40 }} />;
+    return <CenteredLoading message="Loading request…" />;
   }
 
   if (unavailable) {

@@ -36,6 +36,9 @@ const config = {
   android: {
     icon: './assets/icon.png',
     package: androidPackage,
+    // Google Play requires a unique, increasing integer per upload. EAS remote
+    // + autoIncrement on store/internal profiles bumps this; keep a floor here.
+    versionCode: 2,
     softwareKeyboardLayoutMode: 'resize',
     usesCleartextTraffic: true,
     adaptiveIcon: {
@@ -66,9 +69,16 @@ const config = {
       {
         android: {
           // SDK 58 release APKs: R8 strips WorkManager/Room no-arg constructors (expo-notifications).
+          // Incomplete keeps still crash right after login when push registration starts.
           extraProguardRules: [
-            '-keep class * extends androidx.room.RoomDatabase { <init>(); }',
-            '-keep class * extends androidx.work.InputMerger { <init>(); }',
+            '-keep class * extends androidx.room.RoomDatabase { *; }',
+            '-keep class * extends androidx.work.Worker { *; }',
+            '-keep class * extends androidx.work.InputMerger { *; }',
+            '-keep class * extends androidx.work.ListenableWorker { *; }',
+            '-keep class androidx.work.** { *; }',
+            '-keep class androidx.room.** { *; }',
+            '-dontwarn androidx.work.**',
+            '-dontwarn androidx.room.**',
           ].join('\n'),
         },
       },
@@ -96,10 +106,26 @@ const config = {
 };
 
 if (googleMapsApiKey) {
-  config.ios.config = { googleMapsApiKey };
-  config.android.config = {
-    googleMaps: { apiKey: googleMapsApiKey },
+  // Writes com.google.android.geo.API_KEY into AndroidManifest (required by MapView / expo-maps).
+  config.ios = {
+    ...config.ios,
+    config: { ...(config.ios.config ?? {}), googleMapsApiKey },
   };
+  config.android = {
+    ...config.android,
+    config: {
+      ...(config.android.config ?? {}),
+      googleMaps: { apiKey: googleMapsApiKey },
+    },
+  };
+  // react-native-maps Expo plugin also injects the same meta-data (needed on SDK 53+).
+  config.plugins.push([
+    'react-native-maps',
+    {
+      androidGoogleMapsApiKey: googleMapsApiKey,
+      iosGoogleMapsApiKey: googleMapsApiKey,
+    },
+  ]);
 }
 
 export default config;

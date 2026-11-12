@@ -19,23 +19,23 @@ export function OwnerActiveJobRecovery() {
     }
 
     const recover = async (navigateToActive: boolean) => {
-      const pending = consumePendingNotificationNavigation();
-      if (pending && pending.role === 'owner') {
-        await navigateFromNotification(user, pending);
-        return;
-      }
-
-      if (!navigateToActive) {
-        return;
-      }
-
       try {
+        const pending = consumePendingNotificationNavigation();
+        if (pending && pending.role === 'owner') {
+          await navigateFromNotification(user, pending);
+          return;
+        }
+
+        if (!navigateToActive) {
+          return;
+        }
+
         const active = await fetchActiveHelpRequest();
         if (active && isOwnerLiveHelpRequest(active)) {
           navigateOwnerStackScreen('ActiveHelpRequest', { helpRequestId: active.id });
         }
       } catch {
-        /* stay on current screen */
+        /* stay on current screen — never crash the session on recovery */
       }
     };
 

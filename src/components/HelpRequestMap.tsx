@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
+import { StyleSheet, Text, View } from 'react-native';
+import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
 import { MAP_MARKER_IMAGES } from '../constants/mapMarkerAssets';
 import { useMapMarkers } from '../hooks/useMapMarkers';
 import { formatMapDistanceKm, haversineDistanceKm } from '../utils/distanceKm';
 import { layoutMechanicMarkerForMap } from '../utils/mapMarkerOverlap';
+import { androidMapsProvider } from '../utils/mapsProvider';
 import { statusBarTopInset } from '../utils/screenInsets';
 import {
   buildMapRegion,
@@ -195,7 +196,7 @@ export function HelpRequestMap({
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+        provider={androidMapsProvider()}
         initialRegion={fallbackRegion}
         onRegionChangeComplete={onRegionChangeComplete}
         showsUserLocation={showMyLocation}

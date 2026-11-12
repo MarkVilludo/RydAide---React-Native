@@ -2,7 +2,6 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Linking,
   Modal,
@@ -16,6 +15,7 @@ import { getApiErrorMessage } from '../../api/client';
 import type { HelpRequest } from '../../api/helpRequests';
 import { fetchMechanicHelpRequest, updateJobStatus } from '../../api/mechanicHelp';
 import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSummary';
+import { CenteredLoading } from '../../components/CenteredLoading';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { JobLifecycleStepper } from '../../components/JobLifecycleStepper';
 import { JobStatusConfirmSheet } from '../../components/JobStatusConfirmSheet';
@@ -92,7 +92,7 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
   const pendingStatusRef = useRef<string | null>(null);
 
   const { config } = useAppConfig();
-  const emergencyOn = config?.features.emergency_assistance ?? false;
+  const emergencyOn = config?.features?.emergency_assistance ?? false;
 
   const { origin } = useMechanicDistanceOrigin('live');
 
@@ -274,7 +274,7 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
   };
 
   if (loading && !request) {
-    return <ActivityIndicator style={{ marginTop: 40 }} />;
+    return <CenteredLoading message="Loading active job…" />;
   }
 
   if (!request) {

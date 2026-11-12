@@ -6,6 +6,7 @@ import type { MechanicStackParamList } from '../../navigation/types';
 import { getApiErrorMessage } from '../../api/client';
 import { acceptHelpRequest, declineHelpRequest, fetchMechanicHelpQueues } from '../../api/mechanicHelp';
 import type { HelpRequest } from '../../api/helpRequests';
+import { CenteredLoading } from '../../components/CenteredLoading';
 import { MechanicDeclineOfferModal } from '../../components/MechanicDeclineOfferModal';
 import { useMechanicLiveLocation } from '../../context/MechanicLocationContext';
 import { formatDistanceKm, resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
@@ -90,7 +91,7 @@ export function MechanicIncomingScreen({ navigation }: Props) {
   };
 
   if (loading && incoming.length === 0) {
-    return <ActivityIndicator style={{ marginTop: 40 }} />;
+    return <CenteredLoading message="Loading incoming requests…" />;
   }
 
   return (

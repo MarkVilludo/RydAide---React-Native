@@ -175,7 +175,16 @@ export function MechanicWorkLocationScreen({ navigation }: Props) {
       });
       applySavedMechanicLocation(updated.latitude!, updated.longitude!, true);
       Alert.alert('Location saved', 'Your service pin is updated for matching and incoming requests.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
+        {
+          text: 'OK',
+          onPress: () => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('MechanicHome');
+            }
+          },
+        },
       ]);
     } catch (error) {
       Alert.alert('Could not save', getApiErrorMessage(error));

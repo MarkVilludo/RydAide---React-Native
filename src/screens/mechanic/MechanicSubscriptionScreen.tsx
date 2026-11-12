@@ -18,11 +18,13 @@ import {
   type MechanicSubscriptionDetails,
   type PaymentHistoryItem,
 } from '../../api/mechanicSubscription';
+import { CenteredLoading } from '../../components/CenteredLoading';
 import { MechanicCreditsCard } from '../../components/MechanicCreditsCard';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { getApiErrorMessage } from '../../api/client';
 import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
+import { logger } from '../../utils/logger';
 import {
   isStoreBillingNativeAvailable,
   mechanicProMonthlyProductId,
@@ -123,6 +125,7 @@ export function MechanicSubscriptionScreen(_props: Props) {
       await load(true);
       Alert.alert('Mechanic Pro (dev)', 'Simulated payment applied. You can accept HELP requests again.');
     } catch (e) {
+      logger.error('Subscription', 'Dev simulate purchase failed', e);
       Alert.alert('Simulation failed', getApiErrorMessage(e));
     } finally {
       setPurchaseBusy(false);
@@ -147,6 +150,7 @@ export function MechanicSubscriptionScreen(_props: Props) {
       await load(true);
       Alert.alert('Mechanic Pro', 'Your subscription is being activated. Pull to refresh if status does not update yet.');
     } catch (e) {
+      logger.error('Subscription', 'Store purchase failed', e);
       Alert.alert('Purchase failed', getApiErrorMessage(e));
     } finally {
       setPurchaseBusy(false);
@@ -182,6 +186,7 @@ export function MechanicSubscriptionScreen(_props: Props) {
               await cancelMechanicSubscription();
               await load(true);
             } catch (e) {
+              logger.error('Subscription', 'Cancel subscription failed', e);
               Alert.alert('Could not update', getApiErrorMessage(e));
             }
           },
@@ -191,11 +196,7 @@ export function MechanicSubscriptionScreen(_props: Props) {
   };
 
   if (loading && !dashboard) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
+    return <CenteredLoading message="Loading subscription…" />;
   }
 
   return (
@@ -368,7 +369,6 @@ export function MechanicSubscriptionScreen(_props: Props) {
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: '#f8fafc' },
   content: { padding: 24, paddingBottom: 40 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 26, fontWeight: '800', color: '#0f172a' },
   subtitle: { fontSize: 16, fontWeight: '600', color: '#0284c7', marginTop: 6, marginBottom: 16 },
   card: {

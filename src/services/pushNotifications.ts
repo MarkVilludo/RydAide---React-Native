@@ -36,24 +36,28 @@ export async function requestPushPermissions(): Promise<boolean> {
     return false;
   }
 
-  ensureNotificationHandlerConfigured();
-  const Notifications = getExpoNotificationsModule();
-  if (!Notifications) {
+  try {
+    ensureNotificationHandlerConfigured();
+    const Notifications = getExpoNotificationsModule();
+    if (!Notifications) {
+      return false;
+    }
+
+    await ensureAndroidChannel();
+
+    const current = await Notifications.getPermissionsAsync();
+    if (current.status === 'granted') {
+      return true;
+    }
+
+    const requested = await Notifications.requestPermissionsAsync({
+      ios: { allowAlert: true, allowBadge: true, allowSound: true },
+    });
+
+    return requested.status === 'granted';
+  } catch {
     return false;
   }
-
-  await ensureAndroidChannel();
-
-  const current = await Notifications.getPermissionsAsync();
-  if (current.status === 'granted') {
-    return true;
-  }
-
-  const requested = await Notifications.requestPermissionsAsync({
-    ios: { allowAlert: true, allowBadge: true, allowSound: true },
-  });
-
-  return requested.status === 'granted';
 }
 
 export async function getExpoPushToken(): Promise<string | null> {

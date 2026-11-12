@@ -42,8 +42,8 @@ function DrawerRow({
 export function MechanicDrawerContent({ navigation }: DrawerContentComponentProps) {
   const { user, signOut } = useAuth();
   const { config } = useAppConfig();
-  const emergencyOn = config?.features.emergency_assistance ?? false;
-  const subscriptionsOn = config?.features.mechanic_subscriptions ?? false;
+  const emergencyOn = config?.features?.emergency_assistance ?? false;
+  const subscriptionsOn = config?.features?.mechanic_subscriptions ?? false;
 
   const goTo = (screen: StackRoute, params?: MechanicStackParamList[StackRoute]) => {
     navigation.navigate('MechanicMain', params !== undefined ? { screen, params } : { screen });

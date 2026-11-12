@@ -75,8 +75,8 @@ function PulseOnlineDot() {
 export function MechanicHomeScreen({ navigation }: Props) {
   const { user } = useAuth();
   const { config } = useAppConfig();
-  const emergencyOn = config?.features.emergency_assistance ?? false;
-  const subscriptionsOn = config?.features.mechanic_subscriptions ?? false;
+  const emergencyOn = config?.features?.emergency_assistance ?? false;
+  const subscriptionsOn = config?.features?.mechanic_subscriptions ?? false;
   const proMonthlyPrice = config?.mechanic_monetization?.pro_monthly_price_php ?? 99;
   const proYearlyPrice = config?.mechanic_monetization?.pro_yearly_price_php;
 

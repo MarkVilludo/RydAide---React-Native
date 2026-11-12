@@ -104,7 +104,7 @@ export function NeedHelpScreen({ navigation, route }: Props) {
   const [mapRecenterKey, setMapRecenterKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEnsureNearbyProviders(lat, lng, config?.features.dynamic_nearby_seed === true);
+  useEnsureNearbyProviders(lat, lng, config?.features?.dynamic_nearby_seed === true);
 
   const reloadCategories = React.useCallback(() => {
     setCategoriesLoading(true);

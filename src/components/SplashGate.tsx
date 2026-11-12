@@ -1,9 +1,8 @@
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { Dimensions, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
-  interpolate,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -20,13 +19,13 @@ type Props = {
   children: React.ReactNode;
 };
 
-const EXIT_MS = 520;
-const EXIT_EASE = Easing.bezierFn(0.33, 0, 0.2, 1);
-/** Ensures branded splash animation is visible on fast reload / cached session (ms). */
-const MIN_SPLASH_VISIBLE_MS = 900;
+const EXIT_MS = 360;
+const EXIT_EASE = Easing.out(Easing.cubic);
+const MIN_SPLASH_VISIBLE_MS = 700;
+const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get('window');
 
 /**
- * Keeps the native splash visible until auth bootstrap finishes, then eases into the app.
+ * Keeps the native splash visible until auth bootstrap finishes, then fades into the app.
  */
 export function SplashGate({ children }: Props) {
   const { isLoading } = useAuth();
@@ -52,7 +51,6 @@ export function SplashGate({ children }: Props) {
       if (cancelled) {
         return;
       }
-      exitProgress.value = 0;
       exitProgress.value = withTiming(1, { duration: EXIT_MS, easing: EXIT_EASE }, (finished) => {
         if (finished) {
           runOnJS(setShowOverlay)(false);
@@ -72,30 +70,37 @@ export function SplashGate({ children }: Props) {
     };
   }, [isLoading, exitProgress]);
 
-  const overlayStyle = useAnimatedStyle(() => {
-    const p = exitProgress.value;
-    return {
-      opacity: interpolate(p, [0, 1], [1, 0]),
-      transform: [{ scale: interpolate(p, [0, 1], [1, 1.04]) }],
-    };
-  });
+  const overlayStyle = useAnimatedStyle(() => ({
+    opacity: 1 - exitProgress.value,
+  }));
 
   return (
-    <>
+    <View style={styles.root}>
       {children}
       {showOverlay ? (
-        <Animated.View style={[styles.overlay, overlayStyle]} pointerEvents={isLoading ? 'auto' : 'none'}>
+        <Animated.View
+          style={[styles.overlay, overlayStyle]}
+          pointerEvents={isLoading ? 'auto' : 'none'}
+        >
           <AppBootstrapSplash />
         </Animated.View>
       ) : null}
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: WINDOW_WIDTH,
+    height: WINDOW_HEIGHT,
     zIndex: 9999,
     elevation: 9999,
+    backgroundColor: '#f8fafc',
   },
 });

@@ -57,6 +57,7 @@
     "internal-android": {
       "extends": "base",
       "distribution": "internal",
+      "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
       },

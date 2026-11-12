@@ -1,6 +1,7 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
+import { CenteredLoading } from '../components/CenteredLoading';
 import { useAuth } from '../context/AuthContext';
 import { navigationRef } from './navigationRef';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
@@ -30,7 +31,7 @@ export function RootNavigator() {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return null;
+    return <CenteredLoading message="Signing you in…" />;
   }
 
   return (

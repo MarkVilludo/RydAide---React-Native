@@ -14,9 +14,20 @@ Uses EAS profile **`internal-apk`**: release APK, production API (`EXPO_PUBLIC_A
 
 Open the build page on Expo (link in terminal), **Download APK**, install on device. Allow install from browser/Files if prompted.
 
-## Startup crash (WorkManager / WorkDatabase)
+## Startup / post-login crash
 
-If the app crashes immediately with `InitializationProvider` / `WorkDatabase.canonicalName`, the release APK hit an **Expo SDK 58 + R8** issue. The project adds ProGuard keep rules via **`expo-build-properties`** in `app.config.js`. Rebuild the APK after pulling that fix.
+### WorkManager / WorkDatabase
+If the app crashes with `InitializationProvider` / `WorkDatabase.canonicalName` (often right after the splash / login while push registers), the release APK hit an **Expo SDK 58 + R8** issue. `app.config.js` keeps WorkManager/Room classes via **`expo-build-properties`**. Rebuild the APK after pulling that fix.
+
+### Loading spinner then crash (active job / maps)
+After login, an owner/mechanic with a live job is auto-opened onto a screen that mounts **Google Maps**. EAS builds need:
+
+```bash
+# Local .env AND EAS secrets / eas.json env for the build profile
+EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your_maps_sdk_key
+```
+
+Without the key, Android may hard-crash when the map mounts. See [MAPS.md](./MAPS.md).
 
 ## Rebuild after code changes
 

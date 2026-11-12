@@ -1,9 +1,11 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { CenteredLoading } from '../../components/CenteredLoading';
 import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 import { fetchHelpRequests, type HelpRequest } from '../../api/helpRequests';
+import { logger } from '../../utils/logger';
 import type { OwnerStackParamList } from '../../navigation/types';
 import { isOwnerLiveHelpRequest, jobStatusOf } from '../../utils/helpRequestUi';
 import { jobWorkDurationLabel } from '../../utils/jobWorkDuration';
@@ -39,7 +41,10 @@ export function HelpRequestHistoryScreen({ navigation }: Props) {
     else setLoading(true);
     fetchHelpRequests()
       .then(setItems)
-      .catch(() => setItems([]))
+      .catch((error) => {
+        logger.error('HelpHistory', 'Failed to load help requests', error);
+        setItems([]);
+      })
       .finally(() => {
         setLoading(false);
         setRefreshing(false);
@@ -53,7 +58,7 @@ export function HelpRequestHistoryScreen({ navigation }: Props) {
   );
 
   if (loading && items.length === 0) {
-    return <ActivityIndicator style={{ marginTop: 40 }} />;
+    return <CenteredLoading message="Loading help history…" />;
   }
 
   return (

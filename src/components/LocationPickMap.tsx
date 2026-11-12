@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import MapView, { Marker, type Region } from 'react-native-maps';
+import { androidMapsProvider } from '../utils/mapsProvider';
 
 export type PickLocation = {
   latitude: number;
@@ -98,7 +99,7 @@ export function LocationPickMap({
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+        provider={androidMapsProvider()}
         initialRegion={initialRegion}
         showsUserLocation
         showsMyLocationButton

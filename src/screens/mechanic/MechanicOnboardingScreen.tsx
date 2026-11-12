@@ -20,8 +20,10 @@ import {
   updateMechanicProfile,
   type GovIdType,
 } from '../../api/mechanicProfile';
+import { CenteredLoading } from '../../components/CenteredLoading';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import type { MechanicStackParamList } from '../../navigation/types';
+import { logger } from '../../utils/logger';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'MechanicOnboarding'>;
 
@@ -69,6 +71,9 @@ export function MechanicOnboardingScreen({ navigation }: Props) {
             setServiceRadiusKm(String(profile.service_radius_km));
           }
         }
+      })
+      .catch((error) => {
+        logger.error('MechanicOnboarding', 'Failed to load profile', error);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -157,7 +162,18 @@ export function MechanicOnboardingScreen({ navigation }: Props) {
       Alert.alert(
         'Listing saved',
         'Your ID and listing were submitted. An admin will verify them before you appear in the public directory.',
-        [{ text: 'OK', onPress: () => navigation.goBack() }],
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                navigation.navigate('MechanicHome');
+              }
+            },
+          },
+        ],
       );
     } catch (error) {
       Alert.alert('Could not save', getApiErrorMessage(error));
@@ -167,11 +183,7 @@ export function MechanicOnboardingScreen({ navigation }: Props) {
   };
 
   if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
+    return <CenteredLoading message="Loading your listing…" />;
   }
 
   return (
@@ -262,7 +274,6 @@ export function MechanicOnboardingScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { padding: 20, backgroundColor: '#f8fafc' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   lead: { color: '#475569', marginBottom: 16 },
   rejectionBanner: {
     backgroundColor: '#fef2f2',

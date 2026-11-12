@@ -42,7 +42,7 @@ function DrawerRow({
 export function OwnerDrawerContent({ navigation }: DrawerContentComponentProps) {
   const { user, signOut } = useAuth();
   const { config } = useAppConfig();
-  const emergencyOn = config?.features.emergency_assistance ?? false;
+  const emergencyOn = config?.features?.emergency_assistance ?? false;
 
   const goTo = (screen: StackRoute) => {
     navigation.navigate('OwnerMain', { screen });

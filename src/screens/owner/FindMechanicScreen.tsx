@@ -31,7 +31,7 @@ type Props = NativeStackScreenProps<OwnerStackParamList, 'FindMechanic'>;
 export function FindMechanicScreen({ navigation }: Props) {
   const emergency = false;
   const { config } = useAppConfig();
-  const emergencyOn = config?.features.emergency_assistance ?? false;
+  const emergencyOn = config?.features?.emergency_assistance ?? false;
   const minRadius = config?.directory.min_radius_km ?? SEARCH_RADIUS_MIN_KM;
   const maxRadius = config?.directory.max_radius_km ?? SEARCH_RADIUS_MAX_KM;
   const defaultRadius = Math.min(

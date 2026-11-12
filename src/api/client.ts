@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { API_URL } from '../config';
+import { logger } from '../utils/logger';
 import type { ApiError } from './types';
 
 export const api = axios.create({
@@ -37,15 +38,25 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (__DEV__ && axios.isAxiosError(error) && !error.response) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        '[RydAid] Network error —',
-        error.config?.url ?? 'request',
-        '→',
-        API_URL,
-        '(phone must be on same Wi‑Fi; Laravel: serve --host=0.0.0.0 --port=8000)',
-      );
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      const url = error.config?.url ?? 'request';
+      if (!error.response) {
+        logger.warn('API', `Network error → ${url}`, {
+          baseURL: API_URL,
+          hint: 'Check EXPO_PUBLIC_API_URL / device network',
+        });
+      } else if (status != null && status >= 500) {
+        logger.error('API', `Server ${status} on ${url}`, error);
+      } else if (status === 401 || status === 403) {
+        logger.warn('API', `Auth ${status} on ${url}`);
+      } else if (__DEV__ && status != null && status >= 400) {
+        logger.debug('API', `Client ${status} on ${url}`, {
+          data: error.response.data,
+        });
+      }
+    } else {
+      logger.error('API', 'Non-HTTP request failure', error);
     }
     return Promise.reject(error);
   },

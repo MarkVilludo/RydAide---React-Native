@@ -197,7 +197,7 @@ const actionStyles = StyleSheet.create({
 
 export function OwnerHomeScreen({ navigation }: Props) {
   const { config } = useAppConfig();
-  const emergencyOn = config?.features.emergency_assistance ?? false;
+  const emergencyOn = config?.features?.emergency_assistance ?? false;
   const [activeRequest, setActiveRequest] = useState<HelpRequest | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const resumePrompted = useRef(false);

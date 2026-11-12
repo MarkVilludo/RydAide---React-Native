@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker } from 'react-native-maps';
+import { androidMapsProvider } from '../utils/mapsProvider';
 
 type Props = {
   latitude: number;
@@ -26,7 +27,7 @@ export function MechanicLocationMapPreview({ latitude, longitude, height = 132 }
       <MapView
         key={mapKey}
         style={styles.map}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+        provider={androidMapsProvider()}
         initialRegion={region}
         region={region}
         scrollEnabled={false}

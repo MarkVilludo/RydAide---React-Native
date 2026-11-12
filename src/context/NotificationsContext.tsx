@@ -33,18 +33,22 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     if (!user || !pushAvailable) {
       return;
     }
-    await requestPushPermissions();
-    const token = await getExpoPushToken();
-    if (!token) {
-      return;
-    }
-    pushTokenRef.current = token;
-    setCurrentPushToken(token);
-    setPushToken(token);
     try {
-      await registerPushToken(token);
+      await requestPushPermissions();
+      const token = await getExpoPushToken();
+      if (!token) {
+        return;
+      }
+      pushTokenRef.current = token;
+      setCurrentPushToken(token);
+      setPushToken(token);
+      try {
+        await registerPushToken(token);
+      } catch {
+        /* auth or network */
+      }
     } catch {
-      /* auth or network */
+      /* Native push / WorkManager failures must not kill the session after login. */
     }
   }, [pushAvailable, user]);
 
@@ -55,19 +59,23 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       setCurrentPushToken(null);
       return;
     }
-    void registerDevicePush();
+    void registerDevicePush().catch(() => {});
   }, [user, registerDevicePush]);
 
   useEffect(() => {
     if (!user || !pushAvailable) {
       return;
     }
-    return addPushTokenListener((token) => {
-      pushTokenRef.current = token;
-      setCurrentPushToken(token);
-      setPushToken(token);
-      void registerPushToken(token).catch(() => {});
-    });
+    try {
+      return addPushTokenListener((token) => {
+        pushTokenRef.current = token;
+        setCurrentPushToken(token);
+        setPushToken(token);
+        void registerPushToken(token).catch(() => {});
+      });
+    } catch {
+      return undefined;
+    }
   }, [pushAvailable, user]);
 
   useEffect(() => {
@@ -77,28 +85,39 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     }
 
     const handleResponse = (response: import('expo-notifications').NotificationResponse) => {
-      const data = response.notification.request.content.data as Record<string, unknown> | undefined;
-      const nav = navigationFromPushData(data);
-      if (nav) {
-        void navigateFromNotification(user, nav);
+      try {
+        const data = response.notification.request.content.data as Record<string, unknown> | undefined;
+        const nav = navigationFromPushData(data);
+        if (nav) {
+          void navigateFromNotification(user, nav);
+        }
+      } catch {
+        /* ignore malformed notification payloads */
       }
     };
 
-    const responseSub = Notifications.addNotificationResponseReceivedListener(handleResponse);
+    let responseSub: { remove: () => void } | undefined;
+    try {
+      responseSub = Notifications.addNotificationResponseReceivedListener(handleResponse);
+    } catch {
+      return;
+    }
 
-    void Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (!response) {
-        return;
-      }
-      const data = response.notification.request.content.data as Record<string, unknown> | undefined;
-      const nav = navigationFromPushData(data);
-      if (nav) {
-        setPendingNotificationNavigation(nav);
-      }
-    });
+    void Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (!response) {
+          return;
+        }
+        const data = response.notification.request.content.data as Record<string, unknown> | undefined;
+        const nav = navigationFromPushData(data);
+        if (nav) {
+          setPendingNotificationNavigation(nav);
+        }
+      })
+      .catch(() => {});
 
     return () => {
-      responseSub.remove();
+      responseSub?.remove();
     };
   }, [pushAvailable, user]);
 
@@ -108,7 +127,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     }
     const onState = (state: AppStateStatus) => {
       if (state === 'active') {
-        void registerDevicePush();
+        void registerDevicePush().catch(() => {});
       }
     };
     const sub = AppState.addEventListener('change', onState);

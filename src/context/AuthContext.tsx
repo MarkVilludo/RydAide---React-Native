@@ -5,6 +5,7 @@ import { unregisterPushToken } from '../api/pushTokens';
 import { getCurrentPushToken, setCurrentPushToken } from '../services/pushNotifications';
 import { setApiAuthToken } from '../api/client';
 import type { User } from '../api/types';
+import { logger } from '../utils/logger';
 
 const TOKEN_KEY = 'rydaid_auth_token';
 
@@ -33,12 +34,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const token = await SecureStore.getItemAsync(TOKEN_KEY);
       if (!token) {
+        logger.debug('Auth', 'No stored session');
         return;
       }
       setApiAuthToken(token);
       const current = await fetchCurrentUser();
       setUser(current);
-    } catch {
+      logger.info('Auth', 'Session restored', { userId: current.id, role: current.role });
+    } catch (error) {
+      logger.error('Auth', 'Session restore failed — clearing token', error);
       await SecureStore.deleteItemAsync(TOKEN_KEY);
       setApiAuthToken(null);
       setUser(null);
@@ -48,16 +52,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void bootstrap().catch(() => {
+    void bootstrap().catch((error) => {
+      logger.error('Auth', 'bootstrap promise rejected', error);
       setIsLoading(false);
     });
   }, [bootstrap]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const payload = await apiLogin(email, password);
-    await SecureStore.setItemAsync(TOKEN_KEY, payload.token);
-    setApiAuthToken(payload.token);
-    setUser(payload.user);
+    try {
+      const payload = await apiLogin(email, password);
+      await SecureStore.setItemAsync(TOKEN_KEY, payload.token);
+      setApiAuthToken(payload.token);
+      setUser(payload.user);
+      logger.info('Auth', 'Signed in', { userId: payload.user.id, role: payload.user.role });
+    } catch (error) {
+      logger.error('Auth', 'Sign-in failed', error, { email });
+      throw error;
+    }
   }, []);
 
   const signUp = useCallback(
@@ -68,38 +79,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password_confirmation: string;
       role: 'owner' | 'mechanic';
     }) => {
-      const payload = await apiRegister(input);
-      await SecureStore.setItemAsync(TOKEN_KEY, payload.token);
-      setApiAuthToken(payload.token);
-      setUser(payload.user);
+      try {
+        const payload = await apiRegister(input);
+        await SecureStore.setItemAsync(TOKEN_KEY, payload.token);
+        setApiAuthToken(payload.token);
+        setUser(payload.user);
+        logger.info('Auth', 'Registered', { userId: payload.user.id, role: payload.user.role });
+      } catch (error) {
+        logger.error('Auth', 'Registration failed', error, { email: input.email, role: input.role });
+        throw error;
+      }
     },
     [],
   );
 
   const refreshUser = useCallback(async () => {
-    const current = await fetchCurrentUser();
-    setUser(current);
-    return current;
+    try {
+      const current = await fetchCurrentUser();
+      setUser(current);
+      return current;
+    } catch (error) {
+      logger.error('Auth', 'refreshUser failed', error);
+      throw error;
+    }
   }, []);
 
   const signOut = useCallback(async () => {
     const pushToken = getCurrentPushToken();
     try {
       await apiLogout(pushToken);
-    } catch {
-      // Token may already be invalid.
+    } catch (error) {
+      logger.debug('Auth', 'logout API failed (token may already be invalid)', { error: String(error) });
     }
     if (pushToken) {
       try {
         await unregisterPushToken(pushToken);
-      } catch {
-        /* ignore */
+      } catch (error) {
+        logger.debug('Auth', 'unregister push failed', { error: String(error) });
       }
     }
     setCurrentPushToken(null);
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     setApiAuthToken(null);
     setUser(null);
+    logger.info('Auth', 'Signed out');
   }, []);
 
   const value = useMemo(

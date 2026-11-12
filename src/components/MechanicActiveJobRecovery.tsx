@@ -18,17 +18,17 @@ export function MechanicActiveJobRecovery() {
     }
 
     const recover = async (navigateToActive: boolean) => {
-      const pending = consumePendingNotificationNavigation();
-      if (pending && pending.role === 'mechanic') {
-        await navigateFromNotification(user, pending);
-        return;
-      }
-
-      if (!navigateToActive) {
-        return;
-      }
-
       try {
+        const pending = consumePendingNotificationNavigation();
+        if (pending && pending.role === 'mechanic') {
+          await navigateFromNotification(user, pending);
+          return;
+        }
+
+        if (!navigateToActive) {
+          return;
+        }
+
         const job = await fetchActiveJob();
         if (job) {
           navigateMechanicStackScreen('ActiveJob', {
@@ -37,7 +37,7 @@ export function MechanicActiveJobRecovery() {
           });
         }
       } catch {
-        /* stay on dashboard */
+        /* stay on dashboard — never crash the session on recovery */
       }
     };
 

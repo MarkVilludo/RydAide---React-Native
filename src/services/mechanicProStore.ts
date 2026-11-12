@@ -135,6 +135,13 @@ export async function purchaseMechanicPro(productId: string = MECHANIC_PRO_SUBSC
     if (/ExpoIap|native module/i.test(msg)) {
       throw new Error(STORE_BILLING_UNAVAILABLE_MESSAGE);
     }
+    if (/not connected|BillingClient|service disconnected|billing.*unavailable/i.test(msg)) {
+      throw new Error(
+        Platform.OS === 'android'
+          ? 'Google Play Billing is not connected. Sideloaded debug APKs usually cannot purchase. Upload an AAB to Play Console (internal testing), install that build from Play Store while signed into a license-tester Google account, and ensure product com.rydaid.mechanic.pro.monthly exists. For local API testing, use Simulate payment when the server enables it.'
+          : 'App Store is not connected. Use a TestFlight / sandbox build signed with your Apple team, and a Sandbox Apple ID.',
+      );
+    }
     throw e;
   }
 

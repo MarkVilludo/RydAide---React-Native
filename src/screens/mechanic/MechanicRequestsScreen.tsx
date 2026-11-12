@@ -2,7 +2,6 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   ScrollView,
@@ -14,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { HelpRequest } from '../../api/helpRequests';
 import { fetchMyMechanicProfile } from '../../api/mechanicProfile';
 import { fetchMechanicHelpQueues, type MechanicHelpQueues } from '../../api/mechanicHelp';
+import { CenteredLoading } from '../../components/CenteredLoading';
 import { MechanicRequestCard } from '../../components/MechanicRequestCard';
 import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 import { useMechanicLiveLocation } from '../../context/MechanicLocationContext';
@@ -116,7 +116,17 @@ export function MechanicRequestsScreen({ navigation, route }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={8}>
+        <Pressable
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('MechanicHome');
+            }
+          }}
+          style={styles.backBtn}
+          hitSlop={8}
+        >
           <Text style={styles.backText}>← Back</Text>
         </Pressable>
         <Text style={styles.headerTitle}>My requests</Text>
@@ -164,9 +174,7 @@ export function MechanicRequestsScreen({ navigation, route }: Props) {
       </ScrollView>
 
       {loading && !queues ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color="#0284c7" />
-        </View>
+        <CenteredLoading message="Loading requests…" />
       ) : (
         <FlatList
           data={list}
@@ -253,7 +261,6 @@ const styles = StyleSheet.create({
   tabCountActive: { backgroundColor: '#334155' },
   tabCountText: { fontSize: 11, fontWeight: '800', color: '#475569' },
   tabCountTextActive: { color: '#fff' },
-  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   listContent: { paddingTop: 8, paddingBottom: 24 },
   listEmpty: { flexGrow: 1 },
   emptyBox: {

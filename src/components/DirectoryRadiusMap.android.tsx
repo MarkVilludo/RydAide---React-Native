@@ -2,6 +2,7 @@ import { GoogleMaps } from 'expo-maps';
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { MapDirectoryPin } from '../types/mapPins';
+import { hasGoogleMapsApiKey } from '../utils/mapsProvider';
 import { zoomForRadiusKm } from '../utils/mapRegion';
 
 export type SearchCenter = {
@@ -75,6 +76,25 @@ export function DirectoryRadiusMap({
       },
     ];
   }, [center, radiusKm]);
+
+  if (!hasGoogleMapsApiKey()) {
+    return (
+      <View style={styles.wrap}>
+        <View style={styles.missingKey}>
+          <Text style={styles.missingKeyTitle}>Map unavailable</Text>
+          <Text style={styles.missingKeyBody}>
+            This build is missing EXPO_PUBLIC_GOOGLE_MAPS_API_KEY. Search still works — use My location
+            below, then rebuild with a Maps SDK key for the map.
+          </Text>
+          {onUseMyLocation ? (
+            <Pressable style={styles.locBtn} onPress={onUseMyLocation} disabled={locating}>
+              <Text style={styles.locBtnText}>{locating ? 'Locating…' : 'My location'}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrap}>
@@ -158,4 +178,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     borderRadius: 4,
   },
+  missingKey: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  missingKeyTitle: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
+  missingKeyBody: { fontSize: 13, lineHeight: 18, color: '#64748b', textAlign: 'center' },
 });

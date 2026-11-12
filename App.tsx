@@ -8,8 +8,10 @@ import { AuthProvider } from './src/context/AuthContext';
 import { NotificationsProvider } from './src/context/NotificationsContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ensureNotificationHandlerConfigured } from './src/services/expoNotificationsSafe';
+import { installGlobalErrorLogging } from './src/utils/logger';
 import { safeAreaProviderInitialMetrics } from './src/utils/screenInsets';
 
+installGlobalErrorLogging();
 ensureNotificationHandlerConfigured();
 
 export default function App() {
