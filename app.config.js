@@ -38,7 +38,7 @@ const config = {
     package: androidPackage,
     // Google Play requires a unique, increasing integer per upload. EAS remote
     // + autoIncrement on store/internal profiles bumps this; keep a floor here.
-    versionCode: 2,
+    versionCode: 3,
     softwareKeyboardLayoutMode: 'resize',
     usesCleartextTraffic: true,
     adaptiveIcon: {

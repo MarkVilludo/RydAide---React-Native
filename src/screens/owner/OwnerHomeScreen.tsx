@@ -613,6 +613,31 @@ export function OwnerHomeScreen({ navigation }: Props) {
     [navigation],
   );
 
+  const promptActiveRequestBlocksNewBooking = useCallback(
+    (request: HelpRequest) => {
+      Alert.alert(
+        'Active request in progress',
+        'You already have an active help request. Finish or cancel it before booking another service.',
+        [
+          { text: 'OK', style: 'cancel' },
+          { text: 'Open request', onPress: () => openActiveRequest(request) },
+        ],
+      );
+    },
+    [openActiveRequest],
+  );
+
+  const startNeedHelp = useCallback(
+    (emergency: boolean) => {
+      if (activeRequest) {
+        promptActiveRequestBlocksNewBooking(activeRequest);
+        return;
+      }
+      navigation.navigate('NeedHelp', { emergency });
+    },
+    [activeRequest, navigation, promptActiveRequestBlocksNewBooking],
+  );
+
   const load = useCallback(async () => {
     try {
       const live = emergencyOn
@@ -766,7 +791,7 @@ export function OwnerHomeScreen({ navigation }: Props) {
                         { paddingVertical: layout.ctaPadV },
                         pressed && styles.primaryHelpCtaPressed,
                       ]}
-                      onPress={() => navigation.navigate('NeedHelp', { emergency: true })}
+                      onPress={() => startNeedHelp(true)}
                       accessibilityRole="button"
                       accessibilityLabel="Get help now"
                     >
@@ -783,7 +808,13 @@ export function OwnerHomeScreen({ navigation }: Props) {
                     { paddingVertical: layout.secondaryPadV },
                     pressed && styles.secondaryHelpCtaPressed,
                   ]}
-                  onPress={() => navigation.navigate('NeedHelp', { emergency: false })}
+                  onPress={() => {
+                    if (activeRequest) {
+                      promptActiveRequestBlocksNewBooking(activeRequest);
+                      return;
+                    }
+                    startNeedHelp(false);
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel="Book a service"
                 >

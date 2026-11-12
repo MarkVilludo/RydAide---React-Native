@@ -1,8 +1,10 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
+import { fetchActiveHelpRequest } from '../../api/helpRequests';
 import { searchMechanics, type MechanicResult } from '../../api/mechanics';
+import { isOwnerLiveHelpRequest } from '../../utils/helpRequestStatus';
 import { DirectoryRadiusMap } from '../../components/DirectoryRadiusMap';
 import { DirectorySearchEmptyState } from '../../components/DirectorySearchEmptyState';
 import { directoryBrowseStyles } from '../../components/directoryBrowseStyles';
@@ -94,10 +96,39 @@ export function FindMechanicScreen({ navigation }: Props) {
           ? `${results.length} within ${searchMeta.applied_radius_km} km`
           : 'Move the map to search';
 
-  const needHelpParams = {
-    latitude: center?.latitude,
-    longitude: center?.longitude,
-  };
+  const needHelpLatitude = center?.latitude;
+  const needHelpLongitude = center?.longitude;
+
+  const startNeedHelp = useCallback(
+    async (asEmergency: boolean) => {
+      try {
+        const active = await fetchActiveHelpRequest();
+        if (active && isOwnerLiveHelpRequest(active)) {
+          Alert.alert(
+            'Active request in progress',
+            'You already have an active help request. Finish or cancel it before booking another service.',
+            [
+              { text: 'OK', style: 'cancel' },
+              {
+                text: 'Open request',
+                onPress: () =>
+                  navigation.navigate('ActiveHelpRequest', { helpRequestId: active.id }),
+              },
+            ],
+          );
+          return;
+        }
+      } catch {
+        /* API still enforces on submit */
+      }
+      navigation.navigate('NeedHelp', {
+        emergency: asEmergency,
+        latitude: needHelpLatitude,
+        longitude: needHelpLongitude,
+      });
+    },
+    [navigation, needHelpLatitude, needHelpLongitude],
+  );
 
   return (
     <View style={directoryBrowseStyles.root}>
@@ -132,17 +163,11 @@ export function FindMechanicScreen({ navigation }: Props) {
 
           {emergencyOn && (
             <>
-              <Pressable
-                style={styles.helpCta}
-                onPress={() => navigation.navigate('NeedHelp', { emergency: true, ...needHelpParams })}
-              >
+              <Pressable style={styles.helpCta} onPress={() => void startNeedHelp(true)}>
                 <Text style={styles.helpCtaTitle}>Need help now?</Text>
                 <Text style={styles.helpCtaSub}>We’ll notify verified mechanics near you.</Text>
               </Pressable>
-              <Pressable
-                style={styles.serviceCta}
-                onPress={() => navigation.navigate('NeedHelp', { emergency: false, ...needHelpParams })}
-              >
+              <Pressable style={styles.serviceCta} onPress={() => void startNeedHelp(false)}>
                 <Text style={styles.serviceCtaText}>Book non-emergency service</Text>
               </Pressable>
             </>
@@ -174,11 +199,7 @@ export function FindMechanicScreen({ navigation }: Props) {
               emergencyAssistanceEnabled={emergencyOn}
               searchMeta={searchMeta}
               onWidenRadius={setRadiusKm}
-              onRequestHelp={
-                emergencyOn
-                  ? () => navigation.navigate('NeedHelp', { emergency: true, ...needHelpParams })
-                  : undefined
-              }
+              onRequestHelp={emergencyOn ? () => void startNeedHelp(true) : undefined}
             />
           ) : undefined
         }

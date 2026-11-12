@@ -18,10 +18,12 @@ import { stickyFooterBottomPadding } from '../../utils/screenInsets';
 import { getApiErrorMessage } from '../../api/client';
 import {
   createHelpRequest,
+  fetchActiveHelpRequest,
   fetchCategoryQuestions,
   fetchProblemCategories,
   type ProblemCategory,
 } from '../../api/helpRequests';
+import { isOwnerLiveHelpRequest } from '../../utils/helpRequestStatus';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
@@ -77,6 +79,29 @@ export function NeedHelpScreen({ navigation, route }: Props) {
       navigation.replace('OwnerHome');
     }
   }, [config, configLoading, navigation]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const active = await fetchActiveHelpRequest();
+        if (cancelled || !active || !isOwnerLiveHelpRequest(active)) return;
+        Alert.alert(
+          'Active request in progress',
+          'You already have an active help request. Finish or cancel it before booking another service.',
+        );
+        navigation.replace('ActiveHelpRequest', {
+          helpRequestId: active.id,
+          initialRequest: active,
+        });
+      } catch {
+        /* allow form if active check fails; API still enforces on submit */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigation]);
   const [step, setStep] = useState<Step>(() => needHelpInitialStep(draft));
   const [vehicleDescription, setVehicleDescription] = useState(draft?.vehicleDescription ?? '');
   const [vehicleId, setVehicleId] = useState<number | null>(null);
