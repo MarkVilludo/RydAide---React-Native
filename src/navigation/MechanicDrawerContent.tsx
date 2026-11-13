@@ -1,10 +1,9 @@
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import React from 'react';
-import { View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useAppConfig } from '../hooks/useAppConfig';
-import { confirmBeforeDeleteAccountFlow } from '../utils/deleteAccountConfirm';
-import { AppDrawerShell, DrawerLink } from './AppDrawerShell';
+import { resolveMediaUrl } from '../utils/resolveMediaUrl';
+import { AppDrawerShell, DrawerItem, DrawerSection } from './AppDrawerShell';
 import type { MechanicStackParamList } from './types';
 
 type StackRoute = keyof MechanicStackParamList;
@@ -24,41 +23,47 @@ export function MechanicDrawerContent({ navigation }: DrawerContentComponentProp
     <AppDrawerShell
       name={user?.name?.trim() || 'Mechanic'}
       email={user?.email ?? ''}
+      avatarUrl={user?.avatar_url ? resolveMediaUrl(user.avatar_url) : null}
+      onProfilePress={() => goTo('Profile')}
       roleLabel="Mechanic"
       footer={
-        <>
-          <DrawerLink
-            label="Delete account"
-            muted
-            danger
-            onPress={() => {
-              confirmBeforeDeleteAccountFlow(() => {
-                navigation.closeDrawer();
-                navigation.navigate('MechanicMain', { screen: 'DeleteAccount' });
-              });
-            }}
-          />
-          <DrawerLink
-            label="Sign out"
-            muted
-            onPress={() => {
-              navigation.closeDrawer();
-              signOut();
-            }}
-          />
-        </>
+        // Account deletion lives only on Profile → Account settings (too easy to tap by accident here).
+        <DrawerItem
+          icon="logout"
+          label="Sign out"
+          onPress={() => {
+            navigation.closeDrawer();
+            signOut();
+          }}
+        />
       }
     >
-      <View>
-        <DrawerLink label="Dashboard" onPress={() => goTo('MechanicHome')} />
+      <DrawerSection first>
+        <DrawerItem icon="map" label="Dashboard" onPress={() => goTo('MechanicHome')} />
         {emergencyOn ? (
-          <DrawerLink label="Requests" onPress={() => goTo('MechanicRequests', { tab: 'incoming' })} />
+          <DrawerItem
+            icon="toolbox"
+            label="Requests"
+            hint="Incoming offers and your jobs"
+            onPress={() => goTo('MechanicRequests', { tab: 'incoming' })}
+          />
         ) : null}
-        <DrawerLink label="Your listing" onPress={() => goTo('MechanicOnboarding')} />
-        {subscriptionsOn ? (
-          <DrawerLink label="Mechanic Pro" onPress={() => goTo('MechanicSubscription')} />
-        ) : null}
-      </View>
+        <DrawerItem icon="pin" label="Work location" onPress={() => goTo('MechanicWorkLocation')} />
+      </DrawerSection>
+      <DrawerSection title="Account">
+        <DrawerItem icon="listing" label="Your listing" hint="Your public mechanic profile" onPress={() => goTo('MechanicOnboarding')} />
+        <DrawerItem
+          icon="wallet"
+          label="Payment methods"
+          hint="Cash and the wallets customers pay you with"
+          badge={{ text: 'NEW', tone: 'new' }}
+          onPress={() => goTo('PaymentMethods')}
+        />
+        {subscriptionsOn ? <DrawerItem icon="crown" label="Mechanic Pro" onPress={() => goTo('MechanicSubscription')} /> : null}
+      </DrawerSection>
+      <DrawerSection title="Help">
+        <DrawerItem icon="headset" label="Contact Support" onPress={() => goTo('ContactSupport')} />
+      </DrawerSection>
     </AppDrawerShell>
   );
 }

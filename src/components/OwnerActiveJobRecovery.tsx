@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { fetchActiveHelpRequest } from '../api/helpRequests';
 import { useAuth } from '../context/AuthContext';
+import { markLaunchStep } from '../utils/launchSteps';
 import { navigateOwnerStackScreen } from '../navigation/nestedNavigate';
 import {
   consumePendingNotificationNavigation,
@@ -42,9 +43,11 @@ export function OwnerActiveJobRecovery() {
     let coldStartTimer: ReturnType<typeof setTimeout> | undefined;
     if (coldStart.current) {
       coldStart.current = false;
+      // Runs under the launch loading screen, which waits for it — so a redirect to the
+      // active job happens before anything is shown (no dashboard → job flash).
       coldStartTimer = setTimeout(() => {
-        void recover(true);
-      }, 400);
+        void recover(true).finally(() => markLaunchStep('recovery'));
+      }, 100);
     }
 
     const onState = (state: AppStateStatus) => {

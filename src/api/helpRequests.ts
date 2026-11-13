@@ -100,6 +100,8 @@ export interface ServiceJob {
   work_elapsed_seconds?: number | null;
   shop?: { id: number; name: string } | null;
   pricing?: ServiceJobPricing | null;
+  /** Recorded payment (newer servers). */
+  payment?: import('./paymentMethods').JobPaymentRecord | null;
 }
 
 export interface HelpRequest {
@@ -137,7 +139,24 @@ export interface HelpRequest {
     is_extended: boolean;
   } | null;
   vehicle_description?: string | null;
+  /** How the owner plans to pay (newer servers; no account numbers). */
+  payment_preference?: { type: string; label: string } | null;
+  /** Structured details (newer servers only; null when the request only has the description line). */
+  vehicle_details?: {
+    type?: string | null;
+    type_label?: string | null;
+    year?: number | null;
+    color?: string | null;
+    plate?: string | null;
+    transmission?: string | null;
+    transmission_label?: string | null;
+    fuel?: string | null;
+    fuel_label?: string | null;
+  } | null;
   problem_category?: ProblemCategory;
+  /** All problems in order (first = problem_category). Missing on servers without multi-problem support. */
+  problem_category_ids?: number[];
+  problem_categories?: ProblemCategory[];
   owner?: HelpRequestOwner;
   vehicle?: HelpRequestVehicle;
   mechanic?: {
@@ -189,10 +208,55 @@ export async function fetchCategoryQuestions(categoryId: number) {
   }>;
 }
 
+/** Owner self-cancellations today vs the daily limit (server: GET /help-requests/cancellations). */
+export type HelpCancellationSummary = {
+  limit: number | null;
+  used_today: number;
+  remaining_today: number | null;
+  limit_reached: boolean;
+  resets_at: string;
+  timezone: string;
+};
+
+function parseCancellationSummary(raw: unknown): HelpCancellationSummary | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.used_today !== 'number') return null;
+  return {
+    limit: typeof r.limit === 'number' ? r.limit : null,
+    used_today: r.used_today,
+    remaining_today: typeof r.remaining_today === 'number' ? r.remaining_today : null,
+    limit_reached: r.limit_reached === true,
+    resets_at: typeof r.resets_at === 'string' ? r.resets_at : '',
+    timezone: typeof r.timezone === 'string' ? r.timezone : 'Asia/Manila',
+  };
+}
+
+/**
+ * Returns null when the server doesn't support the cancellation limit yet (older deploy → 404),
+ * so screens simply hide the warning instead of failing.
+ */
+export async function fetchHelpCancellationSummary(): Promise<HelpCancellationSummary | null> {
+  try {
+    const { data } = await api.get('/help-requests/cancellations');
+    return parseCancellationSummary(data?.data?.cancellations);
+  } catch {
+    return null;
+  }
+}
+
 export type CreateHelpRequestPayload = {
   vehicle_id?: number;
   vehicle_description?: string;
+  /** Primary problem (first of problem_category_ids). Still sent for servers that only know one. */
   problem_category_id: number;
+  problem_category_ids?: number[];
+  vehicle_type?: string;
+  vehicle_year?: number;
+  vehicle_color?: string;
+  vehicle_plate?: string;
+  vehicle_transmission?: string;
+  vehicle_fuel?: string;
   request_type: 'SERVICE' | 'EMERGENCY';
   remarks: string;
   latitude: number;
@@ -200,6 +264,9 @@ export type CreateHelpRequestPayload = {
   address_text?: string;
   answers?: Array<{ question_id: number; answer: string }>;
   photoUris?: string[];
+  /** Planned payment: a saved wallet id, or 'cash'. Omit both to use the preferred method. */
+  payment_method_id?: number | null;
+  payment_preference?: 'cash';
 };
 
 export async function createHelpRequest(payload: CreateHelpRequestPayload): Promise<HelpRequest> {
@@ -210,7 +277,21 @@ export async function createHelpRequest(payload: CreateHelpRequestPayload): Prom
   if (payload.vehicle_description) {
     form.append('vehicle_description', payload.vehicle_description);
   }
+  (
+    ['vehicle_type', 'vehicle_year', 'vehicle_color', 'vehicle_plate', 'vehicle_transmission', 'vehicle_fuel'] as const
+  ).forEach((key) => {
+    const value = payload[key];
+    if (value != null && String(value).trim() !== '') form.append(key, String(value));
+  });
   form.append('problem_category_id', String(payload.problem_category_id));
+  payload.problem_category_ids?.forEach((id, index) => {
+    form.append(`problem_category_ids[${index}]`, String(id));
+  });
+  if (payload.payment_method_id != null) {
+    form.append('payment_method_id', String(payload.payment_method_id));
+  } else if (payload.payment_preference === 'cash') {
+    form.append('payment_preference', 'cash');
+  }
   form.append('request_type', payload.request_type);
   form.append('remarks', payload.remarks);
   form.append('latitude', String(payload.latitude));
@@ -265,8 +346,10 @@ export async function fetchHelpRequest(id: number): Promise<HelpRequest> {
   return data.data.help_request;
 }
 
-export async function cancelHelpRequest(id: number): Promise<void> {
-  await api.post(`/help-requests/${id}/cancel`);
+/** Resolves to today's cancellation summary when the server returns one (null on older servers). */
+export async function cancelHelpRequest(id: number): Promise<HelpCancellationSummary | null> {
+  const { data } = await api.post(`/help-requests/${id}/cancel`);
+  return parseCancellationSummary(data?.data?.cancellations);
 }
 
 export async function extendHelpRequest(id: number): Promise<HelpRequest> {

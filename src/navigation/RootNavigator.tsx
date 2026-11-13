@@ -1,7 +1,8 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
-import { CenteredLoading } from '../components/CenteredLoading';
+import { View } from 'react-native';
+import { LAUNCH_BACKGROUND } from '../constants/launchBrand';
 import { useAuth } from '../context/AuthContext';
 import { navigationRef } from './navigationRef';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
@@ -31,7 +32,9 @@ export function RootNavigator() {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return <CenteredLoading message="Signing you in…" />;
+    // The branded loading screen (SplashGate) covers this; render nothing that could flash
+    // (previously a second "Signing you in…" spinner sat here).
+    return <View style={{ flex: 1, backgroundColor: LAUNCH_BACKGROUND }} />;
   }
 
   return (

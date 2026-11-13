@@ -11,7 +11,7 @@ import { MechanicDeclineOfferModal } from '../../components/MechanicDeclineOffer
 import { useMechanicLiveLocation } from '../../context/MechanicLocationContext';
 import { formatDistanceKm, resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
 import { acceptLostRaceKind, incomingOfferUnavailableTitle } from '../../utils/incomingHelpOffer';
-import { vehicleTitle } from '../../utils/helpRequestUi';
+import { vehicleTitle, problemNamesOf, vehicleWithDetails } from '../../utils/helpRequestUi';
 import { subscriptionRequiredMessage } from '../../utils/mechanicAcceptErrors';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'IncomingRequests'>;
@@ -105,12 +105,12 @@ export function MechanicIncomingScreen({ navigation }: Props) {
         <View style={styles.card}>
           {item.request_type === 'EMERGENCY' && <Text style={styles.emergency}>🚨 Emergency</Text>}
           {item.owner?.name && <Text style={styles.ownerName}>Owner: {item.owner.name}</Text>}
-          <Text style={styles.title}>{item.problem_category?.name}</Text>
+          <Text style={styles.title}>{problemNamesOf(item)}</Text>
           {(() => {
             const d = formatDistanceKm(resolveMechanicToCustomerDistanceKm(item, distanceOrigin ?? null));
             return d ? <Text style={styles.distance}>{d}</Text> : null;
           })()}
-          <Text style={styles.vehicle}>{vehicleTitle(item)}</Text>
+          <Text style={styles.vehicle}>{vehicleWithDetails(item)}</Text>
           <Text style={styles.remarks} numberOfLines={2}>{item.remarks}</Text>
           <Pressable
             style={styles.detailsBtn}

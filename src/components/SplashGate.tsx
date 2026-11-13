@@ -1,14 +1,8 @@
 import * as SplashScreen from 'expo-splash-screen';
-import React, { useEffect, useRef, useState } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
-import Animated, {
-  Easing,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { useLaunchSteps } from '../utils/launchSteps';
 import { AppBootstrapSplash } from './AppBootstrapSplash';
 
 void SplashScreen.preventAutoHideAsync().catch(() => {
@@ -19,70 +13,89 @@ type Props = {
   children: React.ReactNode;
 };
 
-const EXIT_MS = 360;
-const EXIT_EASE = Easing.out(Easing.cubic);
-const MIN_SPLASH_VISIBLE_MS = 700;
-const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get('window');
+const EXIT_MS = 320;
+/** Keep the loading screen at least this long so it reads as intentional, not a flicker. */
+const MIN_VISIBLE_MS = 600;
+/** Never hold a signed-in user on the loading screen longer than this waiting for the dashboard. */
+const DASHBOARD_WAIT_CAP_MS = 6000;
+/** Hide the native splash even if the logo's load event never fires. */
+const NATIVE_HIDE_FALLBACK_MS = 1500;
 
 /**
- * Keeps the native splash visible until auth bootstrap finishes, then fades into the app.
+ * Launch sequence: native splash → this ONE branded loading screen → the right dashboard.
+ *
+ * The app renders underneath from the start; the loading screen stays on top until auth is
+ * restored AND the role's dashboard has its first data AND the cold-start active-job redirect
+ * has run — so no half-loaded or about-to-redirect screen is ever shown.
  */
 export function SplashGate({ children }: Props) {
-  const { isLoading } = useAuth();
+  const { isLoading, user, bootError, retryBootstrap, abandonSession } = useAuth();
+  const steps = useLaunchSteps();
   const [showOverlay, setShowOverlay] = useState(true);
-  const exitProgress = useSharedValue(0);
-  const appOpenedAt = useRef(Date.now());
+  const [capHit, setCapHit] = useState(false);
+  const exit = useRef(new Animated.Value(0)).current;
+  const mountedAt = useRef(Date.now());
+  const nativeHidden = useRef(false);
+  const exiting = useRef(false);
+
+  const hideNative = useCallback(() => {
+    if (nativeHidden.current) return;
+    nativeHidden.current = true;
+    void SplashScreen.hideAsync().catch(() => {});
+  }, []);
 
   useEffect(() => {
-    if (isLoading) {
-      setShowOverlay(true);
-      exitProgress.value = 0;
-      return;
-    }
+    const t = setTimeout(hideNative, NATIVE_HIDE_FALLBACK_MS);
+    return () => clearTimeout(t);
+  }, [hideNative]);
 
-    let cancelled = false;
+  const authDone = !isLoading && !bootError;
+  const showsDashboard = authDone && user != null && !!user.email_verified_at;
+  const hasRecovery = user?.role === 'owner' || user?.role === 'mechanic';
 
-    const go = async () => {
-      try {
-        await SplashScreen.hideAsync();
-      } catch {
-        /* ignore */
-      }
-      if (cancelled) {
-        return;
-      }
-      exitProgress.value = withTiming(1, { duration: EXIT_MS, easing: EXIT_EASE }, (finished) => {
-        if (finished) {
-          runOnJS(setShowOverlay)(false);
-        }
-      });
-    };
+  useEffect(() => {
+    if (!showsDashboard) return;
+    const t = setTimeout(() => setCapHit(true), DASHBOARD_WAIT_CAP_MS);
+    return () => clearTimeout(t);
+  }, [showsDashboard]);
 
-    const elapsed = Date.now() - appOpenedAt.current;
-    const waitMs = Math.max(0, MIN_SPLASH_VISIBLE_MS - elapsed);
-    const timer = setTimeout(() => {
-      void go();
-    }, waitMs);
+  const ready =
+    authDone && (!showsDashboard || capHit || (steps.dashboard && (!hasRecovery || steps.recovery)));
 
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [isLoading, exitProgress]);
+  useEffect(() => {
+    if (!ready || exiting.current || !showOverlay) return;
+    const wait = Math.max(0, MIN_VISIBLE_MS - (Date.now() - mountedAt.current));
+    const t = setTimeout(() => {
+      exiting.current = true;
+      hideNative();
+      Animated.timing(exit, {
+        toValue: 1,
+        duration: EXIT_MS,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => setShowOverlay(false));
+    }, wait);
+    return () => clearTimeout(t);
+  }, [ready, showOverlay, exit, hideNative]);
 
-  const overlayStyle = useAnimatedStyle(() => ({
-    opacity: 1 - exitProgress.value,
-  }));
+  const overlayOpacity = exit.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
 
   return (
     <View style={styles.root}>
       {children}
       {showOverlay ? (
         <Animated.View
-          style={[styles.overlay, overlayStyle]}
-          pointerEvents={isLoading ? 'auto' : 'none'}
+          style={[StyleSheet.absoluteFill, styles.overlay, { opacity: overlayOpacity }]}
+          pointerEvents={ready ? 'none' : 'auto'}
         >
-          <AppBootstrapSplash />
+          <AppBootstrapSplash
+            onLogoReady={hideNative}
+            error={bootError}
+            retrying={isLoading && !bootError}
+            onRetry={retryBootstrap}
+            onSignOut={() => void abandonSession()}
+            exit={exit}
+          />
         </Animated.View>
       ) : null}
     </View>
@@ -90,17 +103,6 @@ export function SplashGate({ children }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: WINDOW_WIDTH,
-    height: WINDOW_HEIGHT,
-    zIndex: 9999,
-    elevation: 9999,
-    backgroundColor: '#f8fafc',
-  },
+  root: { flex: 1 },
+  overlay: { zIndex: 9999, elevation: 9999 },
 });

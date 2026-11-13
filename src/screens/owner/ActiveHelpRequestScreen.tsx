@@ -14,7 +14,9 @@ import { CenteredLoading } from '../../components/CenteredLoading';
 import {
   cancelHelpRequest,
   extendHelpRequest,
+  fetchHelpCancellationSummary,
   fetchHelpRequest,
+  type HelpCancellationSummary,
   submitHelpRequestReview,
   type HelpRequest,
 } from '../../api/helpRequests';
@@ -22,6 +24,7 @@ import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSumm
 import { AndroidHideNavigationBarWhenFocused } from '../../components/AndroidHideNavigationBarWhenFocused';
 import { CancelHelpRequestButton } from '../../components/CancelHelpRequestButton';
 import { HelpRequestCompletionPanel } from '../../components/HelpRequestCompletionPanel';
+import { OwnerPayMechanicCard, PaymentPlanLine } from '../../components/JobPaymentCards';
 import {
   KeyboardAwareScrollView,
   type KeyboardAwareScrollViewRef,
@@ -41,8 +44,11 @@ import {
 import { haversineDistanceKm } from '../../utils/distanceKm';
 import {
   canOwnerCancelHelpRequest,
+  cancelConfirmMessage,
   jobStatusOf,
+  problemNamesOf,
   vehicleTitle,
+  vehicleWithDetails,
 } from '../../utils/helpRequestUi';
 import { needHelpParamsFromHelpRequest } from '../../utils/needHelpDraft';
 
@@ -76,6 +82,7 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [photosOpen, setPhotosOpen] = useState(false);
   const cancelLock = useRef(false);
+  const [cancelSummary, setCancelSummary] = useState<HelpCancellationSummary | null>(null);
   const extendPromptShown = useRef(false);
   const extendLock = useRef(false);
   const reviewScrollRef = useRef<KeyboardAwareScrollViewRef>(null);
@@ -153,7 +160,8 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
             if (cancelLock.current) return;
             cancelLock.current = true;
             try {
-              await cancelHelpRequest(helpRequestId);
+              const summary = await cancelHelpRequest(helpRequestId);
+              if (summary) setCancelSummary(summary);
               const updated = await fetchHelpRequest(helpRequestId);
               setRequest(updated);
             } catch (e) {
@@ -219,10 +227,12 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
 
   const canCancel = canOwnerCancelHelpRequest(request);
 
-  const confirmCancel = () => {
+  const confirmCancel = async () => {
+    // Today's count from the server (null on older servers → plain message).
+    const summary = await fetchHelpCancellationSummary();
     Alert.alert(
       'Cancel request?',
-      'Stop searching for a mechanic? You can submit a new request anytime.',
+      cancelConfirmMessage(summary),
       [
         { text: 'Keep request', style: 'cancel' },
         {
@@ -232,7 +242,8 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
             if (cancelLock.current) return;
             cancelLock.current = true;
             try {
-              await cancelHelpRequest(helpRequestId);
+              const summary = await cancelHelpRequest(helpRequestId);
+              if (summary) setCancelSummary(summary);
               const updated = await fetchHelpRequest(helpRequestId);
               setRequest(updated);
             } catch (e) {
@@ -309,7 +320,7 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
           </View>
 
           <Text style={styles.problemLine} numberOfLines={workStarted ? 1 : 2}>
-            {request.problem_category?.name}
+            {problemNamesOf(request)}
             {request.remarks ? ` · ${request.remarks}` : ''}
           </Text>
 
@@ -374,9 +385,9 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
         <View style={styles.detailsHalf}>
           <GrabStyleBottomSheet fill flush bottomInset={canCancel ? 72 : 0}>
             <Text style={styles.headlineSearching}>Finding a mechanic</Text>
-            {request.problem_category?.name ? (
+            {problemNamesOf(request) ? (
               <Text style={styles.problemSearching} numberOfLines={1}>
-                {request.problem_category.name}
+                {problemNamesOf(request)}
               </Text>
             ) : null}
             <View style={styles.searchingHeroWrap}>
@@ -421,8 +432,8 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
       >
         <GrabStyleBottomSheet>
           <Text style={styles.headline}>{activeJourneyHeadline(request)}</Text>
-          {request.problem_category?.name ? (
-            <Text style={styles.problem}>{request.problem_category.name}</Text>
+          {problemNamesOf(request) ? (
+            <Text style={styles.problem}>{problemNamesOf(request)}</Text>
           ) : null}
 
           <HelpJourneyTimeline steps={journeySteps} compact />
@@ -435,17 +446,39 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
                   ? request.status === 'EXPIRED'
                     ? 'No mechanic accepted in time. You can send a new request anytime.'
                     : 'No mechanic accepted in time. Try again or browse nearby listings.'
-                  : 'This request was cancelled. You can send a new one anytime.'}
+                  : 'This request was cancelled and can’t be resent. If you still need help, start a new request.'}
               </Text>
+              {cancelled && cancelSummary?.limit != null ? (
+                <Text
+                  style={[
+                    styles.terminalBody,
+                    styles.cancelCount,
+                    (cancelSummary.remaining_today ?? 0) <= 1 && styles.cancelCountWarn,
+                  ]}
+                >
+                  {cancelSummary.limit_reached
+                    ? `You’ve reached today’s limit of ${cancelSummary.limit} cancelled requests. You can send a new request after midnight.`
+                    : `Cancellations today: ${cancelSummary.used_today} of ${cancelSummary.limit} (${cancelSummary.remaining_today} left).`}
+                </Text>
+              ) : null}
               <View style={styles.terminalActions}>
                 <Pressable
-                  style={styles.retryBtn}
+                  style={[styles.retryBtn, cancelled && cancelSummary?.limit_reached && styles.retryBtnDisabled]}
+                  disabled={cancelled && cancelSummary?.limit_reached === true}
+                  accessibilityRole="button"
+                  accessibilityLabel={cancelled ? 'Start a new request' : 'Try again'}
                   onPress={() =>
-                    navigation.replace('NeedHelp', needHelpParamsFromHelpRequest(request))
+                    // Cancelled requests are never prefilled: a fresh form, same request type only.
+                    navigation.replace(
+                      'NeedHelp',
+                      cancelled
+                        ? { emergency: request.request_type === 'EMERGENCY' }
+                        : needHelpParamsFromHelpRequest(request),
+                    )
                   }
                 >
                   <Text style={styles.retryBtnText}>
-                    {cancelled ? 'Request help again' : 'Try again'}
+                    {cancelled ? 'Start a new request' : 'Try again'}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -457,6 +490,8 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
               </View>
             </View>
           )}
+
+          {completed && <OwnerPayMechanicCard request={request} onUpdated={setRequest} />}
 
           {completed && (
             <HelpRequestCompletionPanel
@@ -480,8 +515,9 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
 
           {!completed && (
             <>
-              <Text style={styles.summaryText}>{vehicleTitle(request)}</Text>
+              <Text style={styles.summaryText}>{vehicleWithDetails(request)}</Text>
               <Text style={styles.remarks}>{request.remarks}</Text>
+              <PaymentPlanLine request={request} prefix="You'll pay with" />
             </>
           )}
 
@@ -568,6 +604,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   retryBtnText: { color: '#fff', fontWeight: '700' },
+  retryBtnDisabled: { opacity: 0.5 },
+  cancelCount: { marginTop: 6, fontWeight: '600' },
+  cancelCountWarn: { color: '#b45309' },
   browseBtn: {
     paddingVertical: 12,
     borderRadius: 10,

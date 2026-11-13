@@ -5,6 +5,8 @@ export interface User {
   name: string;
   email: string;
   phone: string | null;
+  /** Profile photo (newer servers). */
+  avatar_url?: string | null;
   role: UserRole;
   status: string;
   email_verified_at: string | null;

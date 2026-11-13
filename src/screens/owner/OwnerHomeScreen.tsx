@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fetchHelpRequests, type HelpRequest } from '../../api/helpRequests';
 import { useAppConfig } from '../../hooks/useAppConfig';
+import { markLaunchStep } from '../../utils/launchSteps';
 import type { OwnerStackParamList } from '../../navigation/types';
 import { pickPrimaryOwnerLiveHelpRequest } from '../../utils/helpRequestStatus';
 import { jobStatusLabelOf, vehicleTitle } from '../../utils/helpRequestUi';
@@ -646,6 +647,8 @@ export function OwnerHomeScreen({ navigation }: Props) {
       setActiveRequest(live);
     } catch {
       setActiveRequest(null);
+    } finally {
+      markLaunchStep('dashboard');
     }
   }, [emergencyOn]);
 
@@ -658,11 +661,13 @@ export function OwnerHomeScreen({ navigation }: Props) {
   useEffect(() => {
     if (!emergencyOn || !activeRequest || resumePrompted.current) return;
     resumePrompted.current = true;
+    // The launch recovery may already have opened the request — don't stack a prompt on top of it.
+    if (!navigation.isFocused()) return;
     Alert.alert('Help request in progress', 'Open your active request to track your mechanic?', [
       { text: 'Later', style: 'cancel' },
       { text: 'Open', onPress: () => openActiveRequest(activeRequest) },
     ]);
-  }, [activeRequest, emergencyOn, openActiveRequest]);
+  }, [activeRequest, emergencyOn, navigation, openActiveRequest]);
 
   useEffect(() => {
     if (!emergencyOn || hasActiveBanner) {

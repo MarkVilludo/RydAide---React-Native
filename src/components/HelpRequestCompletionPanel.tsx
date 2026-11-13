@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { HelpRequest } from '../api/helpRequests';
-import { vehicleTitle } from '../utils/helpRequestUi';
+import { vehicleTitle, problemNamesOf } from '../utils/helpRequestUi';
 import { jobWorkDurationValueOnly } from '../utils/jobWorkDuration';
 
 const STAR_LABELS: Record<number, string> = {
@@ -56,7 +56,7 @@ export function HelpRequestCompletionPanel({
   const receipt = useMemo(() => {
     const service =
       job?.service_performed?.trim() ||
-      request.problem_category?.name ||
+      problemNamesOf(request) ||
       request.request_type_label ||
       null;
     const amount = formatPhpAmount(job?.pricing?.final_service_amount_php);

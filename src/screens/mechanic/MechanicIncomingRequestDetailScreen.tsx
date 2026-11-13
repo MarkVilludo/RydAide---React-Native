@@ -24,7 +24,8 @@ import { useMechanicDistanceOrigin } from '../../hooks/useMechanicDistanceOrigin
 import { resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
 import { formatElapsedSeconds } from '../../utils/formatElapsed';
 import type { MechanicStackParamList } from '../../navigation/types';
-import { vehicleTitle } from '../../utils/helpRequestUi';
+import { vehicleTitle, problemNamesOf, vehicleWithDetails } from '../../utils/helpRequestUi';
+import { PaymentPlanLine } from '../../components/JobPaymentCards';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'IncomingRequestDetail'>;
 
@@ -162,14 +163,15 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
           <Text style={styles.ownerName}>Vehicle owner: {request.owner.name}</Text>
         )}
 
-        <Text style={styles.vehicle}>{vehicleTitle(request)}</Text>
+        <Text style={styles.vehicle}>{vehicleWithDetails(request)}</Text>
+        <PaymentPlanLine request={request} />
         {request.vehicle?.current_mileage != null && (
           <Text style={styles.mileage}>{request.vehicle.current_mileage.toLocaleString()} km</Text>
         )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Problem</Text>
-          <Text style={styles.problem}>{request.problem_category?.name ?? '—'}</Text>
+          <Text style={styles.problem}>{problemNamesOf(request, '—')}</Text>
         </View>
 
         <View style={styles.section}>

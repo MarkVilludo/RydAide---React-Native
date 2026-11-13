@@ -10,6 +10,8 @@ import {
   jobStatusLabelOf,
   jobStatusOf,
   vehicleTitle,
+  problemNamesOf,
+  vehicleWithDetails,
 } from '../utils/helpRequestUi';
 import { jobWorkDurationLabel } from '../utils/jobWorkDuration';
 
@@ -99,8 +101,8 @@ function MechanicRequestCardImpl({
     ? formatTimeAgo(request.created_at)
     : formatRequestDate(request.completed_at ?? request.created_at);
   const price = priceLine(request);
-  const title = request.problem_category?.name ?? 'Help request';
-  const vehicle = vehicleTitle(request);
+  const title = problemNamesOf(request, 'Help request');
+  const vehicle = vehicleWithDetails(request);
 
   const a11y = [
     statusLabel,

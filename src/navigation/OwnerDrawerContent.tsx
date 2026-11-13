@@ -1,10 +1,9 @@
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import React from 'react';
-import { View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useAppConfig } from '../hooks/useAppConfig';
-import { confirmBeforeDeleteAccountFlow } from '../utils/deleteAccountConfirm';
-import { AppDrawerShell, DrawerLink } from './AppDrawerShell';
+import { resolveMediaUrl } from '../utils/resolveMediaUrl';
+import { AppDrawerShell, DrawerItem, DrawerSection } from './AppDrawerShell';
 import type { OwnerStackParamList } from './types';
 
 type StackRoute = keyof OwnerStackParamList;
@@ -23,37 +22,42 @@ export function OwnerDrawerContent({ navigation }: DrawerContentComponentProps) 
     <AppDrawerShell
       name={user?.name?.trim() || 'Owner'}
       email={user?.email ?? ''}
+      avatarUrl={user?.avatar_url ? resolveMediaUrl(user.avatar_url) : null}
+      onProfilePress={() => goTo('Profile')}
       roleLabel="Vehicle owner"
       footer={
-        <>
-          <DrawerLink
-            label="Delete account"
-            muted
-            danger
-            onPress={() => {
-              confirmBeforeDeleteAccountFlow(() => {
-                navigation.closeDrawer();
-                navigation.navigate('OwnerMain', { screen: 'DeleteAccount' });
-              });
-            }}
-          />
-          <DrawerLink
-            label="Sign out"
-            muted
-            onPress={() => {
-              navigation.closeDrawer();
-              signOut();
-            }}
-          />
-        </>
+        // Account deletion lives only on Profile → Account settings (too easy to tap by accident here).
+        <DrawerItem
+          icon="logout"
+          label="Sign out"
+          onPress={() => {
+            navigation.closeDrawer();
+            signOut();
+          }}
+        />
       }
     >
-      <View>
-        <DrawerLink label="Home" onPress={() => goTo('OwnerHome')} />
+      <DrawerSection first>
+        <DrawerItem icon="home" label="Home" onPress={() => goTo('OwnerHome')} />
         {emergencyOn ? (
-          <DrawerLink label="Help requests" onPress={() => goTo('HelpRequestHistory')} />
+          <DrawerItem icon="history" label="Help requests" hint="Your active and past requests" onPress={() => goTo('HelpRequestHistory')} />
         ) : null}
-      </View>
+        <DrawerItem icon="wrench" label="Nearby mechanics" onPress={() => goTo('FindMechanic')} />
+        <DrawerItem icon="store" label="Find a shop" onPress={() => goTo('FindShop')} />
+      </DrawerSection>
+      <DrawerSection title="Account">
+        <DrawerItem icon="car" label="My vehicles" hint="Add, edit or set a default" onPress={() => goTo('MyVehicles')} />
+        <DrawerItem
+          icon="wallet"
+          label="Payment methods"
+          hint="Cash and your saved wallets"
+          badge={{ text: 'NEW', tone: 'new' }}
+          onPress={() => goTo('PaymentMethods')}
+        />
+      </DrawerSection>
+      <DrawerSection title="Help">
+        <DrawerItem icon="headset" label="Contact Support" onPress={() => goTo('ContactSupport')} />
+      </DrawerSection>
     </AppDrawerShell>
   );
 }

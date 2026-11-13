@@ -19,7 +19,8 @@ import { MechanicCustomerDistance } from '../../components/MechanicCustomerDista
 import { useMechanicDistanceOrigin } from '../../hooks/useMechanicDistanceOrigin';
 import { resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
 import type { MechanicStackParamList } from '../../navigation/types';
-import { formatRequestDate, isActiveJobStatus, jobStatusLabelOf, jobStatusOf, vehicleTitle } from '../../utils/helpRequestUi';
+import { MechanicJobPaymentCard, PaymentPlanLine } from '../../components/JobPaymentCards';
+import { formatRequestDate, isActiveJobStatus, jobStatusLabelOf, jobStatusOf, vehicleTitle, problemNamesOf, vehicleWithDetails } from '../../utils/helpRequestUi';
 import { jobWorkDurationLabel } from '../../utils/jobWorkDuration';
 import { MechanicDeclineOfferModal } from '../../components/MechanicDeclineOfferModal';
 import { MechanicIncomingOfferFooter } from '../../components/MechanicIncomingOfferFooter';
@@ -155,10 +156,11 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
               fromServicePin={servicePinManual || origin != null}
               locationUnavailable={permissionDenied && distanceKm == null}
             />
-            <Text style={styles.incomingTitle}>{request.problem_category?.name}</Text>
+            <Text style={styles.incomingTitle}>{problemNamesOf(request)}</Text>
             <Text style={styles.created}>Offer received {formatRequestDate(request.created_at)}</Text>
             <Text style={styles.remarks}>{request.remarks}</Text>
-            <Text style={styles.bold}>{vehicleTitle(request)}</Text>
+            <Text style={styles.bold}>{vehicleWithDetails(request)}</Text>
+            <PaymentPlanLine request={request} />
             <Text style={styles.muted}>Customer details unlock after you accept.</Text>
             {request.answers?.map((a) => (
               <View key={a.question_id} style={styles.answer}>
@@ -175,6 +177,7 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
           <Section title="Customer">
             <Text style={styles.bold}>{request.owner?.name ?? '—'}</Text>
             {request.owner?.phone && <Text>{request.owner.phone}</Text>}
+            <PaymentPlanLine request={request} />
           </Section>
         </>
       )}
@@ -182,7 +185,7 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
       {!isIncomingOffer && (
         <>
           <Section title="Vehicle">
-            <Text style={styles.bold}>{vehicleTitle(request)}</Text>
+            <Text style={styles.bold}>{vehicleWithDetails(request)}</Text>
             {request.vehicle?.year != null && <Text>Year: {request.vehicle.year}</Text>}
             {request.vehicle?.current_mileage != null && (
               <Text>Mileage: {request.vehicle.current_mileage.toLocaleString()} km</Text>
@@ -190,7 +193,7 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
           </Section>
 
           <Section title="Problem">
-            <Text style={styles.bold}>{request.problem_category?.name}</Text>
+            <Text style={styles.bold}>{problemNamesOf(request)}</Text>
             <Text style={styles.remarks}>{request.remarks}</Text>
             {request.answers?.map((a) => (
               <View key={a.question_id} style={styles.answer}>
@@ -239,6 +242,10 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
           {job.shop?.name && <Text>Shop: {job.shop.name}</Text>}
         </Section>
       )}
+
+      {!isIncomingOffer && jobStatusOf(request) === 'COMPLETED' ? (
+        <MechanicJobPaymentCard request={request} onUpdated={setRequest} />
+      ) : null}
 
       {request.review && (
         <Section title="Customer review">

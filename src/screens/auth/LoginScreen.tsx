@@ -1,6 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Dimensions,
   Linking,
@@ -8,13 +7,15 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
+  type TextInputInstance,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiErrorMessage } from '../../api/client';
 import { BrandLogo } from '../../components/BrandLogo';
+import { Button, TextField } from '../../components/ui';
+import { colors, spacing, type as typeScale } from '../../theme/tokens';
 import {
   KeyboardAwareScrollView,
   type KeyboardAwareScrollViewRef,
@@ -39,6 +40,7 @@ export function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const passwordRef = useRef<TextInputInstance>(null);
 
   // Lock content height to the full screen so the keyboard does not "lift"/re-center the form.
   const minContentHeight = useMemo(() => {
@@ -61,6 +63,11 @@ export function LoginScreen({ navigation }: Props) {
   };
 
   const onSubmit = async () => {
+    if (submitting) return;
+    if (!email.trim() || !password) {
+      Alert.alert('Sign in', 'Enter your email and password.');
+      return;
+    }
     setSubmitting(true);
     try {
       await signIn(email.trim(), password);
@@ -95,52 +102,52 @@ export function LoginScreen({ navigation }: Props) {
         <BrandLogo width={200} style={styles.logo} />
         <Text style={styles.subtitle}>Sign in to continue</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#94a3b8"
+        <TextField
+          label="Email"
+          placeholder="you@example.com"
           autoCapitalize="none"
+          autoCorrect={false}
           keyboardType="email-address"
           autoComplete="email"
           textContentType="emailAddress"
           value={email}
           onChangeText={setEmail}
           returnKeyType="next"
-          onLayout={(e) => {
+          submitBehavior="submit"
+          onSubmitEditing={() => passwordRef.current?.focus()}
+          onContainerLayout={(e) => {
             fieldOffsetY.current.email = e.nativeEvent.layout.y;
           }}
           onFocus={() => scrollFieldIntoView('email')}
         />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#94a3b8"
+        <TextField
+          ref={passwordRef}
+          label="Password"
+          placeholder="Your password"
           secureTextEntry
+          revealable
           autoComplete="password"
           textContentType="password"
           value={password}
           onChangeText={setPassword}
-          returnKeyType="done"
-          onLayout={(e) => {
+          returnKeyType="go"
+          onContainerLayout={(e) => {
             fieldOffsetY.current.password = e.nativeEvent.layout.y;
           }}
           onFocus={() => scrollFieldIntoView('password')}
           onSubmitEditing={() => void onSubmit()}
         />
 
-        <Pressable style={styles.primaryButton} onPress={onSubmit} disabled={submitting}>
-          {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Sign in</Text>}
-        </Pressable>
+        <Button title="Sign in" size="large" loading={submitting} onPress={() => void onSubmit()} style={styles.primaryButton} />
 
-        <Pressable onPress={() => navigation.navigate('ForgotPassword')} style={styles.forgotWrap}>
-          <Text style={styles.forgotLink}>Forgot password?</Text>
-        </Pressable>
+        <Button title="Forgot password?" variant="text" onPress={() => navigation.navigate('ForgotPassword')} style={styles.forgotWrap} />
 
-        <Pressable onPress={() => navigation.navigate('Register')}>
-          <Text style={styles.link}>Create an account</Text>
-        </Pressable>
+        <View style={styles.registerRow}>
+          <Text style={styles.registerText}>New to RydAid?</Text>
+          <Button title="Create an account" variant="text" onPress={() => navigation.navigate('Register')} />
+        </View>
 
-        <Pressable onPress={() => Linking.openURL(privacyUrl).catch(() => {})} style={styles.privacyWrap}>
+        <Pressable onPress={() => Linking.openURL(privacyUrl).catch(() => {})} style={styles.privacyWrap} accessibilityRole="link">
           <Text style={styles.privacyLink}>Privacy Policy</Text>
         </Pressable>
         <Pressable
@@ -165,40 +172,24 @@ export function LoginScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: '#f8fafc' },
+  scroll: { flex: 1, backgroundColor: colors.bg },
   content: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.xxl,
   },
   form: {
     width: '100%',
     maxWidth: 440,
     alignSelf: 'center',
   },
-  logo: { marginBottom: 8, alignSelf: 'center' },
-  subtitle: { textAlign: 'center', color: '#64748b', marginBottom: 24, marginTop: 8 },
-  input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 12,
-    color: '#0f172a',
-  },
-  primaryButton: {
-    backgroundColor: '#0284c7',
-    borderRadius: 10,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  primaryText: { color: '#fff', fontWeight: '600' },
-  forgotWrap: { marginTop: 16 },
-  forgotLink: { color: '#0284c7', textAlign: 'center', fontSize: 14 },
-  link: { color: '#0284c7', textAlign: 'center', marginTop: 20 },
-  privacyWrap: { marginTop: 28 },
-  privacyLink: { textAlign: 'center', color: '#64748b', fontSize: 13, textDecorationLine: 'underline' },
-  apiHint: { marginTop: 16, fontSize: 11, color: '#94a3b8', textAlign: 'center' },
+  logo: { marginBottom: spacing.sm, alignSelf: 'center' },
+  subtitle: { ...typeScale.body, textAlign: 'center', color: colors.muted, marginBottom: spacing.xxl, marginTop: spacing.sm },
+  primaryButton: { marginTop: spacing.sm },
+  forgotWrap: { marginTop: spacing.sm },
+  registerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', marginTop: spacing.xs },
+  registerText: { ...typeScale.body, color: colors.muted },
+  privacyWrap: { marginTop: spacing.lg, minHeight: 44, justifyContent: 'center' },
+  privacyLink: { textAlign: 'center', color: colors.muted, fontSize: 13, textDecorationLine: 'underline' },
+  apiHint: { marginTop: spacing.lg, fontSize: 11, color: colors.mutedSoft, textAlign: 'center' },
 });

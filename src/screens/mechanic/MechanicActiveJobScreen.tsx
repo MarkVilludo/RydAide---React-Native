@@ -23,6 +23,7 @@ import { JobWorkDurationText } from '../../components/JobWorkDurationText';
 import { PendingJobStatusBanner } from '../../components/PendingJobStatusBanner';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
+import { PaymentPlanLine } from '../../components/JobPaymentCards';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import { useDeviceLocation } from '../../hooks/useDeviceLocation';
 import { useLiveWorkElapsedSeconds } from '../../hooks/useLiveWorkElapsedSeconds';
@@ -38,6 +39,8 @@ import {
   jobStatusOf,
   parsePhpDigits,
   vehicleTitle,
+  problemNamesOf,
+  vehicleWithDetails,
 } from '../../utils/helpRequestUi';
 import { formatJobWorkDuration } from '../../utils/jobWorkDuration';
 
@@ -338,9 +341,10 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
         </View>
 
         <Text style={styles.problem} numberOfLines={1}>
-          {request.problem_category?.name}
+          {problemNamesOf(request)}
           {request.remarks ? ` · ${request.remarks}` : ''}
         </Text>
+        <PaymentPlanLine request={request} />
 
         {emergencyOn && jobStatus !== 'COMPLETED' ? (
           <JobLifecycleStepper currentStatus={jobStatus} />
@@ -475,7 +479,7 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
                   </View>
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Vehicle</Text>
-                    <Text style={styles.summaryValue}>{vehicleTitle(request)}</Text>
+                    <Text style={styles.summaryValue}>{vehicleWithDetails(request)}</Text>
                   </View>
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Service</Text>

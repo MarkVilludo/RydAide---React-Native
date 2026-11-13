@@ -24,6 +24,40 @@ export function vehicleTitle(request: HelpRequest): string {
   return label || v.nickname || 'Vehicle';
 }
 
+/** "Flat tire, Battery" — all problems when the server sends them, else the single category. */
+export function problemNamesOf(
+  request: Pick<HelpRequest, 'problem_category' | 'problem_categories'>,
+  fallback = '',
+): string {
+  const many = request.problem_categories?.map((c) => c.name).filter(Boolean) ?? [];
+  if (many.length > 0) return many.join(', ');
+  return request.problem_category?.name ?? fallback;
+}
+
+/** Cancel-confirm copy that includes today's count when the server reports it. */
+export function cancelConfirmMessage(
+  summary: { limit: number | null; used_today: number; remaining_today: number | null } | null,
+): string {
+  const base = 'Stop searching for a mechanic? A cancelled request can’t be resent — you’d start a new one.';
+  if (!summary || summary.limit == null || summary.remaining_today == null) return base;
+  const after = summary.used_today + 1;
+  const left = Math.max(0, summary.limit - after);
+  if (left === 0) {
+    return `${base}\n\nThis will be cancellation ${after} of ${summary.limit} today. After this you can’t send a new help request until midnight.`;
+  }
+  return `${base}\n\nThis will be cancellation ${after} of ${summary.limit} today (${left} left).`;
+}
+
+/** "Toyota Vios · Car · 2018 · White · ABC 1234 · Automatic · Gasoline" when the server sends details. */
+export function vehicleWithDetails(request: HelpRequest): string {
+  const d = request.vehicle_details;
+  const extra = d
+    ? [d.type_label, d.year, d.color, d.plate, d.transmission_label, d.fuel_label].filter(Boolean).join(' · ')
+    : '';
+  const title = vehicleTitle(request);
+  return extra ? `${title} · ${extra}` : title;
+}
+
 export function formatStarRating(rating: number): string {
   const r = Math.max(1, Math.min(5, Math.round(rating)));
   return `${'★'.repeat(r)}${'☆'.repeat(5 - r)}`;

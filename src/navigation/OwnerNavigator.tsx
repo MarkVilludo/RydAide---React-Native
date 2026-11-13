@@ -11,7 +11,13 @@ import { HelpRequestDetailScreen } from '../screens/owner/HelpRequestDetailScree
 import { HelpRequestHistoryScreen } from '../screens/owner/HelpRequestHistoryScreen';
 import { OwnerActiveJobRecovery } from '../components/OwnerActiveJobRecovery';
 import { DeleteAccountScreen } from '../screens/account/DeleteAccountScreen';
+import { ProfileScreen } from '../screens/account/ProfileScreen';
+import { ContactSupportScreen } from '../screens/account/ContactSupportScreen';
+import { PaymentMethodFormScreen } from '../screens/account/PaymentMethodFormScreen';
+import { PaymentMethodsScreen } from '../screens/account/PaymentMethodsScreen';
 import { OwnerHomeScreen } from '../screens/owner/OwnerHomeScreen';
+import { MyVehiclesScreen } from '../screens/owner/MyVehiclesScreen';
+import { VehicleFormScreen } from '../screens/owner/VehicleFormScreen';
 import { OwnerDrawerContent } from './OwnerDrawerContent';
 import type { OwnerDrawerParamList, OwnerStackParamList } from './types';
 
@@ -80,6 +86,20 @@ function OwnerStackNavigator() {
       />
       <Stack.Screen name="HelpRequestDetail" component={HelpRequestDetailScreen} options={{ title: 'Request details' }} />
       <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} options={{ title: 'Delete account' }} />
+      <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} options={{ title: 'Payment methods' }} />
+      <Stack.Screen name="ContactSupport" component={ContactSupportScreen} options={{ title: 'Contact Support' }} />
+      <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
+      <Stack.Screen name="MyVehicles" component={MyVehiclesScreen} options={{ title: 'My vehicles' }} />
+      <Stack.Screen
+        name="VehicleForm"
+        component={VehicleFormScreen}
+        options={({ route }) => ({ title: route.params?.vehicle ? 'Edit vehicle' : 'Add a vehicle' })}
+      />
+      <Stack.Screen
+        name="PaymentMethodForm"
+        component={PaymentMethodFormScreen}
+        options={({ route }) => ({ title: route.params?.wallet ? 'Edit wallet' : 'Add a wallet' })}
+      />
     </Stack.Navigator>
     </>
   );
@@ -92,7 +112,7 @@ export function OwnerNavigator() {
       screenOptions={{
         headerShown: false,
         drawerType: 'front',
-        drawerStyle: { width: 300, backgroundColor: '#f8fafc' },
+        drawerStyle: { width: 312, backgroundColor: '#ffffff' },
         overlayColor: 'rgba(15, 23, 42, 0.45)',
       }}
     >

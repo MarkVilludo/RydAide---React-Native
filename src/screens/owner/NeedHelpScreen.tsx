@@ -20,11 +20,26 @@ import {
   createHelpRequest,
   fetchActiveHelpRequest,
   fetchCategoryQuestions,
+  fetchHelpCancellationSummary,
   fetchProblemCategories,
+  type HelpCancellationSummary,
   type ProblemCategory,
 } from '../../api/helpRequests';
+import { useAuth } from '../../context/AuthContext';
+import {
+  EMPTY_VEHICLE,
+  forgetLastHelpVehicle,
+  loadLastHelpVehicle,
+  normalizePlate,
+  saveLastHelpVehicle,
+  vehicleApiFields,
+  vehicleDetailsLine,
+  vehicleErrors,
+  type HelpVehicleForm,
+} from '../../utils/helpVehicle';
 import { isOwnerLiveHelpRequest } from '../../utils/helpRequestStatus';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
+import { HelpPaymentPicker, type HelpPaymentChoice } from '../../components/HelpPaymentPicker';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { LocationPickMap } from '../../components/LocationPickMap';
@@ -32,6 +47,8 @@ import { useAppConfig } from '../../hooks/useAppConfig';
 import { useEnsureNearbyProviders } from '../../hooks/useEnsureNearbyProviders';
 import type { OwnerStackParamList } from '../../navigation/types';
 import { NeedHelpVehicleStep } from './NeedHelpVehicleStep';
+import { createVehicle, isVehicleApiMissing } from '../../api/vehicles';
+import { showAppToast } from '../../components/AppToast';
 import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 import { needHelpInitialStep } from '../../utils/needHelpDraft';
 
@@ -58,6 +75,9 @@ function formatAnswerLabel(value: string): string {
   return ANSWER_OPTIONS.find((o) => o.value === value)?.label ?? value;
 }
 
+/** Same as rydaid.help_requests.max_problems on the server (default 3). */
+const MAX_PROBLEMS = 3;
+
 function minRemarksLength(emergency: boolean): number {
   return emergency ? 2 : 10;
 }
@@ -68,6 +88,7 @@ export function NeedHelpScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const footerBottomPad = stickyFooterBottomPadding(insets);
   const { config, loading: configLoading } = useAppConfig();
+  const { user } = useAuth();
   const submitLock = useRef(false);
   const preservePrefillAnswers = useRef(
     Boolean(draft?.fromFailedMatch && draft.answers && draft.answers.length > 0),
@@ -103,13 +124,40 @@ export function NeedHelpScreen({ navigation, route }: Props) {
     };
   }, [navigation]);
   const [step, setStep] = useState<Step>(() => needHelpInitialStep(draft));
-  const [vehicleDescription, setVehicleDescription] = useState(draft?.vehicleDescription ?? '');
+  const [vehicle, setVehicle] = useState<HelpVehicleForm>(
+    () =>
+      draft?.vehicleForm ?? {
+        ...EMPTY_VEHICLE,
+        makeModel: (draft?.vehicleDescription ?? '').split(' · ')[0]?.trim() ?? '',
+      },
+  );
   const [vehicleId, setVehicleId] = useState<number | null>(null);
+  const [vehicleShowErrors, setVehicleShowErrors] = useState(false);
+  const [rememberedVehicle, setRememberedVehicle] = useState<HelpVehicleForm | null>(null);
+  const [saveVehicleToGarage, setSaveVehicleToGarage] = useState<boolean | null>(null);
+  const [cancelSummary, setCancelSummary] = useState<HelpCancellationSummary | null>(null);
+  const [problemLimitNote, setProblemLimitNote] = useState(false);
+  const [paymentChoice, setPaymentChoice] = useState<HelpPaymentChoice | null>(null);
+
+  React.useEffect(() => {
+    let alive = true;
+    void loadLastHelpVehicle(user?.id).then((v) => alive && setRememberedVehicle(v));
+    // Null on servers without the cancellation limit — the warning simply stays hidden.
+    void fetchHelpCancellationSummary().then((s) => alive && setCancelSummary(s));
+    return () => {
+      alive = false;
+    };
+  }, [user?.id]);
 
   const [categories, setCategories] = useState<ProblemCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
-  const [categoryId, setCategoryId] = useState<number | null>(draft?.problemCategoryId ?? null);
+  const [categoryIds, setCategoryIds] = useState<number[]>(
+    () =>
+      draft?.problemCategoryIds?.slice(0, MAX_PROBLEMS) ??
+      (draft?.problemCategoryId != null ? [draft.problemCategoryId] : []),
+  );
+  const categoryKey = categoryIds.join(',');
   const [remarks, setRemarks] = useState(draft?.remarks ?? '');
   const [questions, setQuestions] = useState<Array<{ id: number; question_text: string }>>([]);
   const [answers, setAnswers] = useState<Record<number, string>>(() => {
@@ -153,27 +201,53 @@ export function NeedHelpScreen({ navigation, route }: Props) {
     setRefreshing(true);
     try {
       reloadCategories();
-      if (categoryId) {
-        await fetchCategoryQuestions(categoryId)
-          .then(setQuestions)
-          .catch(() => setQuestions([]));
-      }
+      void fetchHelpCancellationSummary().then(setCancelSummary);
     } finally {
       setRefreshing(false);
     }
-  }, [categoryId, reloadCategories]);
+  }, [reloadCategories]);
 
+  // Questions for every selected problem, merged in order and de-duplicated.
   React.useEffect(() => {
-    if (!categoryId) return;
-    fetchCategoryQuestions(categoryId)
-      .then(setQuestions)
-      .catch(() => setQuestions([]));
-    if (preservePrefillAnswers.current) {
-      preservePrefillAnswers.current = false;
+    if (categoryIds.length === 0) {
+      setQuestions([]);
       return;
     }
-    setAnswers({});
-  }, [categoryId]);
+    let alive = true;
+    void Promise.all(categoryIds.map((id) => fetchCategoryQuestions(id).catch(() => [])))
+      .then((lists) => {
+        if (!alive) return;
+        const seen = new Set<number>();
+        const merged = lists.flat().filter((q) => (seen.has(q.id) ? false : (seen.add(q.id), true)));
+        setQuestions(merged);
+        // Keep answers for questions that are still shown.
+        setAnswers((prev) => {
+          if (preservePrefillAnswers.current) {
+            preservePrefillAnswers.current = false;
+            return prev;
+          }
+          return Object.fromEntries(Object.entries(prev).filter(([qid]) => seen.has(Number(qid))));
+        });
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- categoryKey tracks categoryIds
+  }, [categoryKey]);
+
+  const toggleProblem = (id: number) => {
+    setCategoryIds((prev) => {
+      if (prev.includes(id)) {
+        setProblemLimitNote(false);
+        return prev.filter((x) => x !== id);
+      }
+      if (prev.length >= MAX_PROBLEMS) {
+        setProblemLimitNote(true);
+        return prev;
+      }
+      return [...prev, id];
+    });
+  };
 
   const stepIndex = STEPS.indexOf(step);
 
@@ -239,27 +313,26 @@ export function NeedHelpScreen({ navigation, route }: Props) {
     reverseGeocode(center.latitude, center.longitude);
   };
 
-  const vehicleValid = () => {
-    if (vehicleId != null) return true;
-    const line = vehicleDescription.trim();
-    const main = line.split(' · ')[0]?.trim() ?? line;
-    return main.length >= 2;
-  };
+  const vehicleValid = () => Object.keys(vehicleErrors(vehicle)).length === 0;
 
   const remarksMin = minRemarksLength(emergency);
-  const problemValid = () => categoryId != null && remarks.trim().length >= remarksMin;
+  const problemValid = () => categoryIds.length > 0 && remarks.trim().length >= remarksMin;
+  const atCancelLimit = cancelSummary?.limit_reached === true;
 
   const locationValid = () => lat != null && lng != null;
 
   const goNext = () => {
     if (step === 'vehicle' && !vehicleValid()) {
-      Alert.alert('Vehicle', 'Describe your vehicle (at least 2 characters).');
+      // Errors show inline under each field.
+      setVehicleShowErrors(true);
       return;
     }
     if (step === 'problem' && !problemValid()) {
       Alert.alert(
         'Problem',
-        `Pick a category and describe what happened (${remarksMin}+ characters).`,
+        categoryIds.length === 0
+          ? `Pick at least one problem (up to ${MAX_PROBLEMS}) and describe what happened.`
+          : `Describe what happened (${remarksMin}+ characters).`,
       );
       return;
     }
@@ -340,18 +413,29 @@ export function NeedHelpScreen({ navigation, route }: Props) {
 
   const submit = async () => {
     if (submitLock.current || submitting) return;
-    if (!vehicleValid() || !categoryId || !problemValid() || lat === null || lng === null) {
+    if (!vehicleValid() || categoryIds.length === 0 || !problemValid() || lat === null || lng === null) {
       Alert.alert('Incomplete', 'Check all steps before submitting.');
+      return;
+    }
+    if (atCancelLimit) {
+      Alert.alert('Daily limit reached', cancelLimitText(cancelSummary));
       return;
     }
     submitLock.current = true;
     setSubmitting(true);
     try {
       const addressText = [landmark.trim(), address].filter(Boolean).join(' · ') || address;
+      // Older servers (no cancellation endpoint) ignore structured fields, so keep color/plate in the line there.
+      const newApi = cancelSummary != null;
+      const description = newApi
+        ? vehicle.makeModel.trim()
+        : [vehicle.makeModel.trim(), vehicle.color.trim(), normalizePlate(vehicle.plate)].filter(Boolean).join(' · ');
       const helpRequest = await createHelpRequest({
         ...(vehicleId != null ? { vehicle_id: vehicleId } : {}),
-        vehicle_description: vehicleDescription.trim().slice(0, 255),
-        problem_category_id: categoryId,
+        vehicle_description: description.slice(0, 255),
+        ...vehicleApiFields(vehicle),
+        problem_category_id: categoryIds[0]!,
+        problem_category_ids: categoryIds,
         request_type: emergency ? 'EMERGENCY' : 'SERVICE',
         remarks: remarks.trim(),
         latitude: lat,
@@ -362,7 +446,27 @@ export function NeedHelpScreen({ navigation, route }: Props) {
           answer,
         })),
         photoUris: photoUris.length > 0 ? photoUris : undefined,
+        ...(typeof paymentChoice === 'number'
+          ? { payment_method_id: paymentChoice }
+          : paymentChoice === 'cash'
+            ? { payment_preference: 'cash' as const }
+            : {}),
       });
+      if (vehicleId == null) {
+        void saveLastHelpVehicle(user?.id, vehicle);
+        // "Save this vehicle" — best effort; the request is already sent, so never block on it.
+        if (saveVehicleToGarage === true) {
+          createVehicle(vehicle)
+            .then(() => showAppToast('Vehicle saved to My vehicles.'))
+            .catch((err) =>
+              showAppToast(
+                isVehicleApiMissing(err)
+                  ? 'Saving vehicles needs the latest server update.'
+                  : `Couldn’t save the vehicle: ${getApiErrorMessage(err)}`,
+              ),
+            );
+        }
+      }
       navigation.replace('ActiveHelpRequest', {
         helpRequestId: helpRequest.id,
         initialRequest: helpRequest,
@@ -375,7 +479,21 @@ export function NeedHelpScreen({ navigation, route }: Props) {
     }
   };
 
-  const selectedCategory = categories.find((c) => c.id === categoryId);
+  const selectedNames = categoryIds
+    .map((id) => categories.find((c) => c.id === id)?.name)
+    .filter(Boolean)
+    .join(', ');
+  const cancelBanner =
+    cancelSummary && cancelSummary.limit != null && cancelSummary.remaining_today != null
+      ? cancelSummary.limit_reached
+        ? { tone: 'bad' as const, text: cancelLimitText(cancelSummary) }
+        : cancelSummary.remaining_today <= 1
+          ? {
+              tone: 'warn' as const,
+              text: `You’ve cancelled ${cancelSummary.used_today} of ${cancelSummary.limit} help requests today. ${cancelSummary.remaining_today} cancellation left — after that you can’t send new requests until midnight.`,
+            }
+          : null
+      : null;
   const addressToSend =
     [landmark.trim(), address].filter(Boolean).join(' · ') ||
     (lat != null && lng != null ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : '');
@@ -405,18 +523,47 @@ export function NeedHelpScreen({ navigation, route }: Props) {
           <RydAidRefreshControl refreshing={refreshing} onRefresh={() => void onPullRefresh()} title="Refresh form" />
         }
       >
+        {cancelBanner && (step === 'vehicle' || step === 'review') ? (
+          <View
+            style={[styles.limitBanner, cancelBanner.tone === 'bad' ? styles.limitBannerBad : styles.limitBannerWarn]}
+            accessibilityRole="alert"
+          >
+            <Text style={[styles.limitBannerText, cancelBanner.tone === 'bad' && styles.limitBannerTextBad]}>
+              {cancelBanner.text}
+            </Text>
+          </View>
+        ) : null}
+
         {step === 'vehicle' && (
           <NeedHelpVehicleStep
-            value={vehicleDescription}
-            onChange={setVehicleDescription}
+            value={vehicle}
+            onChange={setVehicle}
             vehicleId={vehicleId}
             onVehicleIdChange={setVehicleId}
+            showErrors={vehicleShowErrors}
+            remembered={rememberedVehicle}
+            onForgetRemembered={() => {
+              setRememberedVehicle(null);
+              void forgetLastHelpVehicle(user?.id);
+            }}
+            saveToGarage={saveVehicleToGarage}
+            onSaveToGarageChange={setSaveVehicleToGarage}
+            onManageVehicles={() => navigation.navigate('MyVehicles')}
           />
         )}
 
         {step === 'problem' && (
           <>
             <Text style={styles.title}>What happened?</Text>
+            <View style={styles.problemHead}>
+              <Text style={styles.problemHint}>Pick up to {MAX_PROBLEMS}. The first one you pick is the main problem.</Text>
+              <Text
+                style={[styles.problemCount, categoryIds.length >= MAX_PROBLEMS && styles.problemCountFull]}
+                accessibilityLabel={`${categoryIds.length} of ${MAX_PROBLEMS} problems selected`}
+              >
+                {categoryIds.length}/{MAX_PROBLEMS} selected
+              </Text>
+            </View>
             {categoriesLoading ? (
               <ActivityIndicator style={{ marginVertical: 8 }} />
             ) : categoriesError ? (
@@ -430,17 +577,33 @@ export function NeedHelpScreen({ navigation, route }: Props) {
               <Text style={styles.meta}>No categories available. Pull to refresh or tap Retry.</Text>
             ) : (
               <View style={styles.chips}>
-                {categories.map((c) => (
-                  <Pressable
-                    key={c.id}
-                    style={[styles.chip, categoryId === c.id && styles.chipOn]}
-                    onPress={() => setCategoryId(c.id)}
-                  >
-                    <Text style={categoryId === c.id ? styles.chipOnText : undefined}>{c.name}</Text>
-                  </Pressable>
-                ))}
+                {categories.map((c) => {
+                  const order = categoryIds.indexOf(c.id);
+                  const on = order >= 0;
+                  const full = !on && categoryIds.length >= MAX_PROBLEMS;
+                  return (
+                    <Pressable
+                      key={c.id}
+                      style={[styles.chip, on && styles.chipOn, full && styles.chipFull]}
+                      onPress={() => toggleProblem(c.id)}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: on, disabled: full }}
+                      accessibilityLabel={`${c.name}${order === 0 ? ', main problem' : ''}`}
+                    >
+                      <Text style={on ? styles.chipOnText : full ? styles.chipFullText : styles.chipText}>
+                        {on ? `${order + 1}. ` : ''}
+                        {c.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             )}
+            {problemLimitNote && categoryIds.length >= MAX_PROBLEMS ? (
+              <Text style={styles.problemLimit} accessibilityRole="alert">
+                You can pick up to {MAX_PROBLEMS} problems. Tap a selected one to remove it.
+              </Text>
+            ) : null}
             {questions.map((q) => (
               <View key={q.id} style={{ marginTop: 12 }}>
                 <Text style={styles.subLabel}>{q.question_text}</Text>
@@ -512,12 +675,14 @@ export function NeedHelpScreen({ navigation, route }: Props) {
             <GrabStyleBottomSheet>
               <ReviewRow
                 label="Vehicle"
-                value={vehicleDescription.trim() || '—'}
+                value={
+                  [vehicle.makeModel.trim() || '—', vehicleDetailsLine(vehicle)].filter(Boolean).join('\n')
+                }
                 onEdit={() => setStep('vehicle')}
               />
               <ReviewRow
-                label="Problem"
-                value={selectedCategory?.name ?? '—'}
+                label={categoryIds.length > 1 ? 'Problems' : 'Problem'}
+                value={selectedNames || '—'}
                 onEdit={() => setStep('problem')}
               />
               <ReviewRow label="Details" value={remarks || '—'} onEdit={() => setStep('problem')} />
@@ -542,6 +707,11 @@ export function NeedHelpScreen({ navigation, route }: Props) {
                   <HelpRequestPhotoGallery localUris={photoUris} compact />
                 </View>
               ) : null}
+              <HelpPaymentPicker
+                value={paymentChoice}
+                onChange={setPaymentChoice}
+                onManage={() => navigation.navigate('PaymentMethods')}
+              />
               <ReviewRow label="Location" value={addressToSend} onEdit={() => setStep('location')} />
               <HelpRequestMap
                 request={{ latitude: lat, longitude: lng, title: 'You' }}
@@ -586,10 +756,10 @@ export function NeedHelpScreen({ navigation, route }: Props) {
               styles.primary,
               styles.submitBtn,
               pressed && styles.footerBtnPressed,
-              submitting && styles.footerBtnDisabled,
+              (submitting || atCancelLimit) && styles.footerBtnDisabled,
             ]}
             onPress={submit}
-            disabled={submitting}
+            disabled={submitting || atCancelLimit}
             accessibilityRole="button"
             accessibilityLabel={emergency ? 'Request help now' : 'Submit request'}
           >
@@ -603,6 +773,11 @@ export function NeedHelpScreen({ navigation, route }: Props) {
       </View>
     </View>
   );
+}
+
+function cancelLimitText(s: HelpCancellationSummary | null): string {
+  const limit = s?.limit ?? 5;
+  return `You’ve reached today’s limit of ${limit} cancelled help requests. You can send a new request after midnight.`;
 }
 
 function ReviewRow({
@@ -650,7 +825,9 @@ const styles = StyleSheet.create({
   subLabel: { fontSize: 13, color: '#475569', marginBottom: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
-    paddingHorizontal: 10,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: '#fff',
@@ -658,7 +835,20 @@ const styles = StyleSheet.create({
     borderColor: '#cbd5e1',
   },
   chipOn: { backgroundColor: '#0284c7', borderColor: '#0284c7' },
-  chipOnText: { color: '#fff', fontWeight: '600' },
+  chipOnText: { color: '#fff', fontWeight: '700' },
+  chipText: { color: '#0f172a', fontWeight: '600' },
+  chipFull: { opacity: 0.45 },
+  chipFullText: { color: '#64748b', fontWeight: '600' },
+  problemHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: -8, marginBottom: 12, gap: 8 },
+  problemHint: { flex: 1, fontSize: 13, color: '#64748b', lineHeight: 18 },
+  problemCount: { fontSize: 13, fontWeight: '800', color: '#0369a1' },
+  problemCountFull: { color: '#b45309' },
+  problemLimit: { marginTop: 8, color: '#b45309', fontSize: 13, fontWeight: '600' },
+  limitBanner: { borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1 },
+  limitBannerWarn: { backgroundColor: '#fef3c7', borderColor: '#fcd34d' },
+  limitBannerBad: { backgroundColor: '#fee2e2', borderColor: '#fca5a5' },
+  limitBannerText: { color: '#92400e', fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  limitBannerTextBad: { color: '#991b1b' },
   input: {
     minHeight: 100,
     backgroundColor: '#fff',

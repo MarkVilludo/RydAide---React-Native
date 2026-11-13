@@ -7,7 +7,26 @@ export type AuthStackParamList = {
   ResetPassword: { email?: string; token?: string } | undefined;
 };
 
-export type OwnerStackParamList = {
+/** Shared by owner and mechanic stacks. */
+export type PaymentMethodsParamList = {
+  PaymentMethods: undefined;
+  PaymentMethodForm:
+    | {
+        wallet?: import('../api/paymentMethods').PaymentWallet;
+        maxQrMb?: number;
+        /** First wallet defaults to preferred. */
+        firstWallet?: boolean;
+      }
+    | undefined;
+  ContactSupport: undefined;
+  Profile: undefined;
+  DeleteAccount: undefined;
+};
+
+/** Screens the shared Profile screen can open (present in both stacks). */
+export type ProfileParamList = PaymentMethodsParamList;
+
+export type OwnerStackParamList = PaymentMethodsParamList & {
   OwnerHome: undefined;
   FindMechanic: undefined;
   NeedHelp: {
@@ -16,6 +35,9 @@ export type OwnerStackParamList = {
     longitude?: number;
     vehicleDescription?: string;
     problemCategoryId?: number;
+    problemCategoryIds?: number[];
+    /** Structured vehicle details from a previous request (failed match retry). */
+    vehicleForm?: import('../utils/helpVehicle').HelpVehicleForm;
     remarks?: string;
     landmark?: string;
     addressText?: string;
@@ -33,13 +55,23 @@ export type OwnerStackParamList = {
   HelpRequestDetail: { helpRequestId: number };
   FindShop: undefined;
   DeleteAccount: undefined;
+  /** Owner garage: saved vehicles (add, edit, remove, default). */
+  MyVehicles: undefined;
+  /** Add (no params / prefill) or edit (vehicle) a saved vehicle. */
+  VehicleForm:
+    | {
+        vehicle?: import('../api/vehicles').OwnerVehicle;
+        /** e.g. the last vehicle remembered on this device. */
+        prefill?: import('../utils/helpVehicle').HelpVehicleForm;
+      }
+    | undefined;
 };
 
 export type OwnerDrawerParamList = {
   OwnerMain: NavigatorScreenParams<OwnerStackParamList>;
 };
 
-export type MechanicStackParamList = {
+export type MechanicStackParamList = PaymentMethodsParamList & {
   MechanicHome: undefined;
   MechanicOnboarding: undefined;
   MechanicRequests: { tab?: 'incoming' | 'accepted_active' | 'in_progress' | 'completed' | 'declined' | 'cancelled_expired' };

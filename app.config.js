@@ -10,6 +10,11 @@ const easProjectId =
   process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() || '579d9891-5bb8-4e2b-b4f0-975570d3d60e';
 
 /** @type {import('expo/config').ExpoConfig} */
+/** Launch brand — keep in sync with src/constants/launchBrand.ts (JS loading screen). */
+const LAUNCH_BACKGROUND = '#0284c7';
+const LAUNCH_LOGO = './assets/splash-icon.png'; // transparent mark, no tile
+const LAUNCH_LOGO_WIDTH = 120;
+
 const config = {
   name: 'RydAid',
   slug: 'rydaid-app',
@@ -17,9 +22,9 @@ const config = {
   orientation: 'portrait',
   icon: './assets/icon.png',
   splash: {
-    image: './assets/splash-icon.png',
+    image: LAUNCH_LOGO,
     resizeMode: 'contain',
-    backgroundColor: '#f8fafc',
+    backgroundColor: LAUNCH_BACKGROUND,
   },
   userInterfaceStyle: 'light',
   ios: {
@@ -43,7 +48,7 @@ const config = {
     softwareKeyboardLayoutMode: 'resize',
     usesCleartextTraffic: true,
     adaptiveIcon: {
-      backgroundColor: '#E6F4FE',
+      backgroundColor: '#0284c7',
       foregroundImage: './assets/android-icon-foreground.png',
       backgroundImage: './assets/android-icon-background.png',
       monochromeImage: './assets/android-icon-monochrome.png',
@@ -92,6 +97,15 @@ const config = {
         icon: './assets/notification-icon.png',
         color: '#0284c7',
         defaultChannel: 'help-requests',
+      },
+    ],
+    [
+      'expo-splash-screen',
+      {
+        image: LAUNCH_LOGO,
+        imageWidth: LAUNCH_LOGO_WIDTH,
+        resizeMode: 'contain',
+        backgroundColor: LAUNCH_BACKGROUND,
       },
     ],
     'expo-secure-store',

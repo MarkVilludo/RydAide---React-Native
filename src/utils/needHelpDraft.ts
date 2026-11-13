@@ -2,6 +2,7 @@ import type { HelpRequest } from '../api/helpRequests';
 import type { OwnerStackParamList } from '../navigation/types';
 import { resolveMediaUrl } from './resolveMediaUrl';
 import { vehicleTitle } from './helpRequestUi';
+import { vehicleFormFromRequest } from './helpVehicle';
 
 export type NeedHelpParams = OwnerStackParamList['NeedHelp'];
 
@@ -23,6 +24,10 @@ function splitAddressText(addressText: string | null | undefined): {
 
 /** Build Need Help wizard params from a terminal help request (retry after no match). */
 export function needHelpParamsFromHelpRequest(request: HelpRequest): NeedHelpParams {
+  // Cancelled requests are final: never prefill them — the owner starts a fresh request.
+  if (request.status === 'CANCELLED') {
+    return { emergency: request.request_type === 'EMERGENCY' };
+  }
   const { landmark, address } = splitAddressText(request.address_text);
   const vehicleLine = request.vehicle_description?.trim() || vehicleTitle(request);
 
@@ -31,7 +36,13 @@ export function needHelpParamsFromHelpRequest(request: HelpRequest): NeedHelpPar
     latitude: request.latitude,
     longitude: request.longitude,
     vehicleDescription: vehicleLine,
+    vehicleForm: request.vehicle_details ? vehicleFormFromRequest(request, vehicleLine) : undefined,
     problemCategoryId: request.problem_category?.id,
+    problemCategoryIds: request.problem_category_ids?.length
+      ? request.problem_category_ids
+      : request.problem_category?.id != null
+        ? [request.problem_category.id]
+        : undefined,
     remarks: request.remarks,
     landmark,
     addressText: address,
@@ -56,7 +67,8 @@ export function needHelpInitialStep(params: NeedHelpParams | undefined): 'vehicl
   const remarksMin = emergency ? 2 : 10;
   const vehicleOk = (params.vehicleDescription?.trim().length ?? 0) >= 2;
   const remarksLen = params.remarks?.trim().length ?? 0;
-  const problemOk = params.problemCategoryId != null && remarksLen >= remarksMin;
+  const hasProblem = (params.problemCategoryIds?.length ?? 0) > 0 || params.problemCategoryId != null;
+  const problemOk = hasProblem && remarksLen >= remarksMin;
   const locationOk = params.latitude != null && params.longitude != null;
   return vehicleOk && problemOk && locationOk ? 'review' : 'vehicle';
 }

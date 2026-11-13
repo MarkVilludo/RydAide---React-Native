@@ -18,6 +18,11 @@ export function setApiAuthToken(token: string | null): void {
   authToken = token;
 }
 
+/** Current bearer token (for protected images loaded outside axios, e.g. wallet QR codes). */
+export function getApiAuthToken(): string | null {
+  return authToken;
+}
+
 api.interceptors.request.use((config) => {
   if (authToken) {
     config.headers.Authorization = `Bearer ${authToken}`;

@@ -20,6 +20,8 @@ export default function App() {
   return (
     <SafeAreaProvider initialMetrics={initialMetrics}>
       <GestureHandlerRootView style={{ flex: 1 }}>
+        {/* Mounted first so the loading screen's light status bar sits on top until it closes. */}
+        <StatusBar style="dark" />
         <AuthProvider>
           <SplashGate>
             <NotificationsProvider>
@@ -27,7 +29,6 @@ export default function App() {
               <AppToastHost />
             </NotificationsProvider>
           </SplashGate>
-          <StatusBar style="dark" />
         </AuthProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>

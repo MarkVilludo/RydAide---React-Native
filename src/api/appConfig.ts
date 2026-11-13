@@ -56,6 +56,14 @@ export interface AppConfig {
   auth?: {
     require_email_verification?: boolean;
   };
+  /** Contact Support options (newer servers). Null = not configured, hide it. */
+  support?: {
+    email?: string | null;
+    phone?: string | null;
+    messenger_url?: string | null;
+    faq_url?: string | null;
+    hours?: string | null;
+  };
 }
 
 export type MapMarkerRoleConfig = {
@@ -75,6 +83,11 @@ export interface DirectorySearchMeta {
 }
 
 let cached: AppConfig | null = null;
+
+/** Last loaded config (preloaded during launch), so screens render with the right features on first paint. */
+export function getCachedAppConfig(): AppConfig | null {
+  return cached;
+}
 
 export async function fetchAppConfig(force = false): Promise<AppConfig> {
   if (cached && !force) {

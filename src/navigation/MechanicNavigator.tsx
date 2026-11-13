@@ -4,6 +4,10 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
 import { Pressable, Text } from 'react-native';
 import { DeleteAccountScreen } from '../screens/account/DeleteAccountScreen';
+import { ProfileScreen } from '../screens/account/ProfileScreen';
+import { ContactSupportScreen } from '../screens/account/ContactSupportScreen';
+import { PaymentMethodFormScreen } from '../screens/account/PaymentMethodFormScreen';
+import { PaymentMethodsScreen } from '../screens/account/PaymentMethodsScreen';
 import { MechanicActiveJobRecovery } from '../components/MechanicActiveJobRecovery';
 import { MechanicActiveJobScreen } from '../screens/mechanic/MechanicActiveJobScreen';
 import { MechanicHomeScreen } from '../screens/mechanic/MechanicHomeScreen';
@@ -96,6 +100,14 @@ function MechanicStackNavigator() {
           options={{ title: 'Service location' }}
         />
         <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} options={{ title: 'Delete account' }} />
+        <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} options={{ title: 'Payment methods' }} />
+        <Stack.Screen name="ContactSupport" component={ContactSupportScreen} options={{ title: 'Contact Support' }} />
+        <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
+        <Stack.Screen
+          name="PaymentMethodForm"
+          component={PaymentMethodFormScreen}
+          options={({ route }) => ({ title: route.params?.wallet ? 'Edit wallet' : 'Add a wallet' })}
+        />
       </Stack.Navigator>
     </>
   );
@@ -109,7 +121,7 @@ export function MechanicNavigator() {
         screenOptions={{
           headerShown: false,
           drawerType: 'front',
-          drawerStyle: { width: 300, backgroundColor: '#f8fafc' },
+          drawerStyle: { width: 312, backgroundColor: '#ffffff' },
           overlayColor: 'rgba(15, 23, 42, 0.45)',
         }}
       >

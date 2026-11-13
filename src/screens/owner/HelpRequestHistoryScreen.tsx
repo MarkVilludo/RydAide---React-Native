@@ -7,7 +7,7 @@ import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 import { fetchHelpRequests, type HelpRequest } from '../../api/helpRequests';
 import { logger } from '../../utils/logger';
 import type { OwnerStackParamList } from '../../navigation/types';
-import { isOwnerLiveHelpRequest, jobStatusOf } from '../../utils/helpRequestUi';
+import { isOwnerLiveHelpRequest, jobStatusOf, problemNamesOf } from '../../utils/helpRequestUi';
 import { jobWorkDurationLabel } from '../../utils/jobWorkDuration';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'HelpRequestHistory'>;
@@ -91,7 +91,7 @@ export function HelpRequestHistoryScreen({ navigation }: Props) {
           <Text style={styles.type}>{item.request_type_label ?? item.request_type}</Text>
           <Text style={styles.status}>{item.status_label ?? item.status}</Text>
           <Text style={styles.line}>Vehicle: {vehicleLabel(item)}</Text>
-          <Text style={styles.line}>Problem: {item.problem_category?.name ?? '—'}</Text>
+          <Text style={styles.line}>Problem: {problemNamesOf(item, '—')}</Text>
           <Text style={styles.remarks} numberOfLines={2}>{item.remarks}</Text>
           <Text style={styles.meta}>Requested: {formatDate(item.created_at)}</Text>
           <Text style={styles.meta} numberOfLines={1}>Location: {locationLabel(item)}</Text>

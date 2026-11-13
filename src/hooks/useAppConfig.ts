@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
-import { fetchAppConfig, type AppConfig } from '../api/appConfig';
+import { fetchAppConfig, getCachedAppConfig, type AppConfig } from '../api/appConfig';
 
 export function useAppConfig() {
-  const [config, setConfig] = useState<AppConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Start from the launch-preloaded config so dashboards don't paint once with every feature off.
+  const [config, setConfig] = useState<AppConfig | null>(() => getCachedAppConfig());
+  const [loading, setLoading] = useState(() => getCachedAppConfig() == null);
 
   const reload = useCallback(() => {
-    setLoading(true);
+    if (getCachedAppConfig() == null) setLoading(true);
     return fetchAppConfig(true)
       .then(setConfig)
-      .catch(() => setConfig(null))
+      // Keep the last good config on a failed refresh instead of switching every feature off.
+      .catch(() => setConfig(getCachedAppConfig()))
       .finally(() => setLoading(false));
   }, []);
 

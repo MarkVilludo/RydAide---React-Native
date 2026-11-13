@@ -17,6 +17,7 @@ import {
 import { getApiErrorMessage } from '../../api/client';
 import {
   cancelHelpRequest,
+  fetchHelpCancellationSummary,
   fetchHelpRequest,
   submitHelpRequestReview,
   type HelpRequest,
@@ -24,6 +25,7 @@ import {
 import { CancelHelpRequestButton } from '../../components/CancelHelpRequestButton';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { HelpRequestCompletionPanel } from '../../components/HelpRequestCompletionPanel';
+import { OwnerPayMechanicCard, PaymentPlanLine } from '../../components/JobPaymentCards';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import type { OwnerStackParamList } from '../../navigation/types';
@@ -35,6 +37,9 @@ import {
   jobStatusLabelOf,
   jobStatusOf,
   vehicleTitle,
+  problemNamesOf,
+  vehicleWithDetails,
+  cancelConfirmMessage,
 } from '../../utils/helpRequestUi';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'HelpRequestDetail'>;
@@ -62,11 +67,12 @@ export function HelpRequestDetailScreen({ route }: Props) {
     }, [load]),
   );
 
-  const confirmCancel = () => {
+  const confirmCancel = async () => {
     if (!request) return;
+    const summary = await fetchHelpCancellationSummary();
     Alert.alert(
       'Cancel request?',
-      'Stop searching for a mechanic? You can submit a new request anytime.',
+      cancelConfirmMessage(summary),
       [
         { text: 'Keep request', style: 'cancel' },
         {
@@ -141,13 +147,19 @@ export function HelpRequestDetailScreen({ route }: Props) {
           ) : null}
 
           <Section title="Vehicle">
-            <Text style={styles.bold}>{vehicleTitle(request)}</Text>
+            <Text style={styles.bold}>{vehicleWithDetails(request)}</Text>
           </Section>
 
           <Section title="Problem">
-            <Text style={styles.bold}>{request.problem_category?.name ?? '—'}</Text>
+            <Text style={styles.bold}>{problemNamesOf(request, '—')}</Text>
             <Text style={styles.body}>{request.remarks}</Text>
           </Section>
+
+          {request.payment_preference ? (
+            <Section title="Payment">
+              <PaymentPlanLine request={request} prefix="You planned to pay with" />
+            </Section>
+          ) : null}
 
           <Section title="Location">
             <Text style={styles.body}>{location}</Text>
@@ -202,6 +214,10 @@ export function HelpRequestDetailScreen({ route }: Props) {
 
           {request.media && request.media.length > 0 ? (
             <HelpRequestPhotoGallery media={request.media} title="Problem photos" compact />
+          ) : null}
+
+          {completed || ['ARRIVED', 'IN_PROGRESS'].includes(jobStatusOf(request)) ? (
+            <OwnerPayMechanicCard request={request} onUpdated={setRequest} />
           ) : null}
 
           {canReview ? (
