@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
+  type AppStateStatus,
   Animated,
   Easing,
   Linking,
@@ -39,6 +41,7 @@ import type { MechanicStackParamList } from '../../navigation/types';
 import { colors as C } from '../../theme/colors';
 import { formatTimeAgo } from '../../utils/formatTimeAgo';
 import { jobStatusLabelOf, vehicleTitle } from '../../utils/helpRequestUi';
+import { reverseGeocodeLine } from '../../utils/reverseGeocode';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'MechanicHome'>;
 
@@ -55,6 +58,52 @@ const GUIDE_INTERVAL_MS = 3400;
 function pickPrimaryActiveJob(queues: Awaited<ReturnType<typeof fetchMechanicHelpQueues>>): HelpRequest | null {
   const active = [...queues.accepted_active, ...queues.in_progress];
   return active[0] ?? null;
+}
+
+function greetingFor(date: Date): string {
+  const h = date.getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+type ChipTone = 'live' | 'off' | 'warn' | 'danger' | 'busy';
+
+/** Status chip: colored dot + text, so the state never relies on color alone. */
+function StatusChip({ label, tone }: { label: string; tone: ChipTone }) {
+  return (
+    <View
+      style={[
+        styles.chip,
+        tone === 'live' && styles.chipLive,
+        tone === 'warn' && styles.chipWarn,
+        tone === 'danger' && styles.chipDanger,
+        tone === 'busy' && styles.chipBusy,
+      ]}
+    >
+      <View
+        style={[
+          styles.chipDot,
+          tone === 'live' && styles.chipDotLive,
+          tone === 'warn' && styles.chipDotWarn,
+          tone === 'danger' && styles.chipDotDanger,
+          tone === 'busy' && styles.chipDotBusy,
+        ]}
+      />
+      <Text
+        style={[
+          styles.chipText,
+          tone === 'live' && styles.chipTextLive,
+          tone === 'warn' && styles.chipTextWarn,
+          tone === 'danger' && styles.chipTextDanger,
+          tone === 'busy' && styles.chipTextBusy,
+        ]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </View>
+  );
 }
 
 function firstName(fullName: string | undefined): string {
@@ -311,6 +360,20 @@ function MechanicGuideRail({
 }
 
 const POLL_INTERVAL_MS = 45_000;
+
+/** Cheap structural compare for small API payloads, so unchanged polls don't re-render. */
+function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+function keepIfSame<T>(next: T): (prev: T) => T {
+  return (prev) => (sameJson(prev, next) ? prev : next);
+}
 const CLOCK_TICK_MS = 15_000;
 
 type ReadinessItem = {
@@ -356,9 +419,25 @@ export function MechanicHomeScreen({ navigation }: Props) {
   const [deviceSaveBusy, setDeviceSaveBusy] = useState(false);
   const resumePrompted = useRef(false);
   const loadInFlight = useRef(false);
+  /** A focus/manual load requested while another was running; re-run once it finishes. */
+  const loadQueued = useRef<{ showRefresh: boolean } | null>(null);
+  const mountedRef = useRef(true);
+  const focusedRef = useRef(false);
+  const lastLoadAtRef = useRef(0);
   const maxOffsetKm = useServicePinMaxOffsetKm();
   const { coords, permissionDenied, servicePin, servicePinManual, applySavedMechanicLocation } =
     useMechanicLiveLocation();
+  // Read live location through a ref so GPS ticks (every few seconds) don't recreate `load`
+  // and re-fire the focus fetch.
+  const locRef = useRef({ servicePin, servicePinManual, coords, maxOffsetKm });
+  locRef.current = { servicePin, servicePinManual, coords, maxOffsetKm };
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -372,24 +451,35 @@ export function MechanicHomeScreen({ navigation }: Props) {
     }, [pageOpacity]),
   );
 
-  const load = useCallback(async (showRefresh = false, fromPoll = false) => {
-    // Background polls skip if a load is already running; focus/manual loads always run.
-    if (fromPoll && loadInFlight.current) return;
+  const load = useCallback(async (showRefresh = false, fromPoll = false): Promise<void> => {
+    if (loadInFlight.current) {
+      // Background polls just skip; focus/manual loads run once the current one finishes.
+      if (!fromPoll) {
+        const prev = loadQueued.current;
+        loadQueued.current = { showRefresh: showRefresh || (prev?.showRefresh ?? false) };
+        if (showRefresh) setRefreshing(true);
+      }
+      return;
+    }
     loadInFlight.current = true;
     if (showRefresh) setRefreshing(true);
+    const alive = () => mountedRef.current;
     try {
       await Promise.all([
-        fetchEntitlements().then(setEntitlements).catch(() => setEntitlements(null)),
+        fetchEntitlements()
+          .then((e) => alive() && setEntitlements(keepIfSame<Entitlements | null>(e)))
+          .catch(() => alive() && setEntitlements(null)),
         subscriptionsOn
           ? fetchMechanicSubscription()
-              .then((d) => setSubscriptionDashboard(d.subscription))
-              .catch(() => setSubscriptionDashboard(null))
+              .then((d) => alive() && setSubscriptionDashboard(keepIfSame<MechanicSubscriptionDetails | null>(d.subscription)))
+              .catch(() => alive() && setSubscriptionDashboard(null))
           : Promise.resolve(),
         fetchMyMechanicProfile()
           .then((p) => {
+            if (!alive()) return;
             setListingStatus(p?.verification_status ?? (p ? 'pending' : 'none'));
             setAvailability(p?.availability_status ?? 'offline');
-            setIdentity(p?.identity_verification ?? null);
+            setIdentity(keepIfSame<MechanicIdentityVerification | null>(p?.identity_verification ?? null));
             setServiceRadiusKm(
               p?.service_radius_km != null && Number(p.service_radius_km) > 0 ? Number(p.service_radius_km) : null,
             );
@@ -397,53 +487,80 @@ export function MechanicHomeScreen({ navigation }: Props) {
             const lat = p?.latitude != null ? Number(p.latitude) : NaN;
             const lng = p?.longitude != null ? Number(p.longitude) : NaN;
             if (Number.isFinite(lat) && Number.isFinite(lng)) {
-              setWorkLocation({ latitude: lat, longitude: lng, address: p?.address ?? null });
+              setWorkLocation(
+                keepIfSame<SavedWorkLocation | null>({ latitude: lat, longitude: lng, address: p?.address ?? null }),
+              );
             } else {
               setWorkLocation(null);
             }
           })
           .catch(() => {
+            if (!alive()) return;
             setListingStatus(null);
             setAvailability('offline');
             setWorkLocation(null);
           }),
       ]);
 
+      if (!alive()) return;
       if (!emergencyOn) {
         setSummary(null);
         setActiveJob(null);
         setLastUpdatedAt(new Date().toISOString());
         return;
       }
-      const q = await fetchMechanicHelpQueues(
-        mechanicQueueFetchCoords({ servicePin, servicePinManual, coords, maxOffsetKm }),
-      );
-      setSummary(q.summary);
-      setActiveJob(pickPrimaryActiveJob(q));
+      const q = await fetchMechanicHelpQueues(mechanicQueueFetchCoords(locRef.current));
+      if (!alive()) return;
+      setSummary(keepIfSame<typeof q.summary | null>(q.summary));
+      setActiveJob(keepIfSame<HelpRequest | null>(pickPrimaryActiveJob(q)));
       setLastUpdatedAt(new Date().toISOString());
     } catch {
-      setSummary(null);
-      setActiveJob(null);
+      if (alive()) {
+        setSummary(null);
+        setActiveJob(null);
+      }
     } finally {
       loadInFlight.current = false;
-      setNowMs(Date.now());
-      if (showRefresh) setRefreshing(false);
+      lastLoadAtRef.current = Date.now();
+      const queued = loadQueued.current;
+      loadQueued.current = null;
+      if (alive()) {
+        setNowMs(Date.now());
+        if (queued) {
+          // Keep the spinner if either the finished or the queued load asked for it.
+          void loadRef.current(queued.showRefresh || showRefresh);
+        } else if (showRefresh) {
+          setRefreshing(false);
+        }
+      }
     }
-  }, [
-    emergencyOn,
-    subscriptionsOn,
-    coords?.latitude,
-    coords?.longitude,
-    servicePin?.latitude,
-    servicePin?.longitude,
-    servicePinManual,
-    maxOffsetKm,
-  ]);
+  }, [emergencyOn, subscriptionsOn]);
 
   const loadRef = useRef(load);
   loadRef.current = load;
 
-  useFocusEffect(useCallback(() => void load(), [load]));
+  useFocusEffect(
+    useCallback(() => {
+      focusedRef.current = true;
+      void load();
+      return () => {
+        focusedRef.current = false;
+      };
+    }, [load]),
+  );
+
+  // The queue is fetched around the service pin, so refresh when the pin itself moves
+  // (saved on the map, or re-synced from GPS every ~40 m) — not on every GPS tick.
+  const pinKey = servicePin
+    ? `${servicePin.latitude.toFixed(5)},${servicePin.longitude.toFixed(5)},${servicePinManual ? 1 : 0}`
+    : 'none';
+  const pinKeySeen = useRef(pinKey);
+  useEffect(() => {
+    if (pinKeySeen.current === pinKey) return;
+    pinKeySeen.current = pinKey;
+    // Queued (not skipped) so the pin-correct fetch still happens if a load is running.
+    if (focusedRef.current) void loadRef.current(false);
+  }, [pinKey]);
 
   const isOnline = availability === 'available';
   const isBusy = availability === 'busy';
@@ -452,11 +569,27 @@ export function MechanicHomeScreen({ navigation }: Props) {
   // Keep counts fresh while the mechanic is online and looking at the dashboard. Stops on blur/unmount.
   useFocusEffect(
     useCallback(() => {
-      const tick = setInterval(() => setNowMs(Date.now()), CLOCK_TICK_MS);
-      const poll = pollWhileFocused ? setInterval(() => void loadRef.current(false, true), POLL_INTERVAL_MS) : null;
+      const isActive = () => AppState.currentState === 'active';
+      const tick = setInterval(() => {
+        if (isActive()) setNowMs(Date.now());
+      }, CLOCK_TICK_MS);
+      const poll = pollWhileFocused
+        ? setInterval(() => {
+            if (isActive()) void loadRef.current(false, true);
+          }, POLL_INTERVAL_MS)
+        : null;
+      // Skip work while backgrounded; catch up once when the app comes back if data is stale.
+      const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+        if (state !== 'active') return;
+        setNowMs(Date.now());
+        if (pollWhileFocused && Date.now() - lastLoadAtRef.current >= POLL_INTERVAL_MS) {
+          void loadRef.current(false, true);
+        }
+      });
       return () => {
         clearInterval(tick);
         if (poll) clearInterval(poll);
+        sub.remove();
       };
     }, [pollWhileFocused]),
   );
@@ -485,14 +618,25 @@ export function MechanicHomeScreen({ navigation }: Props) {
     entitlements?.accepted_requests?.unlimited ?? entitlements?.unlimited_accepted_requests ?? false;
   const isPro =
     entitlements?.plan_code === 'MECHANIC_PRO' || entitlements?.plan_code === 'MECHANIC_PRO_YEARLY';
+  // Free credits only matter when the server enforces them and the mechanic isn't Pro
+  // (Laravel SubscriptionService::entitlementsFor → accepted_requests.unlimited).
+  const creditsApply = entitlements != null && !isPro && !unlimitedAccepts;
+  /** Server limits are off and the mechanic isn't Pro: accepting is free, no credits used. */
+  const limitsOff = entitlements != null && !isPro && unlimitedAccepts;
+  const creditsRemaining = creditsApply
+    ? (acceptedRemaining ?? subscriptionDashboard?.free_credits.remaining ?? null)
+    : null;
+  const acceptLimit =
+    entitlements?.accepted_requests?.limit ??
+    entitlements?.max_accepted_requests ??
+    subscriptionDashboard?.free_credits.total ??
+    null;
+  // Authoritative: the same flag the accept endpoint enforces (MechanicRequestLimitService::canAccept).
   const atFreeLimit =
-    subscriptionsOn &&
-    !unlimitedAccepts &&
-    acceptedRemaining != null &&
-    acceptedRemaining <= 0;
-
-  const creditsRemaining =
-    subscriptionDashboard?.free_credits.remaining ?? acceptedRemaining ?? null;
+    creditsApply &&
+    (entitlements?.can_accept_help_requests === false || (creditsRemaining != null && creditsRemaining <= 0));
+  const lowCredits = creditsApply && !atFreeLimit && creditsRemaining != null && creditsRemaining <= 2;
+  const showCreditsTile = subscriptionsOn || creditsApply;
 
   const incomingCount = summary?.incoming ?? 0;
   const workingCount = (summary?.accepted_active ?? 0) + (summary?.in_progress ?? 0);
@@ -500,19 +644,24 @@ export function MechanicHomeScreen({ navigation }: Props) {
   const hasWork = emergencyOn && (activeJob != null || incomingCount > 0 || workingCount > 0);
   // Dispatch only matches verified + online mechanics (server MechanicMatchingService), so be explicit.
   const onlineButNotMatchable = isOnline && !verified;
+  /** Online and matched for offers, but can't accept until they get Mechanic Pro. */
+  const onlineButCantAccept = isOnline && verified && atFreeLimit;
   const updatedLabel = lastUpdatedAt ? formatTimeAgo(lastUpdatedAt, nowMs) : null;
 
-  const statusMeta = needsProfile
-    ? { label: 'Setup needed', tone: 'warn' as const }
-    : verificationRejected
-      ? { label: 'Needs fixes', tone: 'danger' as const }
-      : verificationSuspended
-        ? { label: 'Suspended', tone: 'danger' as const }
+  const headerChip: { label: string; tone: ChipTone } = needsProfile
+    ? { label: 'Setup needed', tone: 'warn' }
+    : verificationSuspended
+      ? { label: 'Suspended', tone: 'danger' }
+      : verificationRejected
+        ? { label: 'Needs fixes', tone: 'danger' }
         : verificationPending
-          ? { label: 'In review', tone: 'warn' as const }
-          : verified
-            ? { label: 'Verified', tone: 'ok' as const }
-            : { label: 'Profile', tone: 'neutral' as const };
+          ? { label: 'In review', tone: 'warn' }
+          : isBusy
+            ? { label: 'On a job', tone: 'busy' }
+            : isOnline
+              ? { label: 'Online', tone: 'live' }
+              : { label: 'Offline', tone: 'off' };
+  const greeting = greetingFor(new Date(nowMs));
 
   const toggleOnline = async () => {
     // Going offline is always allowed, even while the listing is in review.
@@ -612,6 +761,7 @@ export function MechanicHomeScreen({ navigation }: Props) {
     [activeJob, isBusy, isOnline, navigation],
   );
 
+  const saveDeviceLocationRef = useRef<() => Promise<void>>(async () => {});
   const saveDeviceLocation = async () => {
     if (!coords) {
       Alert.alert('Location unavailable', 'Turn on location and try again.');
@@ -619,7 +769,8 @@ export function MechanicHomeScreen({ navigation }: Props) {
     }
     setDeviceSaveBusy(true);
     try {
-      const updated = await updateMechanicProfileLocation(coords.latitude, coords.longitude, undefined, {
+      const address = await reverseGeocodeLine(coords.latitude, coords.longitude);
+      const updated = await updateMechanicProfileLocation(coords.latitude, coords.longitude, address ?? undefined, {
         source: 'device',
       });
       applySavedMechanicLocation(
@@ -630,7 +781,7 @@ export function MechanicHomeScreen({ navigation }: Props) {
       setWorkLocation({
         latitude: updated.latitude ?? coords.latitude,
         longitude: updated.longitude ?? coords.longitude,
-        address: updated.address ?? workLocation?.address ?? null,
+        address: address ?? updated.address ?? null,
       });
     } catch {
       Alert.alert('Could not save', 'Use Adjust pin to set your spot on the map.');
@@ -639,13 +790,15 @@ export function MechanicHomeScreen({ navigation }: Props) {
     }
   };
 
-  const showAlert =
-    (emergencyOn && !verified) || !emergencyOn || atFreeLimit;
+  saveDeviceLocationRef.current = saveDeviceLocation;
+  const onUseDeviceLocation = useCallback(() => void saveDeviceLocationRef.current(), []);
+  const onEditMap = useCallback(() => navigation.navigate('MechanicWorkLocation'), [navigation]);
+  const onToggleMap = useCallback(() => setMapCollapsed((v) => !v), []);
+
+  const showAlert = (emergencyOn && !verified) || !emergencyOn;
 
   const submittedOn = formatShortDate(identity?.submitted_at ?? null);
-  const alertCopy: { title: string; detail: string | null } = atFreeLimit
-    ? { title: 'Free credits used up', detail: 'Upgrade to Mechanic Pro to keep accepting requests.' }
-    : needsProfile
+  const alertCopy: { title: string; detail: string | null } = needsProfile
       ? { title: 'Finish your listing to go online', detail: 'Add your details, service pin, and ID.' }
       : verificationRejected
         ? {
@@ -673,6 +826,8 @@ export function MechanicHomeScreen({ navigation }: Props) {
     ? 'Finish the job to take new requests'
     : onlineButNotMatchable
       ? 'Requests start after your listing is approved'
+      : onlineButCantAccept
+        ? 'You’ll see requests, but need Mechanic Pro to accept'
       : isOnline
         ? 'Nearby requests will show up here'
         : verified
@@ -724,16 +879,27 @@ export function MechanicHomeScreen({ navigation }: Props) {
   const readinessOpen = readiness.filter((r) => !r.done);
   const showReadiness = emergencyOn && !needsProfile && !hasWork && readinessOpen.length > 0;
 
-  const creditsHint =
-    subscriptionsOn && !needsProfile
-      ? isPro || unlimitedAccepts
-        ? 'Mechanic Pro: unlimited accepted requests.'
-        : creditsRemaining != null
-          ? `Each accepted request uses 1 free credit · ${creditsRemaining} left`
-          : 'Each accepted request uses 1 free credit.'
-      : null;
+  const creditsHint: { text: string; tone: 'muted' | 'warn' } | null = needsProfile || !showCreditsTile
+    ? null
+    : isPro
+      ? { text: 'Mechanic Pro: unlimited accepted requests.', tone: 'muted' }
+      : limitsOff
+        ? { text: 'Accepting requests doesn’t use credits right now.', tone: 'muted' }
+        : atFreeLimit
+          ? null // the "free requests used" card explains it
+          : lowCredits && creditsRemaining != null
+            ? {
+                text: `Only ${creditsRemaining} free request${creditsRemaining === 1 ? '' : 's'} left. ${
+                  subscriptionsOn ? 'Get Mechanic Pro to keep accepting.' : 'Each accepted request uses 1.'
+                }`,
+                tone: 'warn',
+              }
+            : creditsRemaining != null
+              ? { text: `Each accepted request uses 1 free credit · ${creditsRemaining} left`, tone: 'muted' }
+              : { text: 'Each accepted request uses 1 free credit.', tone: 'muted' };
 
-  const showWaiting = emergencyOn && !needsProfile && !hasWork && isOnline && verified;
+  const showWaiting = emergencyOn && !needsProfile && !hasWork && isOnline && verified && !atFreeLimit;
+  const showOutOfCredits = atFreeLimit && !needsProfile;
   const waitingSub = [
     serviceRadiusKm != null ? `Within ${serviceRadiusKm} km of your service pin` : 'Near your service pin',
     emergencyListing === false ? 'Service requests only' : null,
@@ -762,25 +928,20 @@ export function MechanicHomeScreen({ navigation }: Props) {
           </Pressable>
 
           <Pressable
-            style={styles.identity}
+            style={({ pressed }) => [styles.identity, pressed && styles.pressed]}
             onPress={() => navigation.navigate('MechanicOnboarding')}
             accessibilityRole="button"
-            accessibilityLabel="Open profile"
+            accessibilityLabel={`${greeting}, ${firstName(user?.name)}. Status: ${headerChip.label}. Open your listing`}
           >
-            <Text style={styles.hello} numberOfLines={1}>
-              {firstName(user?.name)}
+            <Text style={styles.greeting} numberOfLines={1}>
+              {greeting}
             </Text>
-            <Text
-              style={[
-                styles.statusLine,
-                statusMeta.tone === 'ok' && styles.statusOk,
-                statusMeta.tone === 'warn' && styles.statusWarn,
-                statusMeta.tone === 'danger' && styles.statusDanger,
-              ]}
-              numberOfLines={1}
-            >
-              {statusMeta.label}
-            </Text>
+            <View style={styles.nameRow}>
+              <Text style={styles.hello} numberOfLines={1}>
+                {firstName(user?.name)}
+              </Text>
+              <StatusChip label={headerChip.label} tone={headerChip.tone} />
+            </View>
           </Pressable>
 
           <Pressable
@@ -814,8 +975,8 @@ export function MechanicHomeScreen({ navigation }: Props) {
             <Pressable
               style={({ pressed }) => [
                 styles.availabilityBtn,
-                isOnline && !onlineButNotMatchable && styles.availabilityLive,
-                onlineButNotMatchable && styles.availabilityPending,
+                isOnline && !onlineButNotMatchable && !onlineButCantAccept && styles.availabilityLive,
+                (onlineButNotMatchable || onlineButCantAccept) && styles.availabilityPending,
                 isBusy && styles.availabilityBusy,
                 pressed && !availabilityBusy && !isBusy && styles.pressed,
               ]}
@@ -830,13 +991,13 @@ export function MechanicHomeScreen({ navigation }: Props) {
                 <ActivityIndicator size="small" color={isOnline ? C.liveInk : C.text} />
               ) : (
                 <>
-                  {isOnline && !onlineButNotMatchable ? (
+                  {isOnline && !onlineButNotMatchable && !onlineButCantAccept ? (
                     <PulseLive />
                   ) : (
                     <View
                       style={[
                         styles.dot,
-                        isBusy || onlineButNotMatchable ? styles.dotBusy : styles.dotOff,
+                        isBusy || onlineButNotMatchable || onlineButCantAccept ? styles.dotBusy : styles.dotOff,
                       ]}
                     />
                   )}
@@ -844,8 +1005,8 @@ export function MechanicHomeScreen({ navigation }: Props) {
                     <Text
                       style={[
                         styles.availabilityText,
-                        isOnline && !onlineButNotMatchable && styles.availabilityTextLive,
-                        onlineButNotMatchable && styles.availabilityTextPending,
+                        isOnline && !onlineButNotMatchable && !onlineButCantAccept && styles.availabilityTextLive,
+                        (onlineButNotMatchable || onlineButCantAccept) && styles.availabilityTextPending,
                       ]}
                     >
                       {availabilityTitle}
@@ -853,8 +1014,8 @@ export function MechanicHomeScreen({ navigation }: Props) {
                     <Text
                       style={[
                         styles.availabilitySub,
-                        isOnline && !onlineButNotMatchable && styles.availabilityHintLive,
-                        onlineButNotMatchable && styles.availabilityTextPending,
+                        isOnline && !onlineButNotMatchable && !onlineButCantAccept && styles.availabilityHintLive,
+                        (onlineButNotMatchable || onlineButCantAccept) && styles.availabilityTextPending,
                       ]}
                       numberOfLines={2}
                     >
@@ -865,8 +1026,8 @@ export function MechanicHomeScreen({ navigation }: Props) {
                     <Text
                       style={[
                         styles.availabilityHint,
-                        isOnline && !onlineButNotMatchable && styles.availabilityHintLive,
-                        onlineButNotMatchable && styles.availabilityTextPending,
+                        isOnline && !onlineButNotMatchable && !onlineButCantAccept && styles.availabilityHintLive,
+                        (onlineButNotMatchable || onlineButCantAccept) && styles.availabilityTextPending,
                       ]}
                     >
                       {isOnline ? 'Tap to go offline' : 'Tap to go online'}
@@ -881,16 +1042,10 @@ export function MechanicHomeScreen({ navigation }: Props) {
             <Pressable
               style={[
                 styles.alertRow,
-                (needsProfile || verificationPending || !emergencyOn || atFreeLimit) && styles.alertWarn,
+                (needsProfile || verificationPending || !emergencyOn) && styles.alertWarn,
                 (verificationRejected || verificationSuspended) && styles.alertDanger,
               ]}
-              onPress={() => {
-                if (atFreeLimit) {
-                  navigation.navigate('MechanicSubscription');
-                  return;
-                }
-                navigation.navigate('MechanicOnboarding');
-              }}
+              onPress={() => navigation.navigate('MechanicOnboarding')}
               accessibilityRole="button"
               accessibilityLabel={`${alertCopy.title}. ${alertCopy.detail ?? ''}`}
             >
@@ -912,6 +1067,54 @@ export function MechanicHomeScreen({ navigation }: Props) {
               </View>
               <Text style={styles.alertChevron}>›</Text>
             </Pressable>
+          ) : null}
+
+          {showOutOfCredits ? (
+            <View style={styles.outCard}>
+              <Text style={styles.outEyebrow}>Free requests used</Text>
+              <Text style={styles.outTitle} accessibilityRole="header">
+                {acceptLimit != null
+                  ? `You’ve used your ${acceptLimit} free requests`
+                  : 'You’ve used all your free requests'}
+              </Text>
+              <Text style={styles.outBody}>
+                {emergencyOn && verified
+                  ? isOnline
+                    ? 'You’ll still get nearby requests while you’re online, but you can’t accept them until you get Mechanic Pro.'
+                    : 'You can still go online and see nearby requests, but you can’t accept them until you get Mechanic Pro.'
+                  : 'You can’t accept new requests until you get Mechanic Pro.'}{' '}
+                Free requests don’t renew on their own.
+                {subscriptionsOn ? '' : ' Mechanic Pro isn’t available in the app yet.'}
+              </Text>
+              {doneCount > 0 ? (
+                <Text style={styles.outStat}>
+                  {doneCount} job{doneCount === 1 ? '' : 's'} completed with RydAid
+                </Text>
+              ) : null}
+              <View style={styles.outActions}>
+                {subscriptionsOn ? (
+                  <Pressable
+                    style={({ pressed }) => [styles.outPrimary, pressed && styles.pressed]}
+                    onPress={() => navigation.navigate('MechanicSubscription')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Get Mechanic Pro"
+                    accessibilityHint="Opens Mechanic Pro plans"
+                  >
+                    <Text style={styles.outPrimaryText}>Get Mechanic Pro</Text>
+                  </Pressable>
+                ) : null}
+                {doneCount > 0 ? (
+                  <Pressable
+                    style={({ pressed }) => [styles.outSecondary, pressed && styles.pressed]}
+                    onPress={() => openRequests('completed')}
+                    accessibilityRole="button"
+                    accessibilityLabel="View completed jobs"
+                  >
+                    <Text style={styles.outSecondaryText}>View completed jobs</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
           ) : null}
 
           {emergencyOn && activeJob ? (
@@ -942,14 +1145,20 @@ export function MechanicHomeScreen({ navigation }: Props) {
               style={({ pressed }) => [styles.incomingCard, pressed && styles.pressed]}
               onPress={() => openRequests('incoming')}
               accessibilityRole="button"
-              accessibilityLabel={`${incomingCount} new request${incomingCount === 1 ? '' : 's'} near you. Review`}
+              accessibilityLabel={`${incomingCount} new request${incomingCount === 1 ? '' : 's'} near you.${
+                atFreeLimit ? ' Upgrade to Mechanic Pro to accept.' : ''
+              } Review`}
             >
               <View style={styles.activeJobCopy}>
                 <Text style={styles.activeJobEyebrow}>New near you</Text>
                 <Text style={styles.activeJobTitle} numberOfLines={1}>
                   {incomingCount} request{incomingCount === 1 ? '' : 's'} waiting for a mechanic
                 </Text>
-                <Text style={styles.incomingSub}>Open one to see the problem and distance</Text>
+                <Text style={styles.incomingSub}>
+                  {atFreeLimit
+                    ? 'Upgrade to Mechanic Pro to accept'
+                    : 'Open one to see the problem and distance'}
+                </Text>
               </View>
               <View style={styles.activeJobCta}>
                 <Text style={styles.activeJobCtaText}>Review</Text>
@@ -975,20 +1184,17 @@ export function MechanicHomeScreen({ navigation }: Props) {
                 <Pressable
                   style={({ pressed }) => [
                     styles.metric,
-                    incomingCount > 0 && !atFreeLimit && styles.metricHot,
-                    atFreeLimit && styles.metricOff,
-                    pressed && !atFreeLimit && styles.pressed,
+                    incomingCount > 0 && styles.metricHot,
+                    pressed && styles.pressed,
                   ]}
-                  disabled={atFreeLimit}
                   onPress={() => openRequests('incoming')}
                   accessibilityRole="button"
                   accessibilityLabel={`Incoming requests: ${incomingCount}`}
-                  accessibilityState={{ disabled: atFreeLimit }}
                 >
-                  <Text style={[styles.metricNum, incomingCount > 0 && !atFreeLimit && styles.metricNumHot]}>
+                  <Text style={[styles.metricNum, incomingCount > 0 && styles.metricNumHot]}>
                     {incomingCount}
                   </Text>
-                  <Text style={[styles.metricLbl, incomingCount > 0 && !atFreeLimit && styles.metricLblHot]}>
+                  <Text style={[styles.metricLbl, incomingCount > 0 && styles.metricLblHot]}>
                     Incoming
                   </Text>
                 </Pressable>
@@ -1021,31 +1227,59 @@ export function MechanicHomeScreen({ navigation }: Props) {
                   <Text style={styles.metricLbl}>Done</Text>
                 </Pressable>
 
-                {subscriptionsOn ? (
+                {showCreditsTile ? (
                   <Pressable
                     style={({ pressed }) => [
                       styles.metric,
-                      atFreeLimit && styles.metricWarn,
+                      atFreeLimit && styles.metricDanger,
+                      lowCredits && styles.metricWarn,
                       pressed && styles.pressed,
                     ]}
-                    onPress={() => navigation.navigate('MechanicSubscription')}
+                    onPress={() => (subscriptionsOn ? navigation.navigate('MechanicSubscription') : undefined)}
+                    disabled={!subscriptionsOn}
                     accessibilityRole="button"
                     accessibilityLabel={
                       isPro
-                        ? 'Mechanic Pro, unlimited accepts'
-                        : `Free credits left: ${creditsRemaining ?? 'unknown'}`
+                        ? 'Mechanic Pro, unlimited accepted requests'
+                        : limitsOff
+                          ? 'Accepting requests doesn’t use credits right now'
+                          : `Free requests left: ${creditsRemaining ?? 'unknown'}`
                     }
                   >
-                    <Text style={styles.metricNum}>
-                      {isPro ? '∞' : creditsRemaining != null ? String(creditsRemaining) : '—'}
+                    <Text
+                      style={[
+                        styles.metricNum,
+                        atFreeLimit && styles.metricNumDanger,
+                        lowCredits && styles.metricNumWarn,
+                      ]}
+                    >
+                      {isPro || limitsOff ? '∞' : creditsRemaining != null ? String(creditsRemaining) : '—'}
                     </Text>
-                    <Text style={styles.metricLbl}>{isPro ? 'Pro' : 'Credits'}</Text>
+                    <Text
+                      style={[
+                        styles.metricLbl,
+                        atFreeLimit && styles.metricNumDanger,
+                        lowCredits && styles.metricNumWarn,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {isPro
+                        ? 'Pro'
+                        : limitsOff
+                          ? 'Free'
+                          : atFreeLimit || lowCredits
+                            ? 'Credits left'
+                            : 'Credits'}
+                    </Text>
                   </Pressable>
                 ) : null}
               </View>
               {creditsHint ? (
-                <Text style={styles.creditsHint} numberOfLines={1}>
-                  {creditsHint}
+                <Text
+                  style={[styles.creditsHint, creditsHint.tone === 'warn' && styles.creditsHintWarn]}
+                  numberOfLines={2}
+                >
+                  {creditsHint.text}
                 </Text>
               ) : null}
             </View>
@@ -1089,12 +1323,12 @@ export function MechanicHomeScreen({ navigation }: Props) {
                 deviceLongitude={coords?.longitude ?? null}
                 permissionDenied={permissionDenied}
                 pinManual={servicePinManual}
-                onEditMap={() => navigation.navigate('MechanicWorkLocation')}
-                onUseDeviceLocation={() => void saveDeviceLocation()}
+                onEditMap={onEditMap}
+                onUseDeviceLocation={onUseDeviceLocation}
                 deviceSaveBusy={deviceSaveBusy}
                 mapHeight={compactMap ? 150 : undefined}
                 collapsed={compactMap && mapCollapsed}
-                onToggleCollapsed={compactMap ? () => setMapCollapsed((v) => !v) : undefined}
+                onToggleCollapsed={compactMap ? onToggleMap : undefined}
               />
             ) : (
               <Pressable
@@ -1252,8 +1486,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   ghostBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     backgroundColor: C.surface,
     alignItems: 'center',
@@ -1264,22 +1498,42 @@ const styles = StyleSheet.create({
   menuBars: { gap: 3.5, width: 15 },
   menuBar: { height: 2, borderRadius: 1, backgroundColor: C.text },
   menuBarMid: { width: 10 },
-  identity: { flex: 1, minWidth: 0 },
+  identity: { flex: 1, minWidth: 0, minHeight: 44, justifyContent: 'center' },
+  greeting: { fontSize: 12, fontWeight: '600', color: C.muted, letterSpacing: 0.1 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 1 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    backgroundColor: C.surfaceMuted,
+    borderColor: C.border,
+    flexShrink: 0,
+  },
+  chipLive: { backgroundColor: C.liveSoft, borderColor: C.liveBorder },
+  chipWarn: { backgroundColor: C.warnSoft, borderColor: C.warnBorder },
+  chipDanger: { backgroundColor: C.dangerSoft, borderColor: C.dangerBorder },
+  chipBusy: { backgroundColor: C.busySoft, borderColor: C.busyBorder },
+  chipDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.mutedSoft },
+  chipDotLive: { backgroundColor: C.live },
+  chipDotWarn: { backgroundColor: C.busy },
+  chipDotDanger: { backgroundColor: C.danger },
+  chipDotBusy: { backgroundColor: C.busy },
+  chipText: { fontSize: 11, fontWeight: '700', color: C.muted, letterSpacing: 0.2 },
+  chipTextLive: { color: C.liveInk },
+  chipTextWarn: { color: C.warnInk },
+  chipTextDanger: { color: C.dangerInk },
+  chipTextBusy: { color: C.warnInk },
   hello: {
+    flexShrink: 1,
     fontSize: 20,
     fontWeight: '700',
     color: C.text,
     letterSpacing: -0.3,
   },
-  statusLine: {
-    marginTop: 1,
-    fontSize: 12,
-    fontWeight: '600',
-    color: C.muted,
-  },
-  statusOk: { color: C.liveInk },
-  statusWarn: { color: C.warnInk },
-  statusDanger: { color: C.dangerInk },
   refreshGlyph: { fontSize: 17, color: C.primary, fontWeight: '700' },
   availabilityBtn: {
     flexDirection: 'row',
@@ -1402,8 +1656,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    height: 40,
-    minWidth: 40,
+    height: 44,
+    minWidth: 44,
     maxWidth: 140,
     paddingHorizontal: 10,
     borderRadius: 12,
@@ -1450,7 +1704,47 @@ const styles = StyleSheet.create({
   metricLblHot: { color: '#e0f2fe' },
   metricOff: { backgroundColor: C.surfaceMuted },
   metricWarn: { backgroundColor: C.warnSoft, borderColor: C.warnBorder },
+  metricDanger: { backgroundColor: C.dangerSoft, borderColor: C.dangerBorder },
+  metricNumWarn: { color: C.warnInk },
+  metricNumDanger: { color: C.dangerInk },
   creditsHint: { marginTop: 6, fontSize: 11, color: C.muted, textAlign: 'center' },
+  creditsHintWarn: { color: C.warnInk, fontWeight: '700' },
+  outCard: {
+    backgroundColor: C.warnSoft,
+    borderColor: C.warnBorder,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+  },
+  outEyebrow: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: C.warnInk,
+  },
+  outTitle: { marginTop: 4, fontSize: 17, fontWeight: '800', color: C.text },
+  outBody: { marginTop: 6, fontSize: 13, lineHeight: 19, color: C.text, opacity: 0.85 },
+  outStat: { marginTop: 8, fontSize: 13, fontWeight: '700', color: C.liveInk },
+  outActions: { marginTop: 12, gap: 8 },
+  outPrimary: {
+    minHeight: 48,
+    borderRadius: 12,
+    backgroundColor: C.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  outPrimaryText: { color: C.onPrimary, fontWeight: '800', fontSize: 15 },
+  outSecondary: {
+    minHeight: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: C.primaryBorder,
+    backgroundColor: C.surface,
+  },
+  outSecondaryText: { color: C.primaryInk, fontWeight: '700', fontSize: 14 },
   readyCard: {
     backgroundColor: C.surface,
     borderRadius: 16,

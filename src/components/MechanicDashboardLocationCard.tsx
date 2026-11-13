@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { servicePinManualSaveHint } from '../constants/servicePinMessages';
 import { useServicePinMaxOffsetMeters } from '../hooks/useMechanicDistanceOrigin';
+import { cachedGeocodeLine, reverseGeocodeLine } from '../utils/reverseGeocode';
 import { MechanicLocationMapPreview } from './MechanicLocationMapPreview';
 
 export type SavedWorkLocation = {
@@ -45,7 +46,7 @@ export function shortAreaLabel(address: string | null | undefined): string | nul
   return parts.slice(0, 2).join(', ');
 }
 
-export function MechanicDashboardLocationCard({
+export const MechanicDashboardLocationCard = React.memo(function MechanicDashboardLocationCard({
   saved,
   deviceLatitude,
   deviceLongitude,
@@ -72,7 +73,31 @@ export function MechanicDashboardLocationCard({
     return null;
   }, [saved, deviceLatitude, deviceLongitude]);
 
-  const fullAddress = saved?.address?.trim() || null;
+  // GPS syncs update the pin coordinates without an address, so the stored address can describe an
+  // older spot. Only trust it for pins placed by hand on the map (saved together with their address);
+  // otherwise name the coordinates actually shown on the map.
+  const trustSavedAddress = Boolean(saved && pinManual && saved.address?.trim());
+  const previewLat = preview?.latitude ?? null;
+  const previewLng = preview?.longitude ?? null;
+  const [geoLine, setGeoLine] = useState<string | null>(() =>
+    previewLat != null && previewLng != null ? cachedGeocodeLine(previewLat, previewLng) : null,
+  );
+  useEffect(() => {
+    if (trustSavedAddress || previewLat == null || previewLng == null) {
+      setGeoLine(null);
+      return;
+    }
+    let alive = true;
+    setGeoLine(cachedGeocodeLine(previewLat, previewLng));
+    void reverseGeocodeLine(previewLat, previewLng).then((line) => {
+      if (alive) setGeoLine(line);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [trustSavedAddress, previewLat, previewLng]);
+
+  const fullAddress = trustSavedAddress ? saved!.address!.trim() : geoLine;
   const areaLabel =
     shortAreaLabel(fullAddress) ??
     (preview ? `${preview.latitude.toFixed(4)}, ${preview.longitude.toFixed(4)}` : null);
@@ -184,7 +209,7 @@ export function MechanicDashboardLocationCard({
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

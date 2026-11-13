@@ -6,14 +6,35 @@ type Props = {
   acting: boolean;
   onAccept: () => void;
   onDecline: () => void;
+  /**
+   * Set when the mechanic can't accept (free requests used, no Mechanic Pro).
+   * Explains it before they tap, and swaps Accept for the upgrade action when one exists.
+   */
+  upgrade?: { message: string; onUpgrade?: () => void } | null;
 };
 
-export function MechanicIncomingOfferFooter({ acting, onAccept, onDecline }: Props) {
+export function MechanicIncomingOfferFooter({ acting, onAccept, onDecline, upgrade }: Props) {
   const insets = useSafeAreaInsets();
   const bottomPad = Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 8);
 
   return (
     <View style={[styles.bar, { paddingBottom: bottomPad }]}>
+      {upgrade ? (
+        <Text style={styles.upgradeNote} accessibilityRole="text">
+          {upgrade.message}
+        </Text>
+      ) : null}
+      {upgrade?.onUpgrade ? (
+        <Pressable
+          style={({ pressed }) => [styles.upgrade, pressed && styles.upgradePressed]}
+          onPress={upgrade.onUpgrade}
+          accessibilityRole="button"
+          accessibilityLabel="Get Mechanic Pro"
+          accessibilityHint="Opens Mechanic Pro plans"
+        >
+          <Text style={styles.acceptText}>Get Mechanic Pro</Text>
+        </Pressable>
+      ) : upgrade ? null : (
       <Pressable
         style={({ pressed }) => [styles.accept, pressed && styles.acceptPressed, acting && styles.disabled]}
         onPress={onAccept}
@@ -27,6 +48,7 @@ export function MechanicIncomingOfferFooter({ acting, onAccept, onDecline }: Pro
           <Text style={styles.acceptText}>Accept job</Text>
         )}
       </Pressable>
+      )}
       <Pressable
         style={({ pressed }) => [styles.decline, pressed && styles.declinePressed, acting && styles.disabled]}
         onPress={onDecline}
@@ -66,6 +88,28 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   acceptPressed: { backgroundColor: '#15803d' },
+  upgradeNote: {
+    color: '#92400e',
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  upgrade: {
+    backgroundColor: '#0284c7',
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+  },
+  upgradePressed: { backgroundColor: '#0369a1' },
   acceptText: { color: '#fff', fontWeight: '800', fontSize: 17 },
   decline: {
     marginTop: 10,

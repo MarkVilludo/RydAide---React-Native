@@ -17,6 +17,8 @@ import { MechanicCustomerDistance } from '../../components/MechanicCustomerDista
 import { MechanicDeclineOfferModal } from '../../components/MechanicDeclineOfferModal';
 import { MechanicIncomingOfferFooter } from '../../components/MechanicIncomingOfferFooter';
 import { MechanicOfferUnavailableState } from '../../components/MechanicOfferUnavailableState';
+import { useMechanicAcceptAllowance } from '../../hooks/useMechanicAcceptAllowance';
+import { useAppConfig } from '../../hooks/useAppConfig';
 import { useMechanicIncomingOfferActions } from '../../hooks/useMechanicIncomingOfferActions';
 import { useMechanicDistanceOrigin } from '../../hooks/useMechanicDistanceOrigin';
 import { resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
@@ -44,6 +46,7 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
     declineOpen,
     setDeclineOpen,
     unavailable,
+    subscriptionBlocked,
     onAccept,
     submitDecline,
     applyLoadedRequest,
@@ -54,6 +57,19 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
     onRequestLoaded: setRequest,
     watchOfferAvailability: true,
   });
+
+  const allowance = useMechanicAcceptAllowance();
+  const { config } = useAppConfig();
+  const subscriptionsOn = config?.features?.mechanic_subscriptions ?? false;
+  const acceptBlocked = allowance.blocked || subscriptionBlocked;
+  const upgrade = acceptBlocked
+    ? {
+        message: subscriptionsOn
+          ? `You’ve used your ${allowance.limit ?? 'free'} free requests. Get Mechanic Pro to accept this one.`
+          : 'You’ve used your free requests, so you can’t accept new ones right now.',
+        onUpgrade: subscriptionsOn ? () => navigation.navigate('MechanicSubscription') : undefined,
+      }
+    : null;
 
   const load = useCallback(() => {
     setLoading(true);
@@ -126,7 +142,7 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
     <View style={styles.root}>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={[styles.content, showActions && { paddingBottom: FOOTER_SPACE }]}
+        contentContainerStyle={[styles.content, showActions && { paddingBottom: FOOTER_SPACE + (upgrade ? 56 : 0) }]}
       >
         {isEmergency && <Text style={styles.emergency}>🚨 New emergency request</Text>}
 
@@ -196,6 +212,7 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
             acting={acting}
             onAccept={onAccept}
             onDecline={() => setDeclineOpen(true)}
+            upgrade={upgrade}
           />
           <MechanicDeclineOfferModal
             visible={declineOpen}

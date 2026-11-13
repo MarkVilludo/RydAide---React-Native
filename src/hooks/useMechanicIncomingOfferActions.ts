@@ -31,6 +31,8 @@ export function useMechanicIncomingOfferActions({
   const [acting, setActing] = useState(false);
   const [declineOpen, setDeclineOpen] = useState(false);
   const [unavailable, setUnavailable] = useState<IncomingOfferUnavailable | null>(null);
+  /** Set after the server refused an accept for lack of free requests (402 SUBSCRIPTION_REQUIRED). */
+  const [subscriptionBlocked, setSubscriptionBlocked] = useState(false);
 
   const applyLoadedRequest = useCallback(
     (request: HelpRequest | null) => {
@@ -68,10 +70,15 @@ export function useMechanicIncomingOfferActions({
     } catch (e) {
       const outcome = classifyAcceptError(e);
       if (outcome.kind === 'subscription') {
-        Alert.alert('Mechanic Pro required', outcome.message, [
-          { text: 'Not now', style: 'cancel' },
-          { text: 'Subscribe', onPress: () => navigation.navigate('MechanicSubscription') },
-        ]);
+        setSubscriptionBlocked(true);
+        Alert.alert(
+          'Free requests used up',
+          'You’ve used all your free requests, so you can’t accept this one. Get Mechanic Pro to keep accepting requests.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Get Mechanic Pro', onPress: () => navigation.navigate('MechanicSubscription') },
+          ],
+        );
       } else if (outcome.kind === 'unavailable') {
         // Lost the race or the offer ended: show the friendly full-screen state, not an error alert.
         setUnavailable(outcome.reason);
@@ -114,6 +121,7 @@ export function useMechanicIncomingOfferActions({
     setDeclineOpen,
     unavailable,
     setUnavailable,
+    subscriptionBlocked,
     onAccept,
     submitDecline,
     applyLoadedRequest,

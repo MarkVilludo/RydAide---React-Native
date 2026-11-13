@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { memo, useEffect, useMemo, useRef } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, type Region } from 'react-native-maps';
 import { androidMapsProvider, hasGoogleMapsApiKey } from '../utils/mapsProvider';
@@ -21,6 +21,8 @@ type Props = {
    * marker: draggable marker on the map.
    */
   pickMode?: 'map-center' | 'marker';
+  /** Fires once the native map is ready (useful for load timing). */
+  onMapReady?: () => void;
 };
 
 const DEFAULT_CENTER = { latitude: 14.5995, longitude: 120.9842 };
@@ -38,7 +40,7 @@ function regionFor(
   };
 }
 
-export function LocationPickMap({
+function LocationPickMapInner({
   center,
   onCenterChange,
   onUseMyLocation,
@@ -46,10 +48,18 @@ export function LocationPickMap({
   height = 220,
   recenterKey = 0,
   pickMode = 'map-center',
+  onMapReady,
 }: Props) {
   const mapRef = useRef<MapView>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipNextRegionEmit = useRef(false);
+  const centerRef = useRef(center);
+  const onCenterChangeRef = useRef(onCenterChange);
+
+  useEffect(() => {
+    centerRef.current = center;
+    onCenterChangeRef.current = onCenterChange;
+  });
 
   const initialRegion = useMemo(() => {
     if (center) {
@@ -63,7 +73,7 @@ export function LocationPickMap({
       clearTimeout(debounceRef.current);
     }
     debounceRef.current = setTimeout(() => {
-      onCenterChange(location);
+      onCenterChangeRef.current(location);
     }, 180);
   };
 
@@ -75,17 +85,20 @@ export function LocationPickMap({
     };
   }, []);
 
+  // Animate only when the parent bumps recenterKey. Depending on center here re-animated (and reset
+  // the zoom) after every pan, because each pan updates center in the parent.
   useEffect(() => {
-    if (!center || recenterKey <= 0) {
+    const target = centerRef.current;
+    if (!target || recenterKey <= 0) {
       return;
     }
     skipNextRegionEmit.current = true;
-    mapRef.current?.animateToRegion(regionFor(center, 0.006, 0.006), 450);
+    mapRef.current?.animateToRegion(regionFor(target, 0.006, 0.006), 450);
     const t = setTimeout(() => {
       skipNextRegionEmit.current = false;
     }, 500);
     return () => clearTimeout(t);
-  }, [recenterKey, center?.latitude, center?.longitude]);
+  }, [recenterKey]);
 
   const onRegionChangeComplete = (region: Region) => {
     if (pickMode !== 'map-center' || skipNextRegionEmit.current) {
@@ -127,6 +140,7 @@ export function LocationPickMap({
         rotateEnabled={false}
         pitchEnabled={false}
         onRegionChangeComplete={onRegionChangeComplete}
+        onMapReady={onMapReady}
         onPress={
           pickMode === 'marker'
             ? (event) => {
@@ -184,6 +198,9 @@ export function LocationPickMap({
     </View>
   );
 }
+
+/** Memoized so typing in sibling inputs doesn't re-render the native map. */
+export const LocationPickMap = memo(LocationPickMapInner);
 
 const styles = StyleSheet.create({
   wrap: { borderRadius: 12, overflow: 'hidden', backgroundColor: '#cbd5e1' },
@@ -245,14 +262,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   hintOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(248, 250, 252, 0.55)',
   },
   hintText: { color: '#475569', fontWeight: '600', textAlign: 'center', paddingHorizontal: 24 },
   centerPinWrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

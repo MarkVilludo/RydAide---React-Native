@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchMyMechanicProfile, updateMechanicProfileLocation } from '../api/mechanicProfile';
 import { useDeviceLocation, type DeviceCoords } from '../hooks/useDeviceLocation';
+import { reverseGeocodeLine } from '../utils/reverseGeocode';
 import {
   MechanicLocationContext,
   type MechanicLocationContextValue,
@@ -80,7 +81,11 @@ export function MechanicLocationProvider({ children }: { children: React.ReactNo
 
     lastSynced.current = coords;
     lastSyncAt.current = now;
-    updateMechanicProfileLocation(coords.latitude, coords.longitude, undefined, { source: 'device' })
+    // Send the area name for the new spot so the stored address doesn't keep describing an old pin.
+    reverseGeocodeLine(coords.latitude, coords.longitude)
+      .then((address) =>
+        updateMechanicProfileLocation(coords.latitude, coords.longitude, address ?? undefined, { source: 'device' }),
+      )
       .then((mechanic) => {
         applySavedMechanicLocation(mechanic.latitude!, mechanic.longitude!, false);
       })

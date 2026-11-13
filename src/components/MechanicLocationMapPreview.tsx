@@ -11,7 +11,12 @@ type Props = {
   fill?: boolean;
 };
 
-export function MechanicLocationMapPreview({ latitude, longitude, height = 132, fill }: Props) {
+export const MechanicLocationMapPreview = React.memo(function MechanicLocationMapPreview({
+  latitude,
+  longitude,
+  height = 132,
+  fill,
+}: Props) {
   const region = useMemo(
     () => ({
       latitude,
@@ -22,7 +27,9 @@ export function MechanicLocationMapPreview({ latitude, longitude, height = 132, 
     [latitude, longitude],
   );
 
-  const mapKey = `${latitude.toFixed(5)}_${longitude.toFixed(5)}`;
+  // iOS follows the `region` prop, so never remount there. Android lite mode renders a static
+  // snapshot, so remount it — but only when the pin moves ~10 m, not on GPS jitter.
+  const mapKey = Platform.OS === 'android' ? `${latitude.toFixed(4)}_${longitude.toFixed(4)}` : 'map';
 
   return (
     <View style={[styles.shell, fill ? styles.shellFill : { height }]} collapsable={false}>
@@ -44,7 +51,7 @@ export function MechanicLocationMapPreview({ latitude, longitude, height = 132, 
       </MapView>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   shell: {
