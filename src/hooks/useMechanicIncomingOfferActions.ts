@@ -5,8 +5,8 @@ import { getApiErrorMessage } from '../api/client';
 import type { HelpRequest } from '../api/helpRequests';
 import { acceptHelpRequest, declineHelpRequest, fetchMechanicHelpRequest } from '../api/mechanicHelp';
 import type { MechanicStackParamList } from '../navigation/types';
-import { acceptLostRaceKind, incomingOfferUnavailableReason, type IncomingOfferUnavailable } from '../utils/incomingHelpOffer';
-import { subscriptionRequiredMessage } from '../utils/mechanicAcceptErrors';
+import { incomingOfferUnavailableReason, type IncomingOfferUnavailable } from '../utils/incomingHelpOffer';
+import { classifyAcceptError } from '../utils/mechanicAcceptErrors';
 
 type Nav = NativeStackNavigationProp<MechanicStackParamList>;
 
@@ -66,19 +66,25 @@ export function useMechanicIncomingOfferActions({
         initialRequest: accepted,
       });
     } catch (e) {
-      const subMsg = subscriptionRequiredMessage(e);
-      if (subMsg) {
-        Alert.alert('Mechanic Pro required', subMsg, [
+      const outcome = classifyAcceptError(e);
+      if (outcome.kind === 'subscription') {
+        Alert.alert('Mechanic Pro required', outcome.message, [
           { text: 'Not now', style: 'cancel' },
           { text: 'Subscribe', onPress: () => navigation.navigate('MechanicSubscription') },
         ]);
+      } else if (outcome.kind === 'unavailable') {
+        // Lost the race or the offer ended: show the friendly full-screen state, not an error alert.
+        setUnavailable(outcome.reason);
+        return;
+      } else if (outcome.kind === 'blocked') {
+        Alert.alert(outcome.title, outcome.message, [
+          { text: 'OK', style: 'cancel' },
+          outcome.action === 'listing'
+            ? { text: 'Open listing', onPress: () => navigation.navigate('MechanicOnboarding') }
+            : { text: 'Dashboard', onPress: () => navigation.navigate('MechanicHome') },
+        ]);
       } else {
-        const lost = acceptLostRaceKind(e);
-        if (lost) {
-          setUnavailable(lost);
-        } else {
-          Alert.alert('Could not accept', getApiErrorMessage(e));
-        }
+        Alert.alert(outcome.title, outcome.message);
       }
       await reload();
     } finally {
@@ -94,7 +100,7 @@ export function useMechanicIncomingOfferActions({
         setDeclineOpen(false);
         navigation.goBack();
       } catch (e) {
-        Alert.alert('Decline failed', getApiErrorMessage(e));
+        Alert.alert('Couldn’t decline', getApiErrorMessage(e));
       } finally {
         setActing(false);
       }

@@ -164,7 +164,12 @@ export function HelpRequestDetailScreen({ route }: Props) {
 
           {request.mechanic && request.status !== 'SEARCHING' ? (
             <Section title="Mechanic">
-              <Text style={styles.bold}>{request.mechanic.business_name}</Text>
+              <Text style={styles.bold}>
+                {request.mechanic.display_name ||
+                  request.mechanic.mechanic_name ||
+                  request.mechanic.business_name ||
+                  'Mechanic'}
+              </Text>
               {request.mechanic.phone ? (
                 <Pressable onPress={() => Linking.openURL(`tel:${request.mechanic!.phone}`)}>
                   <Text style={styles.link}>Call mechanic</Text>
@@ -246,7 +251,7 @@ function TimelineRow({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#e2e8f0' },
+  root: { flex: 1, backgroundColor: '#f8fafc' },
   scroll: { flex: 1 },
   scrollContent: { flexGrow: 1 },
   scrollWithFooter: { paddingBottom: 8 },

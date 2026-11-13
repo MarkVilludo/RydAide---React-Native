@@ -8,6 +8,32 @@ type Options = {
   live?: boolean;
 };
 
+async function readBestEffortPosition(): Promise<DeviceCoords | null> {
+  try {
+    const enabled = await Location.hasServicesEnabledAsync();
+    if (!enabled) {
+      return null;
+    }
+  } catch {
+    /* continue — some platforms omit this API */
+  }
+
+  try {
+    const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    return { latitude: current.coords.latitude, longitude: current.coords.longitude };
+  } catch {
+    try {
+      const last = await Location.getLastKnownPositionAsync();
+      if (last) {
+        return { latitude: last.coords.latitude, longitude: last.coords.longitude };
+      }
+    } catch {
+      /* no fix available */
+    }
+    return null;
+  }
+}
+
 export function useDeviceLocation(enabled: boolean, options?: Options) {
   const live = options?.live ?? false;
   const [coords, setCoords] = useState<DeviceCoords | null>(null);
@@ -30,31 +56,37 @@ export function useDeviceLocation(enabled: boolean, options?: Options) {
           }
           return;
         }
-        setPermissionDenied(false);
-        const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         if (!cancelled) {
-          setCoords({ latitude: current.coords.latitude, longitude: current.coords.longitude });
+          setPermissionDenied(false);
         }
-        subscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.Balanced,
-            distanceInterval: live ? 8 : 25,
-            timeInterval: live ? 3000 : 10000,
-          },
-          (pos) => {
-            if (!cancelled) {
-              setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-            }
-          },
-        );
+
+        const initial = await readBestEffortPosition();
+        if (!cancelled && initial) {
+          setCoords(initial);
+        }
+
+        try {
+          subscription = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.Balanced,
+              distanceInterval: live ? 8 : 25,
+              timeInterval: live ? 3000 : 10000,
+            },
+            (pos) => {
+              if (!cancelled) {
+                setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+              }
+            },
+          );
+        } catch {
+          /* watch can fail when services are off — keep last known coords */
+        }
       } catch {
-        if (!cancelled) {
-          setPermissionDenied(true);
-        }
+        /* permission prompt / module errors — do not crash the app */
       }
     };
 
-    start().catch(() => {});
+    void start();
 
     return () => {
       cancelled = true;

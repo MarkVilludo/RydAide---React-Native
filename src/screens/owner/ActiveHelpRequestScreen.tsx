@@ -493,7 +493,7 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#e2e8f0' },
+  root: { flex: 1, backgroundColor: '#f8fafc' },
   loadingError: { backgroundColor: '#fef2f2' },
   mapArea: { flex: 1, backgroundColor: '#cbd5e1' },
   sheetHeadline: { fontSize: 18, fontWeight: '800', color: '#0284c7', marginTop: 8 },

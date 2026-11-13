@@ -131,12 +131,23 @@ export function MechanicWorkLocationScreen({ navigation }: Props) {
         Alert.alert('Location required', 'Allow location so we can place your pin on the map.');
         return;
       }
+      try {
+        const enabled = await Location.hasServicesEnabledAsync();
+        if (!enabled) {
+          Alert.alert('Location off', 'Turn on location services, then try again.');
+          return;
+        }
+      } catch {
+        /* continue */
+      }
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       referenceGps.current = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
       setLat(pos.coords.latitude);
       setLng(pos.coords.longitude);
       await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
       bumpMapToPin();
+    } catch {
+      Alert.alert('Location unavailable', 'Could not read GPS. Place your pin on the map instead.');
     } finally {
       setLocating(false);
     }

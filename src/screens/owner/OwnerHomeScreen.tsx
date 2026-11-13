@@ -869,7 +869,7 @@ export function OwnerHomeScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f1f5f9' },
+  safe: { flex: 1, backgroundColor: '#f8fafc' },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',

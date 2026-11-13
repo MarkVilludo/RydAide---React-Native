@@ -61,7 +61,7 @@ export function useDirectoryMapSearch<T>({
   }, [ensureLocationPermission]);
 
   useEffect(() => {
-    goToMyLocation();
+    void goToMyLocation();
   }, [goToMyLocation]);
 
   const runSearch = useCallback(

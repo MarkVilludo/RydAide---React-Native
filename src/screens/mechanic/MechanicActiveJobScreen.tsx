@@ -525,7 +525,7 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#e2e8f0' },
+  root: { flex: 1, backgroundColor: '#f8fafc' },
   mapArea: { flex: 1, backgroundColor: '#cbd5e1', position: 'relative' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#f8fafc' },
   muted: { color: '#64748b', marginBottom: 12, textAlign: 'center' },

@@ -2,7 +2,7 @@ import { StyleSheet } from 'react-native';
 
 /** Shared layout for owner directory browse (mechanics + shops). */
 export const directoryBrowseStyles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#e2e8f0' },
+  root: { flex: 1, backgroundColor: '#f8fafc' },
   mapSection: { height: 300, position: 'relative' },
   sheetArea: { zIndex: 2 },
   sheetTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a' },

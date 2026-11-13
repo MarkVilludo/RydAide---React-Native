@@ -197,11 +197,22 @@ export function NeedHelpScreen({ navigation, route }: Props) {
         Alert.alert('Location required', 'We need your location to dispatch nearby mechanics.');
         return;
       }
+      try {
+        const enabled = await Location.hasServicesEnabledAsync();
+        if (!enabled) {
+          Alert.alert('Location off', 'Turn on location services, then try again.');
+          return;
+        }
+      } catch {
+        /* continue */
+      }
       const pos = await Location.getCurrentPositionAsync({});
       setLat(pos.coords.latitude);
       setLng(pos.coords.longitude);
       await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
       setMapRecenterKey((k) => k + 1);
+    } catch {
+      Alert.alert('Location unavailable', 'Could not read GPS. Drop a pin on the map instead.');
     } finally {
       setLocating(false);
     }

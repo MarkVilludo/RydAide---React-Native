@@ -9,7 +9,8 @@ export type GovIdType =
   | 'other';
 
 export interface MechanicProfilePayload {
-  business_name: string;
+  /** Optional — freelancers may leave this blank. */
+  business_name?: string;
   first_name?: string;
   last_name?: string;
   bio?: string;
@@ -41,7 +42,9 @@ export async function fetchMyMechanicProfile(): Promise<MechanicResult | null> {
 }
 
 function appendListingFields(form: FormData, payload: MechanicProfilePayload): void {
-  form.append('business_name', payload.business_name);
+  if (payload.business_name?.trim()) {
+    form.append('business_name', payload.business_name.trim());
+  }
   if (payload.first_name) form.append('first_name', payload.first_name);
   if (payload.last_name) form.append('last_name', payload.last_name);
   if (payload.bio) form.append('bio', payload.bio);
@@ -85,7 +88,10 @@ export async function createMechanicProfile(payload: CreateMechanicProfilePayloa
 }
 
 export async function updateMechanicProfile(payload: MechanicProfilePayload) {
-  const { data } = await api.put('/mechanic/profile', payload);
+  const { data } = await api.put('/mechanic/profile', {
+    ...payload,
+    business_name: payload.business_name?.trim() || null,
+  });
   return data.data.mechanic as MechanicResult;
 }
 

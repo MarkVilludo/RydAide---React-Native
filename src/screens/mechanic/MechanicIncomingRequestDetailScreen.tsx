@@ -83,35 +83,18 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
     navigation.navigate('MechanicRequests', { tab: 'incoming' });
   };
 
-  if (loading && !request) {
-    return <CenteredLoading message="Loading request…" />;
-  }
-
-  if (unavailable) {
-    return <MechanicOfferUnavailableState kind={unavailable} onGoBack={goBackIncoming} />;
-  }
-
-  if (!request) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.muted}>Request not found or no longer available.</Text>
-        <Pressable onPress={goBackIncoming}>
-          <Text style={styles.link}>Go back</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  const isEmergency = request.request_type === 'EMERGENCY';
-  const showActions = request.status === 'SEARCHING' && request.mechanic_dispatch?.response !== 'declined';
+  // Hooks must run before any early return (loading / unavailable states), or React throws on re-render.
+  const showActions =
+    request != null && request.status === 'SEARCHING' && request.mechanic_dispatch?.response !== 'declined';
+  const expiresAt = request?.expires_at ?? null;
   const [acceptSecondsLeft, setAcceptSecondsLeft] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!showActions || !request.expires_at) {
+    if (!showActions || !expiresAt) {
       setAcceptSecondsLeft(null);
       return;
     }
-    const expiresMs = new Date(request.expires_at).getTime();
+    const expiresMs = new Date(expiresAt).getTime();
     const tick = () => {
       if (Number.isNaN(expiresMs)) {
         setAcceptSecondsLeft(null);
@@ -122,7 +105,22 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [showActions, request.expires_at]);
+  }, [showActions, expiresAt]);
+
+  if (loading && !request) {
+    return <CenteredLoading message="Loading request…" />;
+  }
+
+  if (unavailable) {
+    return <MechanicOfferUnavailableState kind={unavailable} onGoBack={goBackIncoming} />;
+  }
+
+  if (!request) {
+    // Fetch failed (usually the offer was withdrawn or taken). Show the friendly state, not a dead end.
+    return <MechanicOfferUnavailableState kind="ended" onGoBack={goBackIncoming} />;
+  }
+
+  const isEmergency = request.request_type === 'EMERGENCY';
 
   return (
     <View style={styles.root}>

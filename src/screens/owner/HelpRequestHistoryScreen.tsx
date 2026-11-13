@@ -96,7 +96,13 @@ export function HelpRequestHistoryScreen({ navigation }: Props) {
           <Text style={styles.meta}>Requested: {formatDate(item.created_at)}</Text>
           <Text style={styles.meta} numberOfLines={1}>Location: {locationLabel(item)}</Text>
           {item.mechanic && item.status !== 'SEARCHING' && (
-            <Text style={styles.meta}>Mechanic: {item.mechanic.business_name}</Text>
+            <Text style={styles.meta}>
+              Mechanic:{' '}
+              {item.mechanic.display_name ||
+                item.mechanic.mechanic_name ||
+                item.mechanic.business_name ||
+                'Mechanic'}
+            </Text>
           )}
           {item.status === 'SEARCHING' && item.search_progress && (
             <Text style={styles.meta}>

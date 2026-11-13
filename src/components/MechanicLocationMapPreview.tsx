@@ -7,9 +7,11 @@ type Props = {
   latitude: number;
   longitude: number;
   height?: number;
+  /** Stretch to fill parent instead of a fixed height. */
+  fill?: boolean;
 };
 
-export function MechanicLocationMapPreview({ latitude, longitude, height = 132 }: Props) {
+export function MechanicLocationMapPreview({ latitude, longitude, height = 132, fill }: Props) {
   const region = useMemo(
     () => ({
       latitude,
@@ -23,7 +25,7 @@ export function MechanicLocationMapPreview({ latitude, longitude, height = 132 }
   const mapKey = `${latitude.toFixed(5)}_${longitude.toFixed(5)}`;
 
   return (
-    <View style={[styles.shell, { height }]} collapsable={false}>
+    <View style={[styles.shell, fill ? styles.shellFill : { height }]} collapsable={false}>
       <MapView
         key={mapKey}
         style={styles.map}
@@ -50,6 +52,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: '#e2e8f0',
+  },
+  shellFill: {
+    flex: 1,
+    minHeight: 0,
   },
   map: {
     width: '100%',

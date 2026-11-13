@@ -247,7 +247,7 @@ export function MechanicSubscriptionScreen(_props: Props) {
           <Text style={styles.pricingSectionHint}>
             {pricesFromStore
               ? 'Prices from Google Play / App Store — what you will be charged.'
-              : 'Showing admin estimates until store prices load (use an EAS / Play install for live billing prices).'}
+              : 'Estimated prices. Your final price shows in Google Play / App Store before you pay.'}
           </Text>
           <View style={styles.planRow}>
             <Pressable
@@ -281,8 +281,8 @@ export function MechanicSubscriptionScreen(_props: Props) {
           <Text style={styles.pricingSectionHint}>
             {monthlyLabel}/month.{' '}
             {yearlyAvailable
-              ? 'Yearly price not available yet — set the yearly SKU in the store and admin.'
-              : 'Add a yearly plan and store SKUs to offer yearly billing.'}
+              ? 'Yearly billing isn’t available yet.'
+              : 'Monthly billing only for now.'}
           </Text>
         </View>
       )}
@@ -366,16 +366,19 @@ export function MechanicSubscriptionScreen(_props: Props) {
         <Text style={styles.body}>Directory listing, incoming offers, browsing, and declining requests.</Text>
       </View>
 
-      <View style={styles.note}>
-        <Text style={styles.noteText}>
-          Store product ID: {productIdForPurchase}.{' '}
-          {pricesFromStore
-            ? 'Displayed prices come from the store.'
-            : 'Live store prices appear after install from Play / TestFlight with products configured.'}{' '}
-          Use sandbox testers for TestFlight/internal builds.
-          {!yearlyAvailable ? ' Yearly billing appears when yearly product IDs are set on the server and in the app env.' : ''}
-        </Text>
-      </View>
+      {/* Developer details: store product IDs and sandbox notes are hidden from mechanics in release builds. */}
+      {__DEV__ ? (
+        <View style={styles.note}>
+          <Text style={styles.noteText}>
+            Store product ID: {productIdForPurchase}.{' '}
+            {pricesFromStore
+              ? 'Displayed prices come from the store.'
+              : 'Live store prices appear after install from Play / TestFlight with products configured.'}{' '}
+            Use sandbox testers for TestFlight/internal builds.
+            {!yearlyAvailable ? ' Yearly billing isn’t available yet.' : ''}
+          </Text>
+        </View>
+      ) : null}
 
       {history.length > 0 ? (
         <View style={styles.card}>

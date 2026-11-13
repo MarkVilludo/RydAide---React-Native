@@ -11,7 +11,7 @@ export interface MechanicIdentityVerification {
 
 export interface MechanicResult {
   id: number;
-  business_name: string;
+  business_name: string | null;
   address: string | null;
   latitude?: number;
   longitude?: number;
@@ -21,12 +21,14 @@ export interface MechanicResult {
   rating_average: number;
   rating_count: number;
   emergency_available: boolean;
+  mobile_service_available?: boolean;
   is_verified: boolean;
   verification_status?: string;
   identity_verification?: MechanicIdentityVerification;
   availability_status?: 'available' | 'busy' | 'offline';
   phone: string | null;
   mechanic_name?: string;
+  vehicle_types?: Array<{ id: number; name: string }>;
 }
 
 export async function searchMechanics(params: {

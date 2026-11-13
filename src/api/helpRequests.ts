@@ -143,7 +143,7 @@ export interface HelpRequest {
   mechanic?: {
     id: number;
     display_name?: string;
-    business_name: string;
+    business_name?: string | null;
     phone: string | null;
     rating_average: number;
     rating_count?: number;
