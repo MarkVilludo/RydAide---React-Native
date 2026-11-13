@@ -469,11 +469,10 @@ export function MechanicHomeScreen({ navigation }: Props) {
         fetchEntitlements()
           .then((e) => alive() && setEntitlements(keepIfSame<Entitlements | null>(e)))
           .catch(() => alive() && setEntitlements(null)),
-        subscriptionsOn
-          ? fetchMechanicSubscription()
-              .then((d) => alive() && setSubscriptionDashboard(keepIfSame<MechanicSubscriptionDetails | null>(d.subscription)))
-              .catch(() => alive() && setSubscriptionDashboard(null))
-          : Promise.resolve(),
+        // Always read stored free credits so the tile can show the real count even when limits are off.
+        fetchMechanicSubscription()
+          .then((d) => alive() && setSubscriptionDashboard(keepIfSame<MechanicSubscriptionDetails | null>(d.subscription)))
+          .catch(() => alive() && setSubscriptionDashboard(null)),
         fetchMyMechanicProfile()
           .then((p) => {
             if (!alive()) return;
@@ -534,7 +533,7 @@ export function MechanicHomeScreen({ navigation }: Props) {
         }
       }
     }
-  }, [emergencyOn, subscriptionsOn]);
+  }, [emergencyOn]);
 
   const loadRef = useRef(load);
   loadRef.current = load;
@@ -636,7 +635,22 @@ export function MechanicHomeScreen({ navigation }: Props) {
     creditsApply &&
     (entitlements?.can_accept_help_requests === false || (creditsRemaining != null && creditsRemaining <= 0));
   const lowCredits = creditsApply && !atFreeLimit && creditsRemaining != null && creditsRemaining <= 2;
-  const showCreditsTile = subscriptionsOn || creditsApply;
+  const showCreditsTile = subscriptionsOn || creditsApply || limitsOff;
+  /**
+   * Real remaining free credits for any non-Pro mechanic, even when the server isn't consuming them
+   * (limits off → entitlements return null, so fall back to the stored credits from /mechanic/subscription).
+   */
+  const freeLeftShown = isPro
+    ? null
+    : (creditsRemaining ?? subscriptionDashboard?.free_credits.remaining ?? null);
+  const freeCountText =
+    freeLeftShown != null ? (acceptLimit != null ? `${freeLeftShown}/${acceptLimit}` : String(freeLeftShown)) : '—';
+  const freeOfTotal =
+    freeLeftShown != null
+      ? acceptLimit != null
+        ? `${freeLeftShown} of ${acceptLimit} free request${acceptLimit === 1 ? '' : 's'} left`
+        : `${freeLeftShown} free request${freeLeftShown === 1 ? '' : 's'} left`
+      : null;
 
   const incomingCount = summary?.incoming ?? 0;
   const workingCount = (summary?.accepted_active ?? 0) + (summary?.in_progress ?? 0);
@@ -882,20 +896,25 @@ export function MechanicHomeScreen({ navigation }: Props) {
   const creditsHint: { text: string; tone: 'muted' | 'warn' } | null = needsProfile || !showCreditsTile
     ? null
     : isPro
-      ? { text: 'Mechanic Pro: unlimited accepted requests.', tone: 'muted' }
+      ? { text: 'Unlimited accepted requests with Mechanic Pro.', tone: 'muted' }
       : limitsOff
-        ? { text: 'Accepting requests doesn’t use credits right now.', tone: 'muted' }
+        ? {
+            text: freeOfTotal
+              ? `${freeOfTotal} · Free credits aren’t used right now.`
+              : 'Free credits aren’t used right now.',
+            tone: 'muted',
+          }
         : atFreeLimit
           ? null // the "free requests used" card explains it
           : lowCredits && creditsRemaining != null
             ? {
-                text: `Only ${creditsRemaining} free request${creditsRemaining === 1 ? '' : 's'} left. ${
+                text: `Only ${freeOfTotal ?? `${creditsRemaining} free requests left`}. ${
                   subscriptionsOn ? 'Get Mechanic Pro to keep accepting.' : 'Each accepted request uses 1.'
                 }`,
                 tone: 'warn',
               }
             : creditsRemaining != null
-              ? { text: `Each accepted request uses 1 free credit · ${creditsRemaining} left`, tone: 'muted' }
+              ? { text: `${freeOfTotal} · each accepted request uses 1.`, tone: 'muted' }
               : { text: 'Each accepted request uses 1 free credit.', tone: 'muted' };
 
   const showWaiting = emergencyOn && !needsProfile && !hasWork && isOnline && verified && !atFreeLimit;
@@ -1241,9 +1260,9 @@ export function MechanicHomeScreen({ navigation }: Props) {
                     accessibilityLabel={
                       isPro
                         ? 'Mechanic Pro, unlimited accepted requests'
-                        : limitsOff
-                          ? 'Accepting requests doesn’t use credits right now'
-                          : `Free requests left: ${creditsRemaining ?? 'unknown'}`
+                        : `${freeOfTotal ?? 'Free requests left unknown'}${
+                            limitsOff ? '. Free credits aren’t used right now' : ''
+                          }`
                     }
                   >
                     <Text
@@ -1253,7 +1272,7 @@ export function MechanicHomeScreen({ navigation }: Props) {
                         lowCredits && styles.metricNumWarn,
                       ]}
                     >
-                      {isPro || limitsOff ? '∞' : creditsRemaining != null ? String(creditsRemaining) : '—'}
+                      {isPro ? 'Pro' : freeCountText}
                     </Text>
                     <Text
                       style={[
@@ -1263,13 +1282,7 @@ export function MechanicHomeScreen({ navigation }: Props) {
                       ]}
                       numberOfLines={1}
                     >
-                      {isPro
-                        ? 'Pro'
-                        : limitsOff
-                          ? 'Free'
-                          : atFreeLimit || lowCredits
-                            ? 'Credits left'
-                            : 'Credits'}
+                      {isPro ? 'Unlimited' : 'Free left'}
                     </Text>
                   </Pressable>
                 ) : null}

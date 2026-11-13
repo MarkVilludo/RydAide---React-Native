@@ -295,3 +295,38 @@ export async function purchaseMechanicPro(productId: string = MECHANIC_PRO_SUBSC
     })();
   });
 }
+
+/**
+ * Restore: look up Mechanic Pro purchases the store already holds for this store account and send
+ * them to the server for verification (same endpoint as a new purchase). Resolves to the number of
+ * purchases verified; 0 means the store has nothing to restore.
+ */
+export async function restoreMechanicProPurchases(productIds: string[]): Promise<number> {
+  const IAP = await loadIapModule();
+  if (!IAP) {
+    throw new Error(STORE_BILLING_UNAVAILABLE_MESSAGE);
+  }
+  await IAP.initConnection();
+  try {
+    const held = ((await IAP.getAvailablePurchases()) ?? []) as unknown as Purchase[];
+    const wanted = new Set(productIds.filter(Boolean));
+    let restored = 0;
+    for (const purchase of held) {
+      const normalized = normalizePurchase(purchase, productIds[0] ?? MECHANIC_PRO_SUBSCRIPTION_ID);
+      if (wanted.size > 0 && !wanted.has(normalized.productId)) continue;
+      await verifyMechanicProStorePurchase({
+        platform: Platform.OS === 'ios' ? 'ios' : 'android',
+        product_id: normalized.productId,
+        purchase_token: normalized.purchaseToken,
+        receipt_data: normalized.receiptData,
+        transaction_id: normalized.transactionId,
+        original_transaction_id: normalized.originalTransactionId,
+        sandbox: STORE_SANDBOX,
+      });
+      restored += 1;
+    }
+    return restored;
+  } finally {
+    void IAP.endConnection();
+  }
+}
