@@ -10,7 +10,8 @@
         "EXPO_PUBLIC_MECHANIC_PRO_PRODUCT_ID": "com.rydaid.mechanic.pro.monthly",
         "EXPO_PUBLIC_IOS_BUNDLE_ID": "com.rydaid.mobile",
         "EXPO_PUBLIC_ANDROID_PACKAGE": "com.rydaid.mobile",
-        "EXPO_PUBLIC_PRODUCTION_API_URL": "https://rydaid.quantumrealm.tech/api/v1"
+        "EXPO_PUBLIC_PRODUCTION_API_URL": "https://rydaid.quantumrealm.tech/api/v1",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDoE6kSF5v-Tgiw3SDfYgI1v_JSC_q__Fo"
       }
     },
     "development": {

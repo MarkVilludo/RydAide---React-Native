@@ -453,6 +453,7 @@ export function NeedHelpScreen({ navigation, route }: Props) {
               style={styles.input}
               multiline
               placeholder={`Describe the problem (${remarksMin}+ characters)…`}
+              placeholderTextColor="#94a3b8"
               value={remarks}
               onChangeText={setRemarks}
             />
@@ -482,6 +483,7 @@ export function NeedHelpScreen({ navigation, route }: Props) {
             <TextInput
               style={styles.singleLineInput}
               placeholder="e.g. beside 7-Eleven, northbound lane"
+              placeholderTextColor="#94a3b8"
               value={landmark}
               onChangeText={setLandmark}
             />
@@ -654,6 +656,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     textAlignVertical: 'top',
+    color: '#0f172a',
   },
   singleLineInput: {
     backgroundColor: '#fff',
@@ -661,6 +664,7 @@ const styles = StyleSheet.create({
     borderColor: '#cbd5e1',
     borderRadius: 10,
     padding: 12,
+    color: '#0f172a',
   },
   secondaryBtn: {
     marginTop: 12,

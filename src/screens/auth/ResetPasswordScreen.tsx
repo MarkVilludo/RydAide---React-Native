@@ -67,6 +67,7 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
       <TextInput
         style={styles.input}
         placeholder="Email"
+        placeholderTextColor="#94a3b8"
         autoCapitalize="none"
         keyboardType="email-address"
         autoComplete="email"
@@ -78,6 +79,7 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
       <TextInput
         style={styles.input}
         placeholder="Reset token"
+        placeholderTextColor="#94a3b8"
         autoCapitalize="none"
         value={token}
         onChangeText={setToken}
@@ -86,6 +88,7 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
       <TextInput
         style={styles.input}
         placeholder="New password"
+        placeholderTextColor="#94a3b8"
         secureTextEntry
         autoComplete="new-password"
         textContentType="newPassword"
@@ -96,6 +99,7 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
       <TextInput
         style={styles.input}
         placeholder="Confirm new password"
+        placeholderTextColor="#94a3b8"
         secureTextEntry
         autoComplete="new-password"
         textContentType="newPassword"
@@ -132,6 +136,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 14,
     marginBottom: 12,
+    color: '#0f172a',
   },
   primaryButton: {
     backgroundColor: '#0284c7',

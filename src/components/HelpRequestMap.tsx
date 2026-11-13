@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
 import { MAP_MARKER_IMAGES } from '../constants/mapMarkerAssets';
 import { useMapMarkers } from '../hooks/useMapMarkers';
 import { formatMapDistanceKm, haversineDistanceKm } from '../utils/distanceKm';
 import { layoutMechanicMarkerForMap } from '../utils/mapMarkerOverlap';
-import { androidMapsProvider } from '../utils/mapsProvider';
+import { androidMapsProvider, hasGoogleMapsApiKey } from '../utils/mapsProvider';
 import { statusBarTopInset } from '../utils/screenInsets';
 import {
   buildMapRegion,
@@ -195,6 +195,19 @@ export function HelpRequestMap({
       ? [requestCoord, mechanicMarkerCoord]
       : [];
 
+  // Android release builds without a Maps SDK key hard-crash when MapView mounts.
+  if (Platform.OS === 'android' && !hasGoogleMapsApiKey()) {
+    return (
+      <View style={[styles.wrap, fill ? styles.fill : { height }, styles.missingKey]}>
+        <Text style={styles.missingKeyTitle}>Map unavailable</Text>
+        <Text style={styles.missingKeyBody}>
+          This build is missing the Google Maps API key. Your help request still works — rebuild with
+          EXPO_PUBLIC_GOOGLE_MAPS_API_KEY to show the map.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.wrap, fill ? styles.fill : { height }]}>
       <MapView
@@ -277,6 +290,14 @@ export function HelpRequestMap({
 const styles = StyleSheet.create({
   wrap: { borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0' },
   fill: { flex: 1, minHeight: 120, borderRadius: 0, borderWidth: 0 },
+  missingKey: {
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  missingKeyTitle: { fontSize: 16, fontWeight: '700', color: '#0f172a', marginBottom: 6 },
+  missingKeyBody: { fontSize: 13, color: '#64748b', textAlign: 'center', lineHeight: 18 },
   distanceBadge: {
     position: 'absolute',
     alignSelf: 'center',

@@ -98,6 +98,7 @@ export function LoginScreen({ navigation }: Props) {
         <TextInput
           style={styles.input}
           placeholder="Email"
+          placeholderTextColor="#94a3b8"
           autoCapitalize="none"
           keyboardType="email-address"
           autoComplete="email"
@@ -113,6 +114,7 @@ export function LoginScreen({ navigation }: Props) {
         <TextInput
           style={styles.input}
           placeholder="Password"
+          placeholderTextColor="#94a3b8"
           secureTextEntry
           autoComplete="password"
           textContentType="password"
@@ -183,6 +185,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 14,
     marginBottom: 12,
+    color: '#0f172a',
   },
   primaryButton: {
     backgroundColor: '#0284c7',

@@ -247,7 +247,17 @@ export function HelpRequestSearchingHero({ startedAt, expiresAt, isExtended, pro
 
       {progress ? (
         <View style={styles.track}>
-          <View style={[styles.fill, { width: `${Math.min(100, progress.progress_percent)}%` }]} />
+          <View
+            style={[
+              styles.fill,
+              {
+                width: `${Math.min(
+                  100,
+                  Math.max(0, Number(progress.progress_percent) || 0),
+                )}%`,
+              },
+            ]}
+          />
         </View>
       ) : null}
 

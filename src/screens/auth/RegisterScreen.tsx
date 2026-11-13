@@ -145,6 +145,7 @@ export function RegisterScreen({ navigation }: Props) {
         <TextInput
           style={styles.input}
           placeholder="Full name"
+          placeholderTextColor="#94a3b8"
           value={name}
           onChangeText={setName}
           returnKeyType="next"
@@ -159,6 +160,7 @@ export function RegisterScreen({ navigation }: Props) {
         <TextInput
           style={styles.input}
           placeholder="Email"
+          placeholderTextColor="#94a3b8"
           autoCapitalize="none"
           keyboardType="email-address"
           autoComplete="email"
@@ -177,6 +179,7 @@ export function RegisterScreen({ navigation }: Props) {
         <TextInput
           style={styles.input}
           placeholder="Password"
+          placeholderTextColor="#94a3b8"
           secureTextEntry
           autoComplete="new-password"
           textContentType="newPassword"
@@ -194,6 +197,7 @@ export function RegisterScreen({ navigation }: Props) {
         <TextInput
           style={styles.input}
           placeholder="Confirm password"
+          placeholderTextColor="#94a3b8"
           secureTextEntry
           autoComplete="new-password"
           textContentType="newPassword"
@@ -272,6 +276,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 14,
     marginBottom: 12,
+    color: '#0f172a',
   },
   primaryButton: {
     backgroundColor: '#0284c7',

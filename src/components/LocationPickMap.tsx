@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, type Region } from 'react-native-maps';
-import { androidMapsProvider } from '../utils/mapsProvider';
+import { androidMapsProvider, hasGoogleMapsApiKey } from '../utils/mapsProvider';
 
 export type PickLocation = {
   latitude: number;
@@ -94,6 +94,23 @@ export function LocationPickMap({
     emitCenter({ latitude: region.latitude, longitude: region.longitude });
   };
 
+  if (Platform.OS === 'android' && !hasGoogleMapsApiKey()) {
+    return (
+      <View style={[styles.wrap, styles.missingKey, { height }]}>
+        <Text style={styles.missingKeyTitle}>Map unavailable</Text>
+        <Text style={styles.missingKeyBody}>
+          Rebuild with EXPO_PUBLIC_GOOGLE_MAPS_API_KEY to pick on the map. You can still use My
+          location below.
+        </Text>
+        {onUseMyLocation ? (
+          <Pressable style={styles.locBtn} onPress={onUseMyLocation} disabled={locating}>
+            <Text style={styles.locBtnText}>{locating ? 'Locating…' : 'Use my location'}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.wrap, { height }]}>
       <MapView
@@ -170,6 +187,29 @@ export function LocationPickMap({
 
 const styles = StyleSheet.create({
   wrap: { borderRadius: 12, overflow: 'hidden', backgroundColor: '#cbd5e1' },
+  missingKey: {
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  missingKeyTitle: { fontSize: 16, fontWeight: '700', color: '#0f172a', marginBottom: 6 },
+  missingKeyBody: {
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  locBtn: {
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  locBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   gpsBtn: {
     position: 'absolute',
     top: 10,

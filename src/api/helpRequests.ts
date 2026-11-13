@@ -243,7 +243,11 @@ export async function createHelpRequest(payload: CreateHelpRequestPayload): Prom
   }
 
   const { data } = await api.post('/help-requests', form);
-  return data.data.help_request;
+  const helpRequest = data?.data?.help_request as HelpRequest | undefined;
+  if (!helpRequest?.id) {
+    throw new Error('Help request was created but the server returned an incomplete response.');
+  }
+  return helpRequest;
 }
 
 export async function fetchHelpRequests(): Promise<HelpRequest[]> {
