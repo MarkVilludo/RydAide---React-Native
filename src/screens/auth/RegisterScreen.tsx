@@ -1,27 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  Dimensions,
-  Keyboard,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type TextInputInstance,
-} from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Dimensions, Keyboard, Platform, Pressable, StyleSheet, Text, View, type TextInputInstance } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiErrorMessage } from '../../api/client';
-import { BrandLogo } from '../../components/BrandLogo';
+import { AuthErrorBanner } from '../../components/auth/AuthErrorBanner';
+import { AuthLayout, authStyles } from '../../components/auth/AuthLayout';
+import { authFieldErrors } from '../../components/auth/authErrors';
+import type { KeyboardAwareScrollViewRef } from '../../components/KeyboardAwareScrollView';
 import { Button, TextField } from '../../components/ui';
-import { colors, radii, spacing, touch, type as typeScale } from '../../theme/tokens';
-import {
-  KeyboardAwareScrollView,
-  type KeyboardAwareScrollViewRef,
-} from '../../components/KeyboardAwareScrollView';
 import { useAuth } from '../../context/AuthContext';
 import { useAppConfig } from '../../hooks/useAppConfig';
+import { colors, radii, spacing, touch } from '../../theme/tokens';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
@@ -29,12 +17,31 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 /** Extra space under the form so lower fields (confirm password) can scroll above the keyboard. */
 const KEYBOARD_SCROLL_PAD = Platform.OS === 'android' ? 280 : 260;
 
-export function RegisterScreen({ navigation }: Props) {
+const ROLES = [
+  {
+    value: 'owner',
+    icon: '🚗',
+    label: 'Vehicle owner',
+    sub: 'I need help with my vehicle',
+    note: 'Request roadside help, book a service and pay your mechanic in the app.',
+  },
+  {
+    value: 'mechanic',
+    icon: '🔧',
+    label: 'Mechanic',
+    sub: 'I fix vehicles',
+    note: 'Get nearby job requests. You’ll set up your mechanic listing after you sign up.',
+  },
+] as const;
+
+export function RegisterScreen({ navigation, route }: Props) {
   const { signUp } = useAuth();
   const { config } = useAppConfig();
-  const insets = useSafeAreaInsets();
   const requireVerification = config?.auth?.require_email_verification !== false;
   const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
+  const emailRef = useRef<TextInputInstance>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
+  const confirmRef = useRef<TextInputInstance>(null);
   const formOffsetY = useRef(0);
   const fieldOffsetY = useRef<Record<string, number>>({});
   const focusedField = useRef<string | null>(null);
@@ -42,16 +49,10 @@ export function RegisterScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [role, setRole] = useState<'owner' | 'mechanic'>('owner');
+  const [role, setRole] = useState<'owner' | 'mechanic'>(route.params?.role ?? 'owner');
   const [submitting, setSubmitting] = useState(false);
-  const emailRef = useRef<TextInputInstance>(null);
-  const passwordRef = useRef<TextInputInstance>(null);
-  const confirmRef = useRef<TextInputInstance>(null);
-
-  const minContentHeight = useMemo(() => {
-    const windowHeight = Dimensions.get('window').height;
-    return Math.max(480, windowHeight - insets.top - insets.bottom);
-  }, [insets.bottom, insets.top]);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState<string | null>(null);
 
   const runScrollToField = (key: string) => {
     const fieldY = fieldOffsetY.current[key];
@@ -87,6 +88,8 @@ export function RegisterScreen({ navigation }: Props) {
 
   const onSubmit = async () => {
     if (submitting) return;
+    setFormError(null);
+    setFieldErrors({});
     setSubmitting(true);
     try {
       await signUp({
@@ -97,89 +100,94 @@ export function RegisterScreen({ navigation }: Props) {
         role,
       });
     } catch (error) {
-      Alert.alert('Registration failed', getApiErrorMessage(error));
+      const fields = authFieldErrors(error);
+      setFieldErrors(fields);
+      setFormError(Object.keys(fields).length ? 'Please fix the highlighted fields.' : getApiErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
   };
 
+  const clear = (key: string) => {
+    if (fieldErrors[key]) setFieldErrors(({ [key]: _drop, ...rest }) => rest);
+    if (formError) setFormError(null);
+  };
+
+  const fieldProps = (key: string) => ({
+    onContainerLayout: (e: { nativeEvent: { layout: { y: number } } }) => {
+      fieldOffsetY.current[key] = e.nativeEvent.layout.y;
+    },
+    onFocus: () => scrollFieldIntoView(key),
+    onBlur: () => {
+      if (focusedField.current === key) focusedField.current = null;
+    },
+  });
+
+  const mismatch = confirm.length > 0 && confirm.length >= password.length && confirm !== password;
+  const selected = ROLES.find((r) => r.value === role)!;
+
   return (
-    <KeyboardAwareScrollView
+    <AuthLayout
       ref={scrollRef}
-      keyboardMode="scroll"
-      style={styles.scroll}
-      contentContainerStyle={[
-        styles.content,
-        {
-          minHeight: minContentHeight,
-          paddingTop: Math.max(16, insets.top + 8),
-          paddingBottom: Math.max(24, insets.bottom + 16) + KEYBOARD_SCROLL_PAD,
-        },
-      ]}
+      onBack={() => navigation.goBack()}
+      title="Create your account"
+      subtitle={requireVerification ? 'We’ll email you a link to verify your account.' : undefined}
+      onFormLayout={(y) => {
+        formOffsetY.current = y;
+      }}
       extraBottomPadding={KEYBOARD_SCROLL_PAD}
     >
-      <View
-        style={styles.form}
-        onLayout={(e) => {
-          formOffsetY.current = e.nativeEvent.layout.y;
-        }}
-      >
-        <BrandLogo width={176} style={styles.logo} />
-        <Text style={styles.title} accessibilityRole="header">
-          Create account
-        </Text>
-        {requireVerification ? (
-          <Text style={styles.subtitle}>
-            We will email you a verification link before you can use the app.
-          </Text>
-        ) : null}
+      <AuthErrorBanner message={formError} />
 
+      <View style={authStyles.fields}>
         <Text style={styles.roleLabel}>I am a…</Text>
         <View style={styles.roleRow} accessibilityRole="radiogroup">
-          {(
-            [
-              ['owner', 'Vehicle owner', 'I need help with my vehicle'],
-              ['mechanic', 'Mechanic', 'I fix vehicles'],
-            ] as const
-          ).map(([value, label, sub]) => {
-            const on = role === value;
+          {ROLES.map((r) => {
+            const on = role === r.value;
             return (
               <Pressable
-                key={value}
+                key={r.value}
                 style={[styles.roleChip, on && styles.roleChipActive]}
-                onPress={() => setRole(value)}
+                onPress={() => setRole(r.value)}
                 accessibilityRole="radio"
                 accessibilityState={{ checked: on }}
-                accessibilityLabel={`${label}. ${sub}`}
+                accessibilityLabel={`${r.label}. ${r.sub}`}
               >
-                <Text style={[styles.roleText, on && styles.roleTextActive]}>{label}</Text>
-                <Text style={[styles.roleSub, on && styles.roleSubActive]}>{sub}</Text>
+                <Text style={styles.roleIcon}>{r.icon}</Text>
+                <Text style={[styles.roleText, on && styles.roleTextActive]}>{r.label}</Text>
+                <Text style={[styles.roleSub, on && styles.roleSubActive]}>{r.sub}</Text>
               </Pressable>
             );
           })}
         </View>
+        <Text style={styles.roleNote}>{selected.note}</Text>
+        {fieldErrors.role ? <Text style={styles.roleError}>{fieldErrors.role}</Text> : null}
 
         <TextField
+          size="large"
+          leadingIcon="user"
+          editable={!submitting}
           label="Full name"
           placeholder="e.g. Juan Dela Cruz"
           autoCapitalize="words"
           autoComplete="name"
           textContentType="name"
           value={name}
-          onChangeText={setName}
+          onChangeText={(t) => {
+            setName(t);
+            clear('name');
+          }}
+          error={fieldErrors.name}
           returnKeyType="next"
           submitBehavior="submit"
           onSubmitEditing={() => emailRef.current?.focus()}
-          onContainerLayout={(e) => {
-            fieldOffsetY.current.name = e.nativeEvent.layout.y;
-          }}
-          onFocus={() => scrollFieldIntoView('name')}
-          onBlur={() => {
-            if (focusedField.current === 'name') focusedField.current = null;
-          }}
+          {...fieldProps('name')}
         />
         <TextField
           ref={emailRef}
+          size="large"
+          leadingIcon="mail"
+          editable={!submitting}
           label="Email"
           placeholder="you@example.com"
           autoCapitalize="none"
@@ -188,20 +196,21 @@ export function RegisterScreen({ navigation }: Props) {
           autoComplete="email"
           textContentType="emailAddress"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(t) => {
+            setEmail(t);
+            clear('email');
+          }}
+          error={fieldErrors.email}
           returnKeyType="next"
           submitBehavior="submit"
           onSubmitEditing={() => passwordRef.current?.focus()}
-          onContainerLayout={(e) => {
-            fieldOffsetY.current.email = e.nativeEvent.layout.y;
-          }}
-          onFocus={() => scrollFieldIntoView('email')}
-          onBlur={() => {
-            if (focusedField.current === 'email') focusedField.current = null;
-          }}
+          {...fieldProps('email')}
         />
         <TextField
           ref={passwordRef}
+          size="large"
+          leadingIcon="lock"
+          editable={!submitting}
           label="Password"
           placeholder="At least 8 characters"
           secureTextEntry
@@ -209,20 +218,21 @@ export function RegisterScreen({ navigation }: Props) {
           autoComplete="new-password"
           textContentType="newPassword"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(t) => {
+            setPassword(t);
+            clear('password');
+          }}
+          error={fieldErrors.password}
           returnKeyType="next"
           submitBehavior="submit"
           onSubmitEditing={() => confirmRef.current?.focus()}
-          onContainerLayout={(e) => {
-            fieldOffsetY.current.password = e.nativeEvent.layout.y;
-          }}
-          onFocus={() => scrollFieldIntoView('password')}
-          onBlur={() => {
-            if (focusedField.current === 'password') focusedField.current = null;
-          }}
+          {...fieldProps('password')}
         />
         <TextField
           ref={confirmRef}
+          size="large"
+          leadingIcon="lock"
+          editable={!submitting}
           label="Confirm password"
           placeholder="Type it again"
           secureTextEntry
@@ -230,49 +240,35 @@ export function RegisterScreen({ navigation }: Props) {
           autoComplete="new-password"
           textContentType="newPassword"
           value={confirm}
-          onChangeText={setConfirm}
-          error={confirm.length > 0 && password.length > 0 && confirm.length >= password.length && confirm !== password ? 'Passwords don’t match.' : null}
+          onChangeText={(t) => {
+            setConfirm(t);
+            clear('password_confirmation');
+          }}
+          error={mismatch ? 'Passwords don’t match.' : fieldErrors.password_confirmation}
           returnKeyType="go"
           onSubmitEditing={() => void onSubmit()}
-          onContainerLayout={(e) => {
-            fieldOffsetY.current.confirm = e.nativeEvent.layout.y;
-          }}
-          onFocus={() => scrollFieldIntoView('confirm')}
-          onBlur={() => {
-            if (focusedField.current === 'confirm') focusedField.current = null;
-          }}
+          {...fieldProps('confirm')}
         />
-
-        <Button title="Create account" size="large" loading={submitting} onPress={() => void onSubmit()} style={styles.primaryButton} />
-
-        <Button title="Back to sign in" variant="text" onPress={() => navigation.goBack()} style={styles.link} />
       </View>
-    </KeyboardAwareScrollView>
+
+      <Button title="Create account" size="large" loading={submitting} onPress={() => void onSubmit()} style={authStyles.primary} />
+
+      <View style={authStyles.linkRow}>
+        <Text style={authStyles.linkRowText}>Already have an account?</Text>
+        <Button title="Sign in" variant="text" onPress={() => navigation.goBack()} style={{ paddingHorizontal: spacing.xs + 2 }} />
+      </View>
+    </AuthLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: colors.bg },
-  content: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xxl,
-  },
-  form: {
-    width: '100%',
-    maxWidth: 440,
-    alignSelf: 'center',
-  },
-  logo: { marginBottom: spacing.md, alignSelf: 'center' },
-  title: { ...typeScale.display, marginBottom: spacing.sm, textAlign: 'center' },
-  subtitle: { ...typeScale.body, color: colors.muted, marginBottom: spacing.lg, textAlign: 'center' },
-  roleLabel: { ...typeScale.label, marginBottom: spacing.xs + 2 },
-  roleRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
+  roleLabel: { fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: spacing.xs + 2 },
+  roleRow: { flexDirection: 'row', gap: spacing.sm },
   roleChip: {
     flex: 1,
-    minHeight: touch.large + 12,
+    minHeight: touch.large + 20,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
+    paddingVertical: spacing.sm,
     borderRadius: radii.md,
     borderWidth: 1.5,
     borderColor: colors.border,
@@ -280,10 +276,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   roleChipActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
-  roleText: { fontSize: 15, fontWeight: '700', color: colors.text },
+  roleIcon: { fontSize: 18 },
+  roleText: { fontSize: 15, fontWeight: '800', color: colors.text },
   roleTextActive: { color: colors.primaryInk },
   roleSub: { fontSize: 12, color: colors.muted, marginTop: 2 },
   roleSubActive: { color: colors.primaryInk },
-  primaryButton: { marginTop: spacing.sm },
-  link: { marginTop: spacing.md, marginBottom: spacing.md },
+  roleNote: { fontSize: 13, color: colors.muted, lineHeight: 18, marginTop: spacing.sm, marginBottom: spacing.md },
+  roleError: { color: colors.danger, fontSize: 13, fontWeight: '600', marginTop: -spacing.sm, marginBottom: spacing.md },
 });

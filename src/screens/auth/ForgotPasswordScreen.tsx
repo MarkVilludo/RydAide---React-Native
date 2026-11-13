@@ -1,16 +1,13 @@
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-} from 'react-native';
+import { Alert, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getApiErrorMessage } from '../../api/client';
 import { requestPasswordReset } from '../../api/auth';
-import { KeyboardAwareScrollView } from '../../components/KeyboardAwareScrollView';
+import { AuthErrorBanner } from '../../components/auth/AuthErrorBanner';
+import { AuthLayout, authStyles } from '../../components/auth/AuthLayout';
+import { authFieldErrors } from '../../components/auth/authErrors';
+import { Button, TextField } from '../../components/ui';
+import { spacing } from '../../theme/tokens';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
@@ -19,12 +16,18 @@ export function ForgotPasswordScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+
   const onSubmit = async () => {
     const trimmed = email.trim();
+    setFormError(null);
     if (!trimmed) {
-      Alert.alert('Email required', 'Enter the email you used for RydAid.');
+      setError('Enter the email you used for RydAid.');
       return;
     }
+    setError(null);
+    if (submitting) return;
     setSubmitting(true);
     try {
       await requestPasswordReset(trimmed);
@@ -40,76 +43,47 @@ export function ForgotPasswordScreen({ navigation }: Props) {
         ],
       );
     } catch (error) {
-      Alert.alert('Request failed', getApiErrorMessage(error));
+      const fields = authFieldErrors(error);
+      if (fields.email) setError(fields.email);
+      else setFormError(getApiErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <KeyboardAwareScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.content}
-      extraBottomPadding={32}
-    >
-      <Text style={styles.title}>Forgot password</Text>
-      <Text style={styles.subtitle}>We will email you a link and reset token.</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#94a3b8"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        autoComplete="email"
-        textContentType="emailAddress"
-        value={email}
-        onChangeText={setEmail}
-        returnKeyType="done"
-        onSubmitEditing={() => void onSubmit()}
+    <AuthLayout onBack={() => navigation.goBack()} title="Forgot password" subtitle="We will email you a link and reset token.">
+      <AuthErrorBanner message={formError} />
+      <View style={authStyles.fields}>
+        <TextField
+          size="large"
+          leadingIcon="mail"
+          editable={!submitting}
+          label="Email"
+          placeholder="you@example.com"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          autoComplete="email"
+          textContentType="emailAddress"
+          value={email}
+          onChangeText={(t) => {
+            setEmail(t);
+            if (error) setError(null);
+          }}
+          error={error}
+          returnKeyType="send"
+          onSubmitEditing={() => void onSubmit()}
+        />
+      </View>
+      <Button title="Send reset email" size="large" loading={submitting} onPress={() => void onSubmit()} style={authStyles.primary} />
+      <Button
+        title="I have a reset token"
+        variant="text"
+        onPress={() => navigation.navigate('ResetPassword', { email: email.trim() || undefined })}
+        style={{ marginTop: spacing.sm }}
       />
-
-      <Pressable style={styles.primaryButton} onPress={onSubmit} disabled={submitting}>
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.primaryText}>Send reset email</Text>
-        )}
-      </Pressable>
-
-      <Pressable onPress={() => navigation.navigate('ResetPassword', { email: email.trim() || undefined })}>
-        <Text style={styles.link}>I have a reset token</Text>
-      </Pressable>
-
-      <Pressable onPress={() => navigation.goBack()}>
-        <Text style={styles.linkMuted}>Back to sign in</Text>
-      </Pressable>
-    </KeyboardAwareScrollView>
+      <Button title="Back to sign in" variant="text" onPress={() => navigation.goBack()} />
+    </AuthLayout>
   );
 }
-
-const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: '#f8fafc' },
-  content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 48, paddingBottom: 24 },
-  title: { fontSize: 24, fontWeight: '600', color: '#0f172a' },
-  subtitle: { color: '#64748b', marginBottom: 20, marginTop: 8 },
-  input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 12,
-    color: '#0f172a',
-  },
-  primaryButton: {
-    backgroundColor: '#0284c7',
-    borderRadius: 10,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  primaryText: { color: '#fff', fontWeight: '600' },
-  link: { color: '#0284c7', textAlign: 'center', marginTop: 20 },
-  linkMuted: { color: '#64748b', textAlign: 'center', marginTop: 16 },
-});

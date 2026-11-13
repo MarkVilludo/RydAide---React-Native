@@ -39,7 +39,8 @@ export function RootNavigator() {
 
   return (
     <NavigationContainer ref={navigationRef}>
-      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+      {/* Fade between auth ↔ verify ↔ app (e.g. sign in → dashboard) instead of a push. */}
+      <RootStack.Navigator screenOptions={{ headerShown: false, animation: 'fade', animationDuration: 300 }}>
         {!user ? (
           <RootStack.Screen name="Auth" component={AuthNavigator} />
         ) : !user.email_verified_at ? (

@@ -62,7 +62,7 @@ export function MechanicDrawerContent({ navigation }: DrawerContentComponentProp
         {subscriptionsOn ? <DrawerItem icon="crown" label="Mechanic Pro" onPress={() => goTo('MechanicSubscription')} /> : null}
       </DrawerSection>
       <DrawerSection title="Help">
-        <DrawerItem icon="headset" label="Contact Support" onPress={() => goTo('ContactSupport')} />
+        <DrawerItem icon="headset" label="Contact Support" hint="Report a problem" onPress={() => goTo('ContactSupport')} />
       </DrawerSection>
     </AppDrawerShell>
   );

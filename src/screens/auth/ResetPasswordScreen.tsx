@@ -1,16 +1,13 @@
-import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-} from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Alert, View, type TextInputInstance } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getApiErrorMessage } from '../../api/client';
 import { resetPassword } from '../../api/auth';
-import { KeyboardAwareScrollView } from '../../components/KeyboardAwareScrollView';
+import { AuthErrorBanner } from '../../components/auth/AuthErrorBanner';
+import { AuthLayout, authStyles } from '../../components/auth/AuthLayout';
+import { authFieldErrors } from '../../components/auth/authErrors';
+import { Button, TextField } from '../../components/ui';
+import { spacing } from '../../theme/tokens';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ResetPassword'>;
@@ -21,20 +18,23 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const tokenRef = useRef<TextInputInstance>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
+  const confirmRef = useRef<TextInputInstance>(null);
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState<string | null>(null);
 
   const onSubmit = async () => {
-    if (!email.trim() || !token.trim()) {
-      Alert.alert('Missing info', 'Enter your email and the reset token from the email.');
-      return;
-    }
-    if (password.length < 8) {
-      Alert.alert('Password too short', 'Use at least 8 characters.');
-      return;
-    }
-    if (password !== confirm) {
-      Alert.alert('Passwords do not match', 'Confirm password must match.');
-      return;
-    }
+    if (submitting) return;
+    const local: Record<string, string> = {};
+    if (!email.trim()) local.email = 'Enter your email.';
+    if (!token.trim()) local.token = 'Paste the reset token from the email.';
+    if (password.length < 8) local.password = 'Use at least 8 characters.';
+    else if (password !== confirm) local.password_confirmation = 'Passwords don’t match.';
+    setErrors(local);
+    setFormError(null);
+    if (Object.keys(local).length) return;
     setSubmitting(true);
     try {
       await resetPassword({
@@ -47,104 +47,110 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
         { text: 'Sign in', onPress: () => navigation.navigate('Login') },
       ]);
     } catch (error) {
-      Alert.alert('Reset failed', getApiErrorMessage(error));
+      const fields = authFieldErrors(error);
+      setErrors(fields);
+      setFormError(Object.keys(fields).length ? 'Please fix the highlighted fields.' : getApiErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
   };
 
+  const clear = (key: string) => {
+    if (errors[key]) setErrors(({ [key]: _drop, ...rest }) => rest);
+    if (formError) setFormError(null);
+  };
+
   return (
-    <KeyboardAwareScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.content}
-      extraBottomPadding={32}
+    <AuthLayout
+      onBack={() => navigation.goBack()}
+      title="Reset password"
+      subtitle="Paste the token from your reset email, or reset via the link in the email in your browser."
+      extraBottomPadding={160}
     >
-      <Text style={styles.title}>Reset password</Text>
-      <Text style={styles.subtitle}>
-        Paste the token from your reset email, or reset via the link in the email in your browser.
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#94a3b8"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        autoComplete="email"
-        textContentType="emailAddress"
-        value={email}
-        onChangeText={setEmail}
-        returnKeyType="next"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Reset token"
-        placeholderTextColor="#94a3b8"
-        autoCapitalize="none"
-        value={token}
-        onChangeText={setToken}
-        returnKeyType="next"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="New password"
-        placeholderTextColor="#94a3b8"
-        secureTextEntry
-        autoComplete="new-password"
-        textContentType="newPassword"
-        value={password}
-        onChangeText={setPassword}
-        returnKeyType="next"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Confirm new password"
-        placeholderTextColor="#94a3b8"
-        secureTextEntry
-        autoComplete="new-password"
-        textContentType="newPassword"
-        value={confirm}
-        onChangeText={setConfirm}
-        returnKeyType="done"
-        onSubmitEditing={() => void onSubmit()}
-      />
-
-      <Pressable style={styles.primaryButton} onPress={onSubmit} disabled={submitting}>
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.primaryText}>Update password</Text>
-        )}
-      </Pressable>
-
-      <Pressable onPress={() => navigation.navigate('Login')}>
-        <Text style={styles.link}>Back to sign in</Text>
-      </Pressable>
-    </KeyboardAwareScrollView>
+      <AuthErrorBanner message={formError} />
+      <View style={authStyles.fields}>
+        <TextField
+          size="large"
+          leadingIcon="mail"
+          label="Email"
+          placeholder="you@example.com"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          autoComplete="email"
+          textContentType="emailAddress"
+          value={email}
+          onChangeText={(t) => {
+            setEmail(t);
+            clear('email');
+          }}
+          error={errors.email}
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => tokenRef.current?.focus()}
+        />
+        <TextField
+          ref={tokenRef}
+          size="large"
+          leadingIcon="shield"
+          label="Reset token"
+          placeholder="From the reset email"
+          autoCapitalize="none"
+          autoCorrect={false}
+          textContentType="oneTimeCode"
+          autoComplete="one-time-code"
+          value={token}
+          onChangeText={(t) => {
+            setToken(t);
+            clear('token');
+          }}
+          error={errors.token}
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => passwordRef.current?.focus()}
+        />
+        <TextField
+          ref={passwordRef}
+          size="large"
+          leadingIcon="lock"
+          label="New password"
+          placeholder="At least 8 characters"
+          secureTextEntry
+          revealable
+          autoComplete="new-password"
+          textContentType="newPassword"
+          value={password}
+          onChangeText={(t) => {
+            setPassword(t);
+            clear('password');
+          }}
+          error={errors.password}
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => confirmRef.current?.focus()}
+        />
+        <TextField
+          ref={confirmRef}
+          size="large"
+          leadingIcon="lock"
+          label="Confirm new password"
+          placeholder="Type it again"
+          secureTextEntry
+          revealable
+          autoComplete="new-password"
+          textContentType="newPassword"
+          value={confirm}
+          onChangeText={(t) => {
+            setConfirm(t);
+            clear('password_confirmation');
+          }}
+          error={errors.password_confirmation}
+          returnKeyType="go"
+          onSubmitEditing={() => void onSubmit()}
+        />
+      </View>
+      <Button title="Update password" size="large" loading={submitting} onPress={() => void onSubmit()} style={authStyles.primary} />
+      <Button title="Back to sign in" variant="text" onPress={() => navigation.navigate('Login')} style={{ marginTop: spacing.sm }} />
+    </AuthLayout>
   );
 }
-
-const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: '#f8fafc' },
-  content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 48, paddingBottom: 24 },
-  title: { fontSize: 24, fontWeight: '600', color: '#0f172a' },
-  subtitle: { color: '#64748b', marginBottom: 20, marginTop: 8, lineHeight: 20 },
-  input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 12,
-    color: '#0f172a',
-  },
-  primaryButton: {
-    backgroundColor: '#0284c7',
-    borderRadius: 10,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  primaryText: { color: '#fff', fontWeight: '600' },
-  link: { color: '#0284c7', textAlign: 'center', marginTop: 20 },
-});

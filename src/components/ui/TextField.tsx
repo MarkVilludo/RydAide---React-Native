@@ -12,6 +12,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { colors, radii, spacing, touch, type } from '../../theme/tokens';
+import { DrawerIcon, type DrawerIconName } from '../DrawerIcons';
 
 type Props = TextInputProps & {
   label?: string;
@@ -23,6 +24,12 @@ type Props = TextInputProps & {
   error?: string | null;
   /** Password fields get a Show/Hide toggle. */
   revealable?: boolean;
+  /** Icon inside the field, on the left (DrawerIcons name). */
+  leadingIcon?: DrawerIconName;
+  /** 'large' = 52 dp (auth forms); default 48 dp. */
+  size?: 'default' | 'large';
+  /** Right side of the label row (e.g. "Forgot password?"). */
+  labelAccessory?: React.ReactNode;
   containerStyle?: StyleProp<ViewStyle>;
   /** Layout of the whole field (label included) — use for scroll-to-field. */
   onContainerLayout?: (e: LayoutChangeEvent) => void;
@@ -40,6 +47,9 @@ export const TextField = forwardRef<TextInputInstance, Props>(function TextField
     helper,
     error,
     revealable,
+    labelAccessory,
+    leadingIcon,
+    size = 'default',
     secureTextEntry,
     containerStyle,
     onContainerLayout,
@@ -58,24 +68,33 @@ export const TextField = forwardRef<TextInputInstance, Props>(function TextField
   return (
     <View style={[styles.wrap, containerStyle]} onLayout={onContainerLayout}>
       {label ? (
-        <Text style={styles.label} nativeID={rest.nativeID ? `${rest.nativeID}-label` : undefined}>
-          {label}
-          {required ? <Text style={styles.req}> *</Text> : null}
-          {optional ? <Text style={styles.opt}> (optional)</Text> : null}
-        </Text>
+        <View style={styles.labelRow}>
+          <Text style={styles.label} nativeID={rest.nativeID ? `${rest.nativeID}-label` : undefined}>
+            {label}
+            {required ? <Text style={styles.req}> *</Text> : null}
+            {optional ? <Text style={styles.opt}> (optional)</Text> : null}
+          </Text>
+          {labelAccessory}
+        </View>
       ) : null}
       <View
         style={[
           styles.box,
+          size === 'large' && styles.boxLarge,
           multiline && styles.boxMultiline,
           focused && styles.boxFocused,
           !!error && styles.boxError,
           !editable && styles.boxDisabled,
         ]}
       >
+        {leadingIcon ? (
+          <View style={styles.lead}>
+            <DrawerIcon name={leadingIcon} size={20} color={error ? colors.danger : focused ? colors.primary : colors.mutedSoft} />
+          </View>
+        ) : null}
         <TextInput
           ref={ref}
-          style={[styles.input, multiline && styles.inputMultiline, style]}
+          style={[styles.input, size === 'large' && styles.inputLarge, !!leadingIcon && styles.inputWithIcon, multiline && styles.inputMultiline, style]}
           placeholderTextColor={colors.mutedSoft}
           secureTextEntry={hidden}
           editable={editable}
@@ -99,7 +118,7 @@ export const TextField = forwardRef<TextInputInstance, Props>(function TextField
             accessibilityRole="button"
             accessibilityLabel={revealed ? 'Hide password' : 'Show password'}
           >
-            <Text style={styles.revealText}>{revealed ? 'Hide' : 'Show'}</Text>
+            <DrawerIcon name={revealed ? 'eyeOff' : 'eye'} size={20} color={colors.muted} />
           </Pressable>
         ) : null}
       </View>
@@ -116,7 +135,8 @@ export const TextField = forwardRef<TextInputInstance, Props>(function TextField
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: spacing.md },
-  label: { ...type.label, marginBottom: spacing.xs + 2 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs + 2 },
+  label: { ...type.label, flexShrink: 1 },
   req: { color: colors.danger },
   opt: { color: colors.mutedSoft, fontWeight: '600' },
   box: {
@@ -128,7 +148,11 @@ const styles = StyleSheet.create({
     borderColor: '#cbd5e1',
     borderRadius: radii.md,
   },
+  boxLarge: { minHeight: touch.large },
   boxMultiline: { alignItems: 'flex-start' },
+  lead: { width: 24, height: 24, marginLeft: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  inputLarge: { minHeight: touch.large - 2 },
+  inputWithIcon: { paddingLeft: spacing.sm + 2 },
   boxFocused: { borderColor: colors.primary, borderWidth: 1.5 },
   boxError: { borderColor: colors.danger, borderWidth: 1.5 },
   boxDisabled: { backgroundColor: colors.surfaceMuted },
@@ -142,7 +166,6 @@ const styles = StyleSheet.create({
   },
   inputMultiline: { minHeight: 96, textAlignVertical: 'top' },
   reveal: { minHeight: touch.min, minWidth: touch.min + 12, alignItems: 'center', justifyContent: 'center' },
-  revealText: { color: colors.primary, fontWeight: '700', fontSize: 14 },
   helper: { ...type.caption, marginTop: spacing.xs + 2 },
   error: { color: colors.danger, fontSize: 13, fontWeight: '600', marginTop: spacing.xs + 2, lineHeight: 18 },
 });

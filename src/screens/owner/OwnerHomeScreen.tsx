@@ -18,6 +18,8 @@ import { markLaunchStep } from '../../utils/launchSteps';
 import type { OwnerStackParamList } from '../../navigation/types';
 import { pickPrimaryOwnerLiveHelpRequest } from '../../utils/helpRequestStatus';
 import { jobStatusLabelOf, vehicleTitle } from '../../utils/helpRequestUi';
+import { DrawerIcon } from '../../components/DrawerIcons';
+import { colors, touch } from '../../theme/tokens';
 import { BrandLogo } from '../../components/BrandLogo';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'OwnerHome'>;
@@ -703,7 +705,7 @@ export function OwnerHomeScreen({ navigation }: Props) {
           accessibilityRole="button"
           accessibilityLabel="Open menu"
         >
-          <Text style={styles.menuIcon}>☰</Text>
+          <DrawerIcon name="menu" color={colors.text} />
         </Pressable>
         <BrandLogo width={layout.logoWidth} />
         <View style={styles.topBarSpacer} />
@@ -874,7 +876,7 @@ export function OwnerHomeScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f8fafc' },
+  safe: { flex: 1, backgroundColor: colors.bg },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -883,7 +885,6 @@ const styles = StyleSheet.create({
   },
   menuBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   topBarSpacer: { width: 44 },
-  menuIcon: { fontSize: 24, color: '#0f172a' },
   body: {
     flex: 1,
     minHeight: 0,
@@ -911,7 +912,7 @@ const styles = StyleSheet.create({
   },
   activeCardEyebrow: {
     color: '#7dd3fc',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.6,
     textTransform: 'uppercase',
@@ -978,6 +979,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   quietBtn: {
+    minHeight: touch.control,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -985,7 +987,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 18,
   },
-  quietBtnPrimary: { backgroundColor: '#0284c7' },
+  quietBtnPrimary: { backgroundColor: colors.primary, minHeight: touch.large },
   quietBtnSecondary: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0' },
   quietBtnPressed: { opacity: 0.9 },
   quietBtnEmoji: { fontSize: 20 },
@@ -1007,7 +1009,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   primaryHelpCta: {
-    backgroundColor: '#0284c7',
+    minHeight: touch.large,
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
     borderRadius: 14,
     paddingHorizontal: 18,
     alignItems: 'center',
@@ -1016,6 +1020,8 @@ const styles = StyleSheet.create({
   primaryHelpCtaPressed: { opacity: 0.9 },
   primaryHelpCtaTitle: { color: '#fff', fontWeight: '800' },
   secondaryHelpCta: {
+    minHeight: touch.control,
+    justifyContent: 'center',
     paddingHorizontal: 18,
     borderRadius: 14,
     borderWidth: 1,

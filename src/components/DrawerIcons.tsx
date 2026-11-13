@@ -34,7 +34,11 @@ export type DrawerIconName =
   | 'car'
   | 'shield'
   | 'user'
-  | 'camera';
+  | 'camera'
+  | 'menu'
+  | 'lock'
+  | 'eye'
+  | 'eyeOff';
 
 type Props = { name: DrawerIconName; color?: string; bg?: string; size?: number };
 
@@ -153,6 +157,15 @@ export function DrawerIcon({ name, color = colors.text, bg = colors.surface, siz
           {line({ left: 7, top: 9, width: S + 1, height: S + 1, borderRadius: 2 })}
           {line({ left: 11, top: 9, width: S + 1, height: S + 1, borderRadius: 2 })}
           {line({ left: 15, top: 9, width: S + 1, height: S + 1, borderRadius: 2 })}
+        </>
+      );
+      break;
+    case 'menu':
+      parts = (
+        <>
+          {line({ left: 3, top: 5, width: 18, height: S, borderRadius: 1 })}
+          {line({ left: 3, top: 11, width: 18, height: S, borderRadius: 1 })}
+          {line({ left: 3, top: 17, width: 18, height: S, borderRadius: 1 })}
         </>
       );
       break;
@@ -295,6 +308,25 @@ export function DrawerIcon({ name, color = colors.text, bg = colors.surface, siz
         <>
           {outline({ left: 7, top: 2, width: 10, height: 10, borderRadius: 5 })}
           {outline({ left: 3, top: 14, width: 18, height: 12, borderTopLeftRadius: 9, borderTopRightRadius: 9, borderBottomWidth: 0 })}
+        </>
+      );
+      break;
+    case 'lock':
+      parts = (
+        <>
+          {outline({ left: 7, top: 2, width: 10, height: 11, borderRadius: 5, borderBottomWidth: 0 })}
+          {outline({ left: 4, top: 10, width: 16, height: 12, borderRadius: 3 })}
+          {line({ left: 11, top: 14, width: S, height: 4, borderRadius: 1 })}
+        </>
+      );
+      break;
+    case 'eye':
+    case 'eyeOff':
+      parts = (
+        <>
+          {outline({ left: 1, top: 6, width: 22, height: 12, borderRadius: 11 })}
+          {line({ left: 9, top: 9, width: 6, height: 6, borderRadius: 3 })}
+          {name === 'eyeOff' ? line({ left: 2, top: 11, width: 20, height: S, transform: [{ rotate: '-40deg' }] }) : null}
         </>
       );
       break;

@@ -61,6 +61,8 @@ export function Button({
         styles[variant],
         !stretch && styles.inline,
         pressed && !isDisabled && (variant === 'text' ? styles.textPressed : styles.pressed),
+        // Subtle press-scale feedback.
+        pressed && !isDisabled && variant !== 'text' && styles.pressScale,
         isDisabled && !loading && styles.disabled,
         style,
       ]}
@@ -101,7 +103,8 @@ const styles = StyleSheet.create({
   dangerText: { color: colors.onPrimary },
   text: { backgroundColor: 'transparent', minHeight: touch.min, paddingHorizontal: spacing.md },
   textText: { color: colors.primary, fontSize: 15, fontWeight: '700' },
-  pressed: { opacity: 0.85 },
+  pressed: { opacity: 0.9 },
+  pressScale: { transform: [{ scale: 0.98 }] },
   textPressed: { opacity: 0.6 },
   disabled: { opacity: 0.5 },
 });

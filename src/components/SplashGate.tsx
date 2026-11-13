@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useLaunchSteps } from '../utils/launchSteps';
+import { LAUNCH_EXIT_MS, LAUNCH_MIN_DISPLAY_MS } from '../constants/launchBrand';
 import { AppBootstrapSplash } from './AppBootstrapSplash';
 
 void SplashScreen.preventAutoHideAsync().catch(() => {
@@ -13,9 +14,6 @@ type Props = {
   children: React.ReactNode;
 };
 
-const EXIT_MS = 320;
-/** Keep the loading screen at least this long so it reads as intentional, not a flicker. */
-const MIN_VISIBLE_MS = 600;
 /** Never hold a signed-in user on the loading screen longer than this waiting for the dashboard. */
 const DASHBOARD_WAIT_CAP_MS = 6000;
 /** Hide the native splash even if the logo's load event never fires. */
@@ -35,6 +33,8 @@ export function SplashGate({ children }: Props) {
   const [capHit, setCapHit] = useState(false);
   const exit = useRef(new Animated.Value(0)).current;
   const mountedAt = useRef(Date.now());
+  /** When the JS loading screen's logo first painted — the minimum display time counts from here. */
+  const paintedAt = useRef<number | null>(null);
   const nativeHidden = useRef(false);
   const exiting = useRef(false);
 
@@ -64,14 +64,15 @@ export function SplashGate({ children }: Props) {
 
   useEffect(() => {
     if (!ready || exiting.current || !showOverlay) return;
-    const wait = Math.max(0, MIN_VISIBLE_MS - (Date.now() - mountedAt.current));
+    const shownSince = paintedAt.current ?? mountedAt.current;
+    const wait = Math.max(0, LAUNCH_MIN_DISPLAY_MS - (Date.now() - shownSince));
     const t = setTimeout(() => {
       exiting.current = true;
       hideNative();
       Animated.timing(exit, {
         toValue: 1,
-        duration: EXIT_MS,
-        easing: Easing.out(Easing.cubic),
+        duration: LAUNCH_EXIT_MS,
+        easing: Easing.inOut(Easing.cubic),
         useNativeDriver: true,
       }).start(() => setShowOverlay(false));
     }, wait);
@@ -89,7 +90,10 @@ export function SplashGate({ children }: Props) {
           pointerEvents={ready ? 'none' : 'auto'}
         >
           <AppBootstrapSplash
-            onLogoReady={hideNative}
+            onLogoReady={() => {
+              if (paintedAt.current == null) paintedAt.current = Date.now();
+              hideNative();
+            }}
             error={bootError}
             retrying={isLoading && !bootError}
             onRetry={retryBootstrap}

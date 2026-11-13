@@ -228,7 +228,7 @@ export function ProfileScreen({ navigation }: Props) {
 
         <Card title="Shortcuts">
           <ActionRow icon="wallet" label="Payment methods" sub="Cash and your saved wallets" onPress={() => navigation.navigate('PaymentMethods')} />
-          <ActionRow icon="headset" label="Contact Support" sub="Call, chat or e-mail us" onPress={() => navigation.navigate('ContactSupport')} last />
+          <ActionRow icon="headset" label="Contact Support" sub="Report a problem with the app" onPress={() => navigation.navigate('ContactSupport')} last />
         </Card>
 
         <Card title="Account settings">

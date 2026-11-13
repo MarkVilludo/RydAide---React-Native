@@ -2,7 +2,8 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 
 export type AuthStackParamList = {
   Login: undefined;
-  Register: undefined;
+  /** Optional role preselected from the login screen's role chips. */
+  Register: { role?: 'owner' | 'mechanic' } | undefined;
   ForgotPassword: undefined;
   ResetPassword: { email?: string; token?: string } | undefined;
 };

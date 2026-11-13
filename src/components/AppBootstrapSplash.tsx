@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import type { BootError } from '../context/AuthContext';
-import { LAUNCH_BACKGROUND, LAUNCH_LOGO, LAUNCH_LOGO_SIZE } from '../constants/launchBrand';
+import { LAUNCH_BACKGROUND, LAUNCH_LOGO, LAUNCH_LOGO_SIZE, LAUNCH_RIPPLE_MS } from '../constants/launchBrand';
 
 const { width: W, height: H } = Dimensions.get('window');
 /** Logo sits exactly where the native splash draws it: centred in the window. */
@@ -51,6 +51,8 @@ export function AppBootstrapSplash({ onLogoReady, error, retrying, onRetry, onSi
   const breathe = useRef(new Animated.Value(0)).current;
   const textIn = useRef(new Animated.Value(0)).current;
   const bar = useRef(new Animated.Value(0)).current;
+  /** Intro: one soft scale pulse 1 → 1.08 → 1. Starts at 1 and full opacity so the native-splash hand-off doesn't jump. */
+  const intro = useRef(new Animated.Value(0)).current;
   const [slow, setSlow] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const readySent = useRef(false);
@@ -71,10 +73,19 @@ export function AppBootstrapSplash({ onLogoReady, error, retrying, onRetry, onSi
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-    if (reduceMotion) return;
+    if (reduceMotion) {
+      intro.setValue(1);
+      return;
+    }
+    Animated.timing(intro, {
+      toValue: 1,
+      duration: 700,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
     const loops = [
       Animated.loop(
-        Animated.timing(ripple, { toValue: 1, duration: 2000, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(ripple, { toValue: 1, duration: LAUNCH_RIPPLE_MS, easing: Easing.out(Easing.quad), useNativeDriver: true }),
       ),
       Animated.loop(
         Animated.sequence([
@@ -88,7 +99,7 @@ export function AppBootstrapSplash({ onLogoReady, error, retrying, onRetry, onSi
     ];
     loops.forEach((l) => l.start());
     return () => loops.forEach((l) => l.stop());
-  }, [reduceMotion, ripple, breathe, textIn, bar]);
+  }, [reduceMotion, ripple, breathe, textIn, bar, intro]);
 
   const logoReady = () => {
     if (readySent.current) return;
@@ -98,8 +109,12 @@ export function AppBootstrapSplash({ onLogoReady, error, retrying, onRetry, onSi
 
   const exitV = exit ?? new Animated.Value(0);
   const logoScale = Animated.multiply(
-    breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] }),
-    exitV.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] }),
+    Animated.multiply(
+      intro.interpolate({ inputRange: [0, 0.45, 1], outputRange: [1, 1.08, 1] }),
+      breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] }),
+    ),
+    // Reduce motion: plain fade on exit, no zoom.
+    exitV.interpolate({ inputRange: [0, 1], outputRange: [1, reduceMotion ? 1 : 1.12] }),
   );
   const ringStyle = (offset: number) => {
     const p = Animated.modulo(Animated.add(ripple, offset), 1);

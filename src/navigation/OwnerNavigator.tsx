@@ -2,6 +2,7 @@ import { createDrawerNavigator } from '@react-navigation/drawer';
 import { DrawerActions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
+import { DrawerIcon } from '../components/DrawerIcons';
 import { Pressable, Text } from 'react-native';
 import { ActiveHelpRequestScreen } from '../screens/owner/ActiveHelpRequestScreen';
 import { FindMechanicScreen } from '../screens/owner/FindMechanicScreen';
@@ -34,11 +35,11 @@ function DrawerMenuButton({ navigation }: { navigation: OwnerStackNav }) {
   return (
     <Pressable
       onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-      style={{ paddingHorizontal: 16, paddingVertical: 8 }}
+      style={{ minWidth: 44, minHeight: 44, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' }}
       accessibilityRole="button"
       accessibilityLabel="Open menu"
     >
-      <Text style={{ fontSize: 22, color: '#0f172a' }}>☰</Text>
+      <DrawerIcon name="menu" color="#0f172a" />
     </Pressable>
   );
 }

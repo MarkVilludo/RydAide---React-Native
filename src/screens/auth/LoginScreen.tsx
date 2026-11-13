@@ -1,117 +1,156 @@
-import React, { useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  Dimensions,
-  Linking,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type TextInputInstance,
-} from 'react-native';
+import Constants from 'expo-constants';
+import React, { useEffect, useRef, useState } from 'react';
+import { Linking, Platform, Pressable, StyleSheet, Text, View, type TextInputInstance } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getApiErrorMessage } from '../../api/client';
-import { BrandLogo } from '../../components/BrandLogo';
+import { AuthErrorBanner } from '../../components/auth/AuthErrorBanner';
+import { AuthLayout, authStyles } from '../../components/auth/AuthLayout';
+import { authFieldErrors } from '../../components/auth/authErrors';
+import type { KeyboardAwareScrollViewRef } from '../../components/KeyboardAwareScrollView';
 import { Button, TextField } from '../../components/ui';
-import { colors, spacing, type as typeScale } from '../../theme/tokens';
-import {
-  KeyboardAwareScrollView,
-  type KeyboardAwareScrollViewRef,
-} from '../../components/KeyboardAwareScrollView';
 import { API_ORIGIN, API_URL, apiEnvironment } from '../../config';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import { useAuth } from '../../context/AuthContext';
+import { colors, radii, spacing, touch } from '../../theme/tokens';
 import { confirmBeforeDeleteAccountFlow } from '../../utils/deleteAccountConfirm';
+import { loadLastLoginEmail, saveLastLoginEmail } from '../../utils/lastLoginEmail';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
+/**
+ * Sign in. Email + password only — the API's login accepts email (no phone login), so there is no
+ * Email/Mobile switch. Auth logic is unchanged: signIn(email, password) from AuthContext.
+ */
 export function LoginScreen({ navigation }: Props) {
   const { signIn } = useAuth();
   const { config } = useAppConfig();
-  const insets = useSafeAreaInsets();
   const privacyUrl = config?.legal?.privacy_url ?? `${API_ORIGIN}/privacy`;
   const deletionUrl = config?.legal?.account_deletion_url ?? `${API_ORIGIN}/account-deletion`;
+  const version = Constants.expoConfig?.version;
   const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
   const formOffsetY = useRef(0);
   const fieldOffsetY = useRef<Record<string, number>>({});
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const passwordRef = useRef<TextInputInstance>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState<string | null>(null);
 
-  // Lock content height to the full screen so the keyboard does not "lift"/re-center the form.
-  const minContentHeight = useMemo(() => {
-    const windowHeight = Dimensions.get('window').height;
-    return Math.max(480, windowHeight - insets.top - insets.bottom);
-  }, [insets.bottom, insets.top]);
+  // Prefill the last email used on this device.
+  useEffect(() => {
+    let alive = true;
+    void loadLastLoginEmail().then((saved) => {
+      if (alive && saved) setEmail((cur) => cur || saved);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const scrollFieldIntoView = (key: string) => {
     const fieldY = fieldOffsetY.current[key];
     setTimeout(() => {
       if (typeof fieldY === 'number') {
-        scrollRef.current?.scrollTo({
-          y: Math.max(0, formOffsetY.current + fieldY - 24),
-          animated: true,
-        });
+        // Keep the field and the Sign in button below it in view.
+        scrollRef.current?.scrollTo({ y: Math.max(0, formOffsetY.current + fieldY - 16), animated: true });
       } else {
         scrollRef.current?.scrollToEnd({ animated: true });
       }
-    }, Platform.OS === 'android' ? 200 : 80);
+    }, Platform.OS === 'android' ? 220 : 80);
   };
 
   const onSubmit = async () => {
     if (submitting) return;
-    if (!email.trim() || !password) {
-      Alert.alert('Sign in', 'Enter your email and password.');
-      return;
-    }
+    const local: Record<string, string> = {};
+    if (!email.trim()) local.email = 'Enter your email.';
+    if (!password) local.password = 'Enter your password.';
+    setFieldErrors(local);
+    setFormError(null);
+    if (Object.keys(local).length) return;
     setSubmitting(true);
     try {
       await signIn(email.trim(), password);
+      void saveLastLoginEmail(email);
     } catch (error) {
-      Alert.alert('Login failed', getApiErrorMessage(error));
+      const message = getApiErrorMessage(error);
+      const fields = authFieldErrors(error);
+      // Wrong credentials come back on "email" with the same text as the banner — show it once.
+      if (fields.email === message) delete fields.email;
+      setFieldErrors(fields);
+      setFormError(message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  return (
-    <KeyboardAwareScrollView
-      ref={scrollRef}
-      keyboardMode="scroll"
-      style={styles.scroll}
-      contentContainerStyle={[
-        styles.content,
-        {
-          minHeight: minContentHeight,
-          paddingTop: Math.max(16, insets.top + 8),
-          paddingBottom: Math.max(24, insets.bottom + 16),
-        },
-      ]}
-      extraBottomPadding={24}
-    >
-      <View
-        style={styles.form}
-        onLayout={(e) => {
-          formOffsetY.current = e.nativeEvent.layout.y;
-        }}
-      >
-        <BrandLogo width={200} style={styles.logo} />
-        <Text style={styles.subtitle}>Sign in to continue</Text>
+  const clearErrors = (key: string) => {
+    if (fieldErrors[key]) setFieldErrors(({ [key]: _drop, ...rest }) => rest);
+    if (formError) setFormError(null);
+  };
 
+  return (
+    <AuthLayout
+      ref={scrollRef}
+      onFormLayout={(y) => {
+        formOffsetY.current = y;
+      }}
+      footer={
+        <>
+          <View style={authStyles.footerRow}>
+            <Pressable onPress={() => Linking.openURL(privacyUrl).catch(() => {})} style={authStyles.footerLink} accessibilityRole="link" hitSlop={6}>
+              <Text style={authStyles.footerText}>Privacy</Text>
+            </Pressable>
+            <Text style={authStyles.footerDot}>·</Text>
+            <Pressable
+              onPress={() =>
+                confirmBeforeDeleteAccountFlow(() => {
+                  Linking.openURL(deletionUrl).catch(() => {});
+                })
+              }
+              style={authStyles.footerLink}
+              accessibilityRole="link"
+              accessibilityLabel="Delete account and data"
+              hitSlop={6}
+            >
+              <Text style={authStyles.footerText}>Delete account</Text>
+            </Pressable>
+            {version ? (
+              <>
+                <Text style={authStyles.footerDot}>·</Text>
+                <Text style={[authStyles.footerText, styles.version]}>v{version}</Text>
+              </>
+            ) : null}
+          </View>
+          {__DEV__ ? (
+            <Text style={authStyles.devHint} numberOfLines={1} selectable>
+              {apiEnvironment()} · {API_URL}
+            </Text>
+          ) : null}
+        </>
+      }
+    >
+      <AuthErrorBanner message={formError} />
+      <View style={styles.fieldsTop}>
         <TextField
+          size="large"
+          leadingIcon="mail"
           label="Email"
           placeholder="you@example.com"
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="email-address"
           autoComplete="email"
-          textContentType="emailAddress"
+          textContentType="username"
+          importantForAutofill="yes"
+          editable={!submitting}
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(t) => {
+            setEmail(t);
+            clearErrors('email');
+          }}
+          error={fieldErrors.email}
           returnKeyType="next"
           submitBehavior="submit"
           onSubmitEditing={() => passwordRef.current?.focus()}
@@ -122,14 +161,32 @@ export function LoginScreen({ navigation }: Props) {
         />
         <TextField
           ref={passwordRef}
+          size="large"
+          leadingIcon="lock"
           label="Password"
           placeholder="Your password"
           secureTextEntry
           revealable
-          autoComplete="password"
+          autoComplete="current-password"
           textContentType="password"
+          importantForAutofill="yes"
+          editable={!submitting}
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(t) => {
+            setPassword(t);
+            clearErrors('password');
+          }}
+          error={fieldErrors.password}
+          labelAccessory={
+            <Pressable
+              onPress={() => navigation.navigate('ForgotPassword')}
+              hitSlop={{ top: 12, bottom: 12, left: 16, right: 8 }}
+              accessibilityRole="link"
+              accessibilityLabel="Forgot password?"
+            >
+              <Text style={styles.forgot}>Forgot?</Text>
+            </Pressable>
+          }
           returnKeyType="go"
           onContainerLayout={(e) => {
             fieldOffsetY.current.password = e.nativeEvent.layout.y;
@@ -137,59 +194,53 @@ export function LoginScreen({ navigation }: Props) {
           onFocus={() => scrollFieldIntoView('password')}
           onSubmitEditing={() => void onSubmit()}
         />
+      </View>
 
-        <Button title="Sign in" size="large" loading={submitting} onPress={() => void onSubmit()} style={styles.primaryButton} />
+      <Button title="Sign in" size="large" loading={submitting} onPress={() => void onSubmit()} style={authStyles.primary} />
 
-        <Button title="Forgot password?" variant="text" onPress={() => navigation.navigate('ForgotPassword')} style={styles.forgotWrap} />
-
-        <View style={styles.registerRow}>
-          <Text style={styles.registerText}>New to RydAid?</Text>
-          <Button title="Create an account" variant="text" onPress={() => navigation.navigate('Register')} />
-        </View>
-
-        <Pressable onPress={() => Linking.openURL(privacyUrl).catch(() => {})} style={styles.privacyWrap} accessibilityRole="link">
-          <Text style={styles.privacyLink}>Privacy Policy</Text>
+      <View style={authStyles.linkRow}>
+        <Text style={authStyles.linkRowText}>New to RydAid?</Text>
+        <Button title="Create account" variant="text" onPress={() => navigation.navigate('Register')} style={styles.inlineLink} />
+      </View>
+      <View style={styles.chips}>
+        <Pressable
+          style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}
+          onPress={() => navigation.navigate('Register', { role: 'owner' })}
+          accessibilityRole="button"
+          accessibilityLabel="Create an account: I need roadside help"
+        >
+          <Text style={styles.chipText}>🚗 I need roadside help</Text>
         </Pressable>
         <Pressable
-          onPress={() =>
-            confirmBeforeDeleteAccountFlow(() => {
-              Linking.openURL(deletionUrl).catch(() => {});
-            })
-          }
-          style={styles.privacyWrap}
+          style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}
+          onPress={() => navigation.navigate('Register', { role: 'mechanic' })}
+          accessibilityRole="button"
+          accessibilityLabel="Create an account: I'm a mechanic"
         >
-          <Text style={styles.privacyLink}>Delete account & data</Text>
+          <Text style={styles.chipText}>🔧 I’m a mechanic</Text>
         </Pressable>
-
-        {__DEV__ ? (
-          <Text style={styles.apiHint} selectable>
-            API ({apiEnvironment()}): {API_URL}
-          </Text>
-        ) : null}
       </View>
-    </KeyboardAwareScrollView>
+    </AuthLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: colors.bg },
-  content: {
-    flexGrow: 1,
+  fieldsTop: { marginTop: 0 },
+  forgot: { fontSize: 14, fontWeight: '700', color: colors.primary },
+  inlineLink: { paddingHorizontal: spacing.xs + 2 },
+  chips: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  chip: {
+    flex: 1,
+    minHeight: touch.min,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.xxl,
+    paddingHorizontal: spacing.sm,
   },
-  form: {
-    width: '100%',
-    maxWidth: 440,
-    alignSelf: 'center',
-  },
-  logo: { marginBottom: spacing.sm, alignSelf: 'center' },
-  subtitle: { ...typeScale.body, textAlign: 'center', color: colors.muted, marginBottom: spacing.xxl, marginTop: spacing.sm },
-  primaryButton: { marginTop: spacing.sm },
-  forgotWrap: { marginTop: spacing.sm },
-  registerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', marginTop: spacing.xs },
-  registerText: { ...typeScale.body, color: colors.muted },
-  privacyWrap: { marginTop: spacing.lg, minHeight: 44, justifyContent: 'center' },
-  privacyLink: { textAlign: 'center', color: colors.muted, fontSize: 13, textDecorationLine: 'underline' },
-  apiHint: { marginTop: spacing.lg, fontSize: 11, color: colors.mutedSoft, textAlign: 'center' },
+  chipPressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
+  chipText: { fontSize: 13, fontWeight: '700', color: colors.primaryInk },
+  version: { paddingHorizontal: spacing.xs },
 });
