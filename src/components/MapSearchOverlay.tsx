@@ -46,7 +46,7 @@ export function MapSearchOverlay({ visible, message = 'Searching nearby…', sub
 
 const styles = StyleSheet.create({
   wrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(248, 250, 252, 0.55)',

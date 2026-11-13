@@ -124,4 +124,5 @@ const styles = StyleSheet.create({
   },
   compactGroup: { alignItems: 'center', width: 72 },
   compactImage: { width: 26, height: 26, marginBottom: 0 },
+  compactLabel: { marginTop: 2, maxWidth: 72, fontSize: 12, fontWeight: '700', color: '#0f172a', textAlign: 'center' },
 });
