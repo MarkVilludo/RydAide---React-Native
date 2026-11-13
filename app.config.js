@@ -13,7 +13,7 @@ const easProjectId =
 const config = {
   name: 'RydAid',
   slug: 'rydaid-app',
-  version: '1.0.1',
+  version: '1.0.2',
   orientation: 'portrait',
   icon: './assets/icon.png',
   splash: {
@@ -39,7 +39,7 @@ const config = {
     package: androidPackage,
     // Google Play requires a unique, increasing integer per upload. EAS remote
     // + autoIncrement on store/internal profiles bumps this; keep a floor here.
-    versionCode: 4,
+    versionCode: 5,
     softwareKeyboardLayoutMode: 'resize',
     usesCleartextTraffic: true,
     adaptiveIcon: {
