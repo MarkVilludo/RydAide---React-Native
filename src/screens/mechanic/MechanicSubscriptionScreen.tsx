@@ -24,7 +24,8 @@ import type { Entitlements } from '../../api/types';
 import { CenteredLoading } from '../../components/CenteredLoading';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import type { MechanicStackParamList } from '../../navigation/types';
-import { getApiErrorMessage } from '../../api/client';
+import { getApiAuthToken, getApiErrorMessage, isUnauthenticatedError } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 import { logger } from '../../utils/logger';
 import {
@@ -37,7 +38,14 @@ import {
 } from '../../services/mechanicProStore';
 import { useMechanicProStorePrices } from '../../hooks/useMechanicProStorePrices';
 import { MECHANIC_PRO_SUBSCRIPTION_ID } from '../../constants/storeBilling';
-import { isMechanicProPlanCode, resolvePriceLabel } from '../../utils/mechanicProPricing';
+import {
+  MECHANIC_PRO_MONTHLY_PRICE_PHP,
+  MECHANIC_PRO_YEARLY_PRICE_PHP,
+  formatPhpAmount,
+  isMechanicProPlanCode,
+  resolvePriceLabel,
+  yearlySavingsVsMonthly,
+} from '../../utils/mechanicProPricing';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'MechanicSubscription'>;
 
@@ -88,9 +96,10 @@ function isFuture(iso: string | null | undefined): boolean {
 
 export function MechanicSubscriptionScreen(_props: Props) {
   const insets = useSafeAreaInsets();
+  const { signOut } = useAuth();
   const { config } = useAppConfig();
-  const cmsMonthlyPrice = config?.mechanic_monetization.pro_monthly_price_php ?? null;
-  const cmsYearlyPrice = config?.mechanic_monetization.pro_yearly_price_php ?? null;
+  const cmsMonthlyPrice = config?.mechanic_monetization.pro_monthly_price_php ?? MECHANIC_PRO_MONTHLY_PRICE_PHP;
+  const cmsYearlyPrice = config?.mechanic_monetization.pro_yearly_price_php ?? MECHANIC_PRO_YEARLY_PRICE_PHP;
   const monthlyStoreId =
     Platform.OS === 'ios'
       ? config?.mechanic_monetization.store_product_ids?.ios
@@ -114,17 +123,14 @@ export function MechanicSubscriptionScreen(_props: Props) {
   const yearlyLabel = resolvePriceLabel(storePrices.yearly?.displayPrice, cmsYearlyPrice);
   const monthlyFromStore = Boolean(storePrices.monthly?.displayPrice);
   const yearlyFromStore = Boolean(storePrices.yearly?.displayPrice);
-  const showYearly = yearlyConfigured && yearlyLabel != null;
+  // Show yearly even when the store SKU isn't configured yet, using the CMS / website price.
+  const showYearly = yearlyLabel != null;
 
-  const yearlySavingsPct = useMemo(() => {
+  const yearlySavings = useMemo(() => {
     // Only compare like with like: both store prices, or both CMS amounts.
     const m = monthlyFromStore && yearlyFromStore ? storePrices.monthly?.price : !monthlyFromStore && !yearlyFromStore ? cmsMonthlyPrice : null;
     const y = monthlyFromStore && yearlyFromStore ? storePrices.yearly?.price : !monthlyFromStore && !yearlyFromStore ? cmsYearlyPrice : null;
-    if (!m || !y || m <= 0 || y <= 0) return null;
-    const full = m * 12;
-    if (full <= y) return null;
-    const pct = Math.round(((full - y) / full) * 100);
-    return pct > 0 ? pct : null;
+    return yearlySavingsVsMonthly(m, y);
   }, [monthlyFromStore, yearlyFromStore, storePrices, cmsMonthlyPrice, cmsYearlyPrice]);
 
   const [dashboard, setDashboard] = useState<MechanicSubscriptionDetails | null>(null);
@@ -133,6 +139,7 @@ export function MechanicSubscriptionScreen(_props: Props) {
   const [billingCycle, setBillingCycle] = useState<'month' | 'year'>('month');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [busy, setBusy] = useState<null | 'buy' | 'restore' | 'sim'>(null);
   const [refreshing, setRefreshing] = useState(false);
   const mounted = useRef(true);
@@ -147,17 +154,44 @@ export function MechanicSubscriptionScreen(_props: Props) {
   const load = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true);
     else setLoading(true);
+
+    // Token is set during AuthProvider bootstrap before this screen can mount.
+    // If it is missing or the server later rejects it, skip a red error box.
+    if (!getApiAuthToken()) {
+      logger.warn('Subscription', 'Skipped subscription load — no auth token');
+      if (!mounted.current) return;
+      setSessionExpired(true);
+      setLoadError('Session expired, please sign in again');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     const [sub, ent] = await Promise.allSettled([fetchMechanicSubscription(), fetchEntitlements()]);
     if (!mounted.current) return;
     if (sub.status === 'fulfilled') {
       setDashboard(sub.value.subscription);
       setHistory(sub.value.payment_history ?? []);
       setLoadError(null);
+      setSessionExpired(false);
+    } else if (isUnauthenticatedError(sub.reason)) {
+      logger.warn('Subscription', 'Load subscription failed — unauthenticated (401)');
+      setSessionExpired(true);
+      setLoadError('Session expired, please sign in again');
     } else {
       logger.error('Subscription', 'Load subscription failed', sub.reason);
+      setSessionExpired(false);
       setLoadError(getApiErrorMessage(sub.reason));
     }
-    if (ent.status === 'fulfilled') setEntitlements(ent.value);
+    if (ent.status === 'fulfilled') {
+      setEntitlements(ent.value);
+    } else if (isUnauthenticatedError(ent.reason)) {
+      logger.warn('Subscription', 'Load entitlements failed — unauthenticated (401)');
+      setSessionExpired(true);
+      if (sub.status !== 'fulfilled') {
+        setLoadError('Session expired, please sign in again');
+      }
+    }
     setLoading(false);
     setRefreshing(false);
   }, []);
@@ -260,10 +294,13 @@ export function MechanicSubscriptionScreen(_props: Props) {
     };
   }, [isPro, status, sub, onYearlyPlan, limitsOff, freeLeft, freeTotal]);
 
-  const selectedProductId = billingCycle === 'year' && showYearly ? resolvedYearlyId : resolvedMonthlyId;
-  const selectedLabel = billingCycle === 'year' && showYearly ? yearlyLabel : monthlyLabel;
-  const selectedFromStore = billingCycle === 'year' && showYearly ? yearlyFromStore : monthlyFromStore;
-  const selectedUnit = billingCycle === 'year' && showYearly ? 'year' : 'month';
+  const yearlySelected = billingCycle === 'year' && showYearly;
+  const canPurchaseYearly = yearlySelected && yearlyConfigured;
+  const selectedProductId = canPurchaseYearly ? resolvedYearlyId : resolvedMonthlyId;
+  const selectedLabel = yearlySelected ? yearlyLabel : monthlyLabel;
+  const selectedFromStore = yearlySelected ? yearlyFromStore : monthlyFromStore;
+  const selectedUnit = yearlySelected ? 'year' : 'month';
+  const yearlyCheckoutUnavailable = yearlySelected && !yearlyConfigured;
 
   const subscribe = async (productId: string) => {
     if (!storeReady) {
@@ -353,17 +390,32 @@ export function MechanicSubscriptionScreen(_props: Props) {
   const canBuy = !isPro && status !== 'PAYMENT_PENDING';
   const priceUnavailable = !storePricesLoading && selectedLabel == null;
   const primary = isPro
-    ? { label: `Manage in ${STORE_NAME}`, hint: `Opens ${STORE_NAME} subscriptions`, onPress: () => void openManage() }
+    ? { label: `Manage in ${STORE_NAME}`, hint: `Opens ${STORE_NAME} subscriptions`, onPress: () => void openManage(), disabled: false }
     : status === 'PAYMENT_PENDING'
-      ? { label: 'Refresh status', hint: 'Checks whether your payment went through', onPress: () => void load(true) }
-      : {
-          label:
-            selectedLabel && !storePricesLoading
-              ? `Subscribe · ${selectedLabel}/${selectedUnit}`
-              : 'Subscribe to Mechanic Pro',
-          hint: `Opens ${STORE_NAME} to confirm the price and pay`,
-          onPress: () => void subscribe(selectedProductId),
-        };
+      ? { label: 'Refresh status', hint: 'Checks whether your payment went through', onPress: () => void load(true), disabled: false }
+      : yearlyCheckoutUnavailable
+        ? {
+            label: yearlyLabel ? `Yearly · ${yearlyLabel}/year` : 'Yearly billing',
+            hint: 'Yearly checkout is not in the store yet. Choose Monthly to subscribe now.',
+            onPress: () => {},
+            disabled: true,
+          }
+        : sessionExpired
+          ? {
+              label: 'Sign in again to subscribe',
+              hint: 'Your session expired. Sign in again, then subscribe.',
+              onPress: () => void signOut(),
+              disabled: false,
+            }
+          : {
+              label:
+                selectedLabel && !storePricesLoading
+                  ? `Subscribe · ${selectedLabel}/${selectedUnit}`
+                  : 'Subscribe to Mechanic Pro',
+              hint: `Opens ${STORE_NAME} to confirm the price and pay`,
+              onPress: () => void subscribe(selectedProductId),
+              disabled: false,
+            };
 
   const tone =
     plan.kind === 'pro'
@@ -396,16 +448,32 @@ export function MechanicSubscriptionScreen(_props: Props) {
 
       {loadError && !dashboard ? (
         <View style={[styles.card, styles.errorCard]} accessibilityRole="alert">
-          <Text style={styles.cardTitle}>Couldn't load your plan</Text>
-          <Text style={styles.body}>{loadError}</Text>
-          <Pressable
-            style={styles.linkBtn}
-            onPress={() => void load()}
-            accessibilityRole="button"
-            accessibilityLabel="Try loading your plan again"
-          >
-            <Text style={styles.linkBtnText}>Try again</Text>
-          </Pressable>
+          <Text style={styles.cardTitle}>{sessionExpired ? 'Session expired' : "Couldn't load your plan"}</Text>
+          <Text style={styles.body}>
+            {sessionExpired
+              ? 'Please sign in again to load your plan. Monthly and yearly prices are still shown below.'
+              : loadError}
+          </Text>
+          <View style={styles.secondaryRow}>
+            <Pressable
+              style={styles.linkBtn}
+              onPress={() => void load()}
+              accessibilityRole="button"
+              accessibilityLabel="Try loading your plan again"
+            >
+              <Text style={styles.linkBtnText}>Try again</Text>
+            </Pressable>
+            {sessionExpired ? (
+              <Pressable
+                style={styles.linkBtn}
+                onPress={() => void signOut()}
+                accessibilityRole="button"
+                accessibilityLabel="Sign in again"
+              >
+                <Text style={styles.linkBtnText}>Sign in again</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       ) : (
         <View
@@ -475,7 +543,11 @@ export function MechanicSubscriptionScreen(_props: Props) {
                   title="Yearly"
                   price={yearlyLabel}
                   unit="year"
-                  note={yearlySavingsPct != null ? `About ${yearlySavingsPct}% less than 12 monthly payments` : undefined}
+                  note={
+                    yearlySavings != null
+                      ? `Save ${formatPhpAmount(yearlySavings.amount)} · ${yearlySavings.percent}% less than 12 months`
+                      : undefined
+                  }
                   selected={billingCycle === 'year'}
                   current={onYearlyPlan}
                   disabled={isPro}
@@ -485,30 +557,36 @@ export function MechanicSubscriptionScreen(_props: Props) {
             </View>
           )}
           <Text style={styles.priceNote}>
-            {priceUnavailable
-              ? `Price isn't available right now. ${STORE_NAME} shows it before you pay.`
-              : selectedFromStore
-                ? `Price from ${STORE_NAME}. Renews each ${selectedUnit} until you cancel.`
-                : `Estimated price. ${STORE_NAME} shows the final price before you pay.`}
+            {yearlyCheckoutUnavailable
+              ? 'Yearly checkout is not in the store yet. The price matches the website so you can compare plans. Choose Monthly to subscribe now.'
+              : priceUnavailable
+                ? `Price isn't available right now. ${STORE_NAME} shows it before you pay.`
+                : selectedFromStore
+                  ? `Price from ${STORE_NAME}. Renews each ${selectedUnit} until you cancel.`
+                  : `Estimated price. ${STORE_NAME} shows the final price before you pay.`}
           </Text>
         </View>
       ) : null}
 
       {/* One primary action */}
       <Pressable
-        style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed, busy != null && styles.btnDisabled]}
-        disabled={busy != null}
+        style={({ pressed }) => [
+          styles.primaryBtn,
+          pressed && !primary.disabled && styles.pressed,
+          (busy != null || primary.disabled) && styles.btnDisabled,
+        ]}
+        disabled={busy != null || primary.disabled}
         onPress={primary.onPress}
         accessibilityRole="button"
         accessibilityLabel={primary.label}
         accessibilityHint={primary.hint}
-        accessibilityState={{ disabled: busy != null, busy: busy === 'buy' }}
+        accessibilityState={{ disabled: busy != null || primary.disabled, busy: busy === 'buy' }}
       >
         {busy === 'buy' ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{primary.label}</Text>}
       </Pressable>
 
       <View style={styles.secondaryRow}>
-        {isPro && onMonthlyPlan && showYearly ? (
+        {isPro && onMonthlyPlan && showYearly && yearlyConfigured ? (
           <Pressable
             style={styles.linkBtn}
             onPress={switchToYearly}
@@ -584,7 +662,7 @@ export function MechanicSubscriptionScreen(_props: Props) {
               Use sandbox / license testers for TestFlight and Play internal testing. Status: {status ?? 'unknown'}.
             </Text>
           ) : null}
-          {simulateEnabled && canBuy ? (
+          {simulateEnabled && canBuy && !yearlyCheckoutUnavailable ? (
             <Pressable
               style={[styles.devBtn, busy != null && styles.btnDisabled]}
               disabled={busy != null}

@@ -93,6 +93,11 @@ function messageFromResponseBody(data: unknown, status: number): string | null {
   return null;
 }
 
+/** Sanctum rejected the bearer token (expired, revoked, or missing). Not used for 403 role/feature denials. */
+export function isUnauthenticatedError(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 401;
+}
+
 export function getApiErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message && !axios.isAxiosError(error)) {
     return error.message;
@@ -108,6 +113,9 @@ export function getApiErrorMessage(error: unknown): string {
     }
 
     const { status, data } = error.response;
+    if (status === 401) {
+      return 'Session expired, please sign in again';
+    }
     const parsed = messageFromResponseBody(data, status);
     if (parsed) {
       return parsed;
