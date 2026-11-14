@@ -60,8 +60,8 @@ function EmergencyToggle({
   value: boolean | null;
   onChange: (next: boolean) => void;
 }) {
-  // New listings start off (same as the server default); existing listings show the stored value.
-  const shown = value ?? false;
+  // New listings default ON (HELP matching needs this). Existing listings use the stored value.
+  const shown = value ?? (isNew ? true : false);
   const unknown = !isNew && value == null;
   const disabled = !featureOn || unknown;
   const helper = !featureOn
@@ -70,7 +70,7 @@ function EmergencyToggle({
       : `Emergency help isn't live in your area yet. Your current choice (${value === true ? 'on' : value === false ? 'off' : 'not set'}) stays saved.`
     : unknown
       ? "We couldn't load this setting. Saving won't change it — reopen this screen to try again."
-      : 'Get roadside breakdowns nearby that need fast help.';
+      : 'Required to receive roadside HELP nearby. Turn off only if you want service jobs only.';
 
   return (
     <View style={[styles.toggleRow, disabled && styles.toggleRowDisabled]}>
@@ -299,7 +299,7 @@ export function MechanicOnboardingScreen({ navigation }: Props) {
           ? emergencyAvailable
           : null
         : emergencyFeatureOn
-          ? (emergencyAvailable ?? false)
+          ? (emergencyAvailable ?? true)
           : null;
       const payload: MechanicProfilePayload = {
         business_name: businessName.trim() || undefined,

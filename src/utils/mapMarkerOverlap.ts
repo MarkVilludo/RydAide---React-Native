@@ -5,8 +5,8 @@ type LatLng = { latitude: number; longitude: number };
 /** Closer than this, pins stack on the map — apply a display-only offset. */
 export const MAP_PIN_OVERLAP_THRESHOLD_KM = 0.03;
 
-/** Display-only gap between stacked pins (~22 m — enough to read both icons). */
-export const MAP_PIN_VISUAL_SEPARATION_KM = 0.022;
+/** Display-only gap between stacked pins (~12 m — enough to read both icons). */
+export const MAP_PIN_VISUAL_SEPARATION_KM = 0.012;
 
 function bearingDegrees(from: LatLng, to: LatLng): number {
   const lat1 = (from.latitude * Math.PI) / 180;

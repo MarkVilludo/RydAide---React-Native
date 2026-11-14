@@ -29,6 +29,7 @@ import { acceptHelpRequest, fetchMechanicHelpQueues } from '../../api/mechanicHe
 import {
   fetchMyMechanicProfile,
   updateMechanicAvailability,
+  updateMechanicProfile,
   updateMechanicProfileLocation,
 } from '../../api/mechanicProfile';
 import { shortAreaLabel, type SavedWorkLocation } from '../../components/MechanicDashboardLocationCard';
@@ -467,35 +468,7 @@ export function MechanicHomeScreen({ navigation }: Props) {
               ? { label: 'Online', tone: 'live' }
               : { label: 'Offline', tone: 'off' };
 
-  const toggleOnline = async () => {
-    // Going offline is always allowed, even while the listing is in review.
-    if (!verified && !isOnline) {
-      Alert.alert(
-        'Not approved yet',
-        needsProfile
-          ? 'Complete your listing first, then we can review it.'
-          : verificationRejected
-            ? 'Your listing needs a few fixes before you can go online.'
-            : verificationSuspended
-              ? 'Your listing is suspended, so you can’t go online right now.'
-              : 'Your listing is still being reviewed. You can go online once it’s approved.',
-        [
-          { text: 'Close', style: 'cancel' },
-          needsProfile || verificationRejected
-            ? {
-                text: 'Open listing',
-                onPress: () => navigation.navigate('MechanicOnboarding'),
-              }
-            : { text: 'OK' },
-        ],
-      );
-      return;
-    }
-    if (isBusy) {
-      Alert.alert('Busy', 'Finish your active job first.');
-      return;
-    }
-    const next = isOnline ? 'offline' : 'available';
+  const applyOnlineStatus = async (next: 'available' | 'offline', enableEmergency = false) => {
     setAvailabilityBusy(true);
     try {
       if (next === 'available') {
@@ -531,6 +504,14 @@ export function MechanicHomeScreen({ navigation }: Props) {
             longitude: updatedLoc.longitude ?? target.longitude,
             address: updatedLoc.address ?? workLocation?.address ?? null,
           });
+          if (enableEmergency) {
+            await updateMechanicProfile({
+              latitude: updatedLoc.latitude ?? target.latitude,
+              longitude: updatedLoc.longitude ?? target.longitude,
+              emergency_available: true,
+            });
+            setEmergencyListing(true);
+          }
         } catch {
           Alert.alert('Could not update location', 'Fix your pin, then try again.');
           return;
@@ -544,6 +525,56 @@ export function MechanicHomeScreen({ navigation }: Props) {
     } finally {
       setAvailabilityBusy(false);
     }
+  };
+
+  const toggleOnline = async () => {
+    // Going offline is always allowed, even while the listing is in review.
+    if (!verified && !isOnline) {
+      Alert.alert(
+        'Not approved yet',
+        needsProfile
+          ? 'Complete your listing first, then we can review it.'
+          : verificationRejected
+            ? 'Your listing needs a few fixes before you can go online.'
+            : verificationSuspended
+              ? 'Your listing is suspended, so you can’t go online right now.'
+              : 'Your listing is still being reviewed. You can go online once it’s approved.',
+        [
+          { text: 'Close', style: 'cancel' },
+          needsProfile || verificationRejected
+            ? {
+                text: 'Open listing',
+                onPress: () => navigation.navigate('MechanicOnboarding'),
+              }
+            : { text: 'OK' },
+        ],
+      );
+      return;
+    }
+    if (isBusy) {
+      Alert.alert('Busy', 'Finish your active job first.');
+      return;
+    }
+    const next = isOnline ? 'offline' : 'available';
+    if (next === 'available' && emergencyOn && emergencyListing === false) {
+      Alert.alert(
+        'HELP requests are off',
+        'Owners requesting roadside HELP won’t see you until emergency HELP is on.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Go online without HELP',
+            onPress: () => void applyOnlineStatus('available'),
+          },
+          {
+            text: 'Enable HELP & go online',
+            onPress: () => void applyOnlineStatus('available', true),
+          },
+        ],
+      );
+      return;
+    }
+    await applyOnlineStatus(next);
   };
 
   const openRequests = (tab: RequestTab) => navigation.navigate('MechanicRequests', { tab });

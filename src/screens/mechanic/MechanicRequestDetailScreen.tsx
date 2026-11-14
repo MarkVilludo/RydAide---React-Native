@@ -1,6 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Linking,
   Pressable,
   ScrollView,
@@ -8,19 +9,21 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { getApiErrorMessage } from '../../api/client';
 import type { HelpRequest } from '../../api/helpRequests';
-import { fetchMechanicHelpRequest } from '../../api/mechanicHelp';
+import { fetchMechanicHelpRequest, submitServiceQuote } from '../../api/mechanicHelp';
 import { CenteredLoading } from '../../components/CenteredLoading';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { MechanicCustomerDistance } from '../../components/MechanicCustomerDistance';
+import { ServiceQuotePanel } from '../../components/ServiceQuotePanel';
+import { useLiveHelpRequestRefresh } from '../../hooks/useLiveHelpRequestRefresh';
 import { useMechanicDistanceOrigin } from '../../hooks/useMechanicDistanceOrigin';
-import { resolveMechanicToCustomerDistanceKm } from '../../utils/distanceKm';
+import { resolveMechanicToCustomerDistanceKm, resolveTrackingDistanceKm } from '../../utils/distanceKm';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { MechanicJobPaymentCard, PaymentPlanLine } from '../../components/JobPaymentCards';
-import { formatRequestDate, isActiveJobStatus, jobStatusLabelOf, jobStatusOf, vehicleTitle, problemNamesOf, vehicleWithDetails } from '../../utils/helpRequestUi';
+import { formatRequestDate, isActiveJobStatus, jobStatusLabelOf, jobStatusOf, problemNamesOf, vehicleWithDetails } from '../../utils/helpRequestUi';
 import { jobWorkDurationLabel } from '../../utils/jobWorkDuration';
 import { MechanicDeclineOfferModal } from '../../components/MechanicDeclineOfferModal';
 import { MechanicIncomingOfferFooter } from '../../components/MechanicIncomingOfferFooter';
@@ -37,6 +40,7 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
   const { helpRequestId } = route.params;
   const [request, setRequest] = useState<HelpRequest | null>(null);
   const [loading, setLoading] = useState(true);
+  const [quoteBusy, setQuoteBusy] = useState(false);
   const { origin, permissionDenied, servicePinManual } = useMechanicDistanceOrigin('service_pin');
 
   const {
@@ -75,26 +79,52 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
     [request, origin],
   );
 
-  const load = useCallback(() => {
-    setLoading(true);
-    fetchMechanicHelpRequest(helpRequestId, origin ?? undefined)
-      .then((r) => applyLoadedRequest(r))
-      .catch(() => applyLoadedRequest(null))
-      .finally(() => setLoading(false));
-  }, [helpRequestId, origin?.latitude, origin?.longitude, applyLoadedRequest]);
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!opts?.silent) setLoading(true);
+      try {
+        const r = await fetchMechanicHelpRequest(helpRequestId, origin ?? undefined);
+        applyLoadedRequest(r);
+        return r;
+      } catch {
+        if (!opts?.silent) applyLoadedRequest(null);
+        return null;
+      } finally {
+        if (!opts?.silent) setLoading(false);
+      }
+    },
+    [helpRequestId, origin?.latitude, origin?.longitude, applyLoadedRequest],
+  );
 
-  useFocusEffect(useCallback(() => load(), [load]));
+  useLiveHelpRequestRefresh({
+    refresh: () => load({ silent: true }),
+    request,
+  });
 
   useEffect(() => {
     if (!request) return;
     const js = jobStatusOf(request);
-    if (isActiveJobStatus(js) && request.status !== 'SEARCHING') {
+    // Keep completed / declined details here; only jump into the live job shell for active work.
+    if (isActiveJobStatus(js) && request.status !== 'SEARCHING' && js !== 'COMPLETED') {
       navigation.replace('ActiveJob', {
         helpRequestId: request.id,
         initialRequest: request,
       });
     }
   }, [request, navigation]);
+
+  const onSubmitQuote = async (amountPhp: number, description: string) => {
+    setQuoteBusy(true);
+    try {
+      const updated = await submitServiceQuote(helpRequestId, amountPhp, description || undefined);
+      applyLoadedRequest(updated);
+    } catch (e) {
+      Alert.alert('Could not send quote', getApiErrorMessage(e));
+      void load({ silent: true });
+    } finally {
+      setQuoteBusy(false);
+    }
+  };
 
   const canAccept =
     request?.status === 'SEARCHING' && request.mechanic_dispatch?.response !== 'declined';
@@ -134,6 +164,14 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
 
   const job = request.job;
   const workDurationLabel = job ? jobWorkDurationLabel(job) : null;
+  const jobStatus = jobStatusOf(request);
+  const trackingLoc = request.tracking?.mechanic_location;
+  const liveDistance =
+    resolveTrackingDistanceKm(request.tracking) ?? distanceKm;
+  const showLiveMap =
+    !isIncomingOffer &&
+    !!trackingLoc &&
+    ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'IN_PROGRESS'].includes(jobStatus);
 
   return (
     <View style={styles.root}>
@@ -205,22 +243,43 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
 
           <Section title="Location">
             <MechanicCustomerDistance
-              distanceKm={distanceKm}
+              distanceKm={liveDistance}
               compact
               fromServicePin={servicePinManual || origin != null}
-              locationUnavailable={permissionDenied && distanceKm == null}
+              locationUnavailable={permissionDenied && liveDistance == null}
             />
             <Text>{request.address_text ?? `${request.latitude}, ${request.longitude}`}</Text>
             <HelpRequestMap
               request={{ latitude: request.latitude, longitude: request.longitude, title: 'Customer' }}
-              height={180}
-              zoomPreset="detail"
-              showLiveDistanceBadge={false}
+              mechanic={
+                showLiveMap && trackingLoc
+                  ? {
+                      latitude: trackingLoc.latitude,
+                      longitude: trackingLoc.longitude,
+                      title: 'You',
+                    }
+                  : null
+              }
+              height={showLiveMap ? 240 : 180}
+              zoomPreset={showLiveMap ? 'live' : 'detail'}
+              showRouteLine={showLiveMap}
+              liveDistanceKm={showLiveMap ? liveDistance : null}
+              showLiveDistanceBadge={showLiveMap}
+              showMyLocation={false}
             />
             <Pressable onPress={openMaps}>
               <Text style={styles.link}>Open in maps</Text>
             </Pressable>
           </Section>
+
+          {['ACCEPTED', 'ON_THE_WAY', 'ARRIVED'].includes(jobStatus) ? (
+            <ServiceQuotePanel
+              role="mechanic"
+              pricing={request.job?.pricing}
+              busy={quoteBusy}
+              onSubmit={(amount, description) => void onSubmitQuote(amount, description)}
+            />
+          ) : null}
         </>
       )}
 
@@ -232,6 +291,7 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
 
       {job && (
         <Section title="Job timeline">
+          <Text style={styles.statusLive}>Status: {jobStatusLabelOf(request)}</Text>
           {workDurationLabel ? <Text style={styles.workDuration}>{workDurationLabel}</Text> : null}
           <TimelineRow label="Accepted" value={job.accepted_at} />
           <TimelineRow label="On the way" value={job.on_the_way_at} />
@@ -318,6 +378,7 @@ const styles = StyleSheet.create({
   link: { color: '#0284c7', fontWeight: '600', marginTop: 8 },
   timeline: { marginTop: 4, color: '#334155' },
   workDuration: { fontSize: 16, fontWeight: '800', color: '#166534', marginBottom: 8 },
+  statusLive: { fontSize: 15, fontWeight: '700', color: '#0284c7', marginBottom: 6 },
   incomingTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
   distance: { fontSize: 16, fontWeight: '700', color: '#0284c7', marginTop: 4 },
 });

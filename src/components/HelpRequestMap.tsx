@@ -150,6 +150,8 @@ export function HelpRequestMap({
   const ownerBadge = liveDistanceBadgeVariant === 'owner';
   const badgeTop = ownerBadge ? statusBarTopInset() + 48 : 10;
 
+  const lastFitKey = useRef<string | null>(null);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) {
@@ -159,17 +161,36 @@ export function HelpRequestMap({
     const basePadding = mapFitEdgePadding(zoomPreset);
     const edgePadding =
       ownerBadge && fill
-        ? { ...basePadding, top: Math.max(basePadding.top, badgeTop + 36) }
+        ? {
+            ...basePadding,
+            top: Math.max(basePadding.top, badgeTop + 36),
+            // Live overlay sheet — keep pins above the dock without huge empty gutters.
+            bottom: zoomPreset === 'live' ? Math.max(basePadding.bottom, 200) : basePadding.bottom,
+          }
         : basePadding;
 
     if (mechanicCoord && mechanicMarkerCoord) {
+      // Avoid re-animating the camera on every GPS tick — only when the pair moves enough.
+      const fitKey = [
+        requestCoord.latitude.toFixed(4),
+        requestCoord.longitude.toFixed(4),
+        mechanicMarkerCoord.latitude.toFixed(4),
+        mechanicMarkerCoord.longitude.toFixed(4),
+        zoomPreset,
+      ].join('|');
+      const shouldAnimate = lastFitKey.current == null || zoomPreset !== 'live';
+      if (fitKey === lastFitKey.current) {
+        return;
+      }
+      lastFitKey.current = fitKey;
       map.fitToCoordinates([requestCoord, mechanicMarkerCoord], {
         edgePadding,
-        animated: true,
+        animated: shouldAnimate,
       });
       return;
     }
 
+    lastFitKey.current = null;
     map.animateToRegion(fallbackRegion, 280);
   }, [
     requestCoord,

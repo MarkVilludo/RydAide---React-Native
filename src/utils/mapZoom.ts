@@ -1,6 +1,6 @@
 import type { Region } from 'react-native-maps';
 
-export type MapZoomPreset = 'default' | 'detail';
+export type MapZoomPreset = 'default' | 'detail' | 'live';
 
 const PRESETS: Record<
   MapZoomPreset,
@@ -8,6 +8,7 @@ const PRESETS: Record<
     singleDelta: number;
     minDualDelta: number;
     coordPad: number;
+    dualZoomOut: number;
     fitPadding: { top: number; right: number; bottom: number; left: number };
   }
 > = {
@@ -15,6 +16,7 @@ const PRESETS: Record<
     singleDelta: 0.045,
     minDualDelta: 0.028,
     coordPad: 0.02,
+    dualZoomOut: 1.12,
     fitPadding: { top: 64, right: 48, bottom: 64, left: 48 },
   },
   detail: {
@@ -22,7 +24,16 @@ const PRESETS: Record<
     singleDelta: 0.028,
     minDualDelta: 0.022,
     coordPad: 0.014,
+    dualZoomOut: 1.12,
     fitPadding: { top: 48, right: 36, bottom: 48, left: 36 },
+  },
+  /** Active job tracking — keep both pins close with less empty map between them. */
+  live: {
+    singleDelta: 0.018,
+    minDualDelta: 0.008,
+    coordPad: 0.004,
+    dualZoomOut: 1.04,
+    fitPadding: { top: 72, right: 24, bottom: 220, left: 24 },
   },
 };
 
@@ -72,13 +83,12 @@ export function buildMapRegion(
 
   const spanLat = maxLat - minLat + cfg.coordPad;
   const spanLng = maxLng - minLng + cfg.coordPad;
-  const dualZoomOut = 1.12;
 
   return {
     latitude: (minLat + maxLat) / 2,
     longitude: (minLng + maxLng) / 2,
-    latitudeDelta: Math.max(cfg.minDualDelta, spanLat * dualZoomOut),
-    longitudeDelta: Math.max(cfg.minDualDelta, spanLng * dualZoomOut),
+    latitudeDelta: Math.max(cfg.minDualDelta, spanLat * cfg.dualZoomOut),
+    longitudeDelta: Math.max(cfg.minDualDelta, spanLng * cfg.dualZoomOut),
   };
 }
 

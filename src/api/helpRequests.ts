@@ -79,6 +79,10 @@ export interface ServiceJobPricing {
     };
   } | null;
   require_quote_before_work?: boolean;
+  quote_submission_window_seconds?: number;
+  quote_submission_deadline_at?: string | null;
+  can_submit_quote?: boolean;
+  quote_rejected_at?: string | null;
 }
 
 export interface ServiceJob {

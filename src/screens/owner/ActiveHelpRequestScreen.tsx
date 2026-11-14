@@ -16,6 +16,7 @@ import {
   extendHelpRequest,
   fetchHelpCancellationSummary,
   fetchHelpRequest,
+  respondToHelpRequestQuote,
   type HelpCancellationSummary,
   submitHelpRequestReview,
   type HelpRequest,
@@ -25,6 +26,7 @@ import { AndroidHideNavigationBarWhenFocused } from '../../components/AndroidHid
 import { CancelHelpRequestButton } from '../../components/CancelHelpRequestButton';
 import { HelpRequestCompletionPanel } from '../../components/HelpRequestCompletionPanel';
 import { OwnerPayMechanicCard, PaymentPlanLine } from '../../components/JobPaymentCards';
+import { ServiceQuotePanel } from '../../components/ServiceQuotePanel';
 import {
   KeyboardAwareScrollView,
   type KeyboardAwareScrollViewRef,
@@ -81,6 +83,7 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
   const [connectionLost, setConnectionLost] = useState(false);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [photosOpen, setPhotosOpen] = useState(false);
+  const [quoteBusy, setQuoteBusy] = useState(false);
   const cancelLock = useRef(false);
   const [cancelSummary, setCancelSummary] = useState<HelpCancellationSummary | null>(null);
   const extendPromptShown = useRef(false);
@@ -92,8 +95,13 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
     });
   }, []);
 
+  const jobPollStatus = request?.job_status ?? request?.job?.status ?? request?.status;
   const pollMs =
-    (request?.job_status ?? request?.job?.status) === 'IN_PROGRESS' ? 1000 : 2000;
+    jobPollStatus === 'IN_PROGRESS'
+      ? 1000
+      : ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED'].includes(String(jobPollStatus))
+        ? 1500
+        : 2000;
 
   // Always drop previous request data when opening a different HELP request (cancel → new).
   useEffect(() => {
@@ -256,6 +264,22 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
     );
   };
 
+  const respondToQuote = async (response: 'accept' | 'reject') => {
+    setQuoteBusy(true);
+    try {
+      const updated = await respondToHelpRequestQuote(helpRequestId, response);
+      setRequest(updated);
+      setConnectionLost(false);
+    } catch (e) {
+      Alert.alert(
+        response === 'accept' ? 'Could not accept quote' : 'Could not decline quote',
+        getApiErrorMessage(e),
+      );
+    } finally {
+      setQuoteBusy(false);
+    }
+  };
+
   if (accepted && request.mechanic) {
     return (
       <View style={styles.root}>
@@ -284,9 +308,11 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
             liveDistanceKm={liveDistanceKm}
             showLiveDistanceBadge={!!mechanicLoc && !workStarted}
             liveDistanceBadgeVariant="owner"
+            zoomPreset="live"
           />
         </View>
 
+        <View style={styles.sheetDock} pointerEvents="box-none">
         <GrabStyleBottomSheet immersiveBottom={workStarted}>
           <HelpJourneyTimeline steps={activeJobJourneySteps} compact />
 
@@ -324,6 +350,16 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
             {request.remarks ? ` · ${request.remarks}` : ''}
           </Text>
 
+          {!workStarted && jobStatus !== 'COMPLETED' ? (
+            <ServiceQuotePanel
+              role="owner"
+              pricing={request.job?.pricing}
+              busy={quoteBusy}
+              onAccept={() => void respondToQuote('accept')}
+              onDecline={() => void respondToQuote('reject')}
+            />
+          ) : null}
+
           {workStarted ? (
             <JobWorkDurationText
               job={request.job}
@@ -350,6 +386,7 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
             </Pressable>
           ) : null}
         </GrabStyleBottomSheet>
+        </View>
 
         <Modal visible={photosOpen} transparent animationType="fade">
           <View style={styles.modalBackdrop}>
@@ -531,7 +568,8 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f8fafc' },
   loadingError: { backgroundColor: '#fef2f2' },
-  mapArea: { flex: 1, backgroundColor: '#cbd5e1' },
+  mapArea: { ...StyleSheet.absoluteFillObject, backgroundColor: '#cbd5e1' },
+  sheetDock: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   sheetHeadline: { fontSize: 18, fontWeight: '800', color: '#0284c7', marginTop: 8 },
   plansChangeHint: {
     marginTop: 8,

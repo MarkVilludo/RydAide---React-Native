@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { getApiErrorMessage } from '../../api/client';
 import type { HelpRequest } from '../../api/helpRequests';
-import { fetchMechanicHelpRequest, updateJobStatus } from '../../api/mechanicHelp';
+import { fetchMechanicHelpRequest, submitServiceQuote, updateJobStatus } from '../../api/mechanicHelp';
 import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSummary';
 import { CenteredLoading } from '../../components/CenteredLoading';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
@@ -24,6 +24,7 @@ import { PendingJobStatusBanner } from '../../components/PendingJobStatusBanner'
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { PaymentPlanLine } from '../../components/JobPaymentCards';
+import { ServiceQuotePanel } from '../../components/ServiceQuotePanel';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import { useDeviceLocation } from '../../hooks/useDeviceLocation';
 import { useLiveWorkElapsedSeconds } from '../../hooks/useLiveWorkElapsedSeconds';
@@ -92,6 +93,7 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
   const [statusConfirmTarget, setStatusConfirmTarget] = useState<string | null>(null);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [pendingUndoSeconds, setPendingUndoSeconds] = useState(0);
+  const [quoteBusy, setQuoteBusy] = useState(false);
   const pendingStatusRef = useRef<string | null>(null);
 
   const { config } = useAppConfig();
@@ -112,7 +114,12 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
   }, [helpRequestId, origin?.latitude, origin?.longitude]);
 
   const jobStatus = request ? jobStatusOf(request) : '';
-  const refreshMs = jobStatus === 'IN_PROGRESS' ? 1000 : 5000;
+  const refreshMs =
+    jobStatus === 'IN_PROGRESS'
+      ? 1000
+      : ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED'].includes(jobStatus)
+        ? 2000
+        : 5000;
 
   useFocusEffect(
     useCallback(() => {
@@ -221,12 +228,40 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
     }
   }, [pendingStatus, pendingUndoSeconds, acting, clearPendingStatus]);
 
+  const pricing = request?.job?.pricing;
+  const quoteStatus = (pricing?.quote_status ?? 'none').toLowerCase();
+  const requireQuote = pricing?.require_quote_before_work === true;
+  const quoteBlocksStart = requireQuote && quoteStatus !== 'accepted';
+
   const requestStatusChange = (status: string) => {
+    if (status === 'IN_PROGRESS' && quoteBlocksStart) {
+      Alert.alert(
+        'Quote needed',
+        quoteStatus === 'pending'
+          ? 'Wait for the owner to accept your quote before starting work.'
+          : 'Send a service quote first. The owner must accept it before work can begin.',
+      );
+      return;
+    }
     if (emergencyOn) {
       setStatusConfirmTarget(status);
       return;
     }
     void setStatus(status);
+  };
+
+  const onSubmitQuote = async (amountPhp: number, description: string) => {
+    setQuoteBusy(true);
+    try {
+      const updated = await submitServiceQuote(helpRequestId, amountPhp, description || undefined);
+      setRequest(updated);
+      setConnectionLost(false);
+    } catch (e) {
+      Alert.alert('Could not send quote', getApiErrorMessage(e));
+      void load();
+    } finally {
+      setQuoteBusy(false);
+    }
   };
 
   const onStatusConfirmSheetConfirm = () => {
@@ -310,9 +345,11 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
           showRouteLine={!!mechanicMapPoint}
           liveDistanceKm={displayDistanceKm}
           showLiveDistanceBadge={shareLiveWithCustomer}
+          zoomPreset="live"
         />
       </View>
 
+      <View style={styles.sheetDock} pointerEvents="box-none">
       <GrabStyleBottomSheet>
         <View style={styles.titleRow}>
           <Text style={styles.headline} numberOfLines={1}>
@@ -345,6 +382,15 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
           {request.remarks ? ` · ${request.remarks}` : ''}
         </Text>
         <PaymentPlanLine request={request} />
+
+        {['ACCEPTED', 'ON_THE_WAY', 'ARRIVED'].includes(jobStatus) ? (
+          <ServiceQuotePanel
+            role="mechanic"
+            pricing={pricing}
+            busy={quoteBusy}
+            onSubmit={(amount, description) => void onSubmitQuote(amount, description)}
+          />
+        ) : null}
 
         {emergencyOn && jobStatus !== 'COMPLETED' ? (
           <JobLifecycleStepper currentStatus={jobStatus} />
@@ -401,13 +447,22 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
             </View>
           )}
           {jobStatus === 'ARRIVED' && (
-            <Pressable
-              style={styles.primaryBtn}
-              disabled={statusChangeLocked}
-              onPress={() => requestStatusChange('IN_PROGRESS')}
-            >
-              <Text style={styles.primaryBtnText}>Start job</Text>
-            </Pressable>
+            <>
+              {quoteBlocksStart ? (
+                <Text style={styles.quoteGate}>
+                  {quoteStatus === 'pending'
+                    ? 'Waiting for the owner to accept your quote…'
+                    : 'Send a quote above, then start the job after they accept.'}
+                </Text>
+              ) : null}
+              <Pressable
+                style={[styles.primaryBtn, (statusChangeLocked || quoteBlocksStart) && styles.primaryBtnOff]}
+                disabled={statusChangeLocked || quoteBlocksStart}
+                onPress={() => requestStatusChange('IN_PROGRESS')}
+              >
+                <Text style={styles.primaryBtnText}>Start job</Text>
+              </Pressable>
+            </>
           )}
           {jobStatus === 'IN_PROGRESS' && (
             <Pressable style={styles.primaryBtn} disabled={statusChangeLocked} onPress={openCompleteForm}>
@@ -416,6 +471,7 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
           )}
         </View>
       </GrabStyleBottomSheet>
+      </View>
 
       <Modal visible={photosOpen} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
@@ -530,7 +586,8 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f8fafc' },
-  mapArea: { flex: 1, backgroundColor: '#cbd5e1', position: 'relative' },
+  mapArea: { ...StyleSheet.absoluteFillObject, backgroundColor: '#cbd5e1' },
+  sheetDock: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#f8fafc' },
   muted: { color: '#64748b', marginBottom: 12, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
@@ -565,7 +622,9 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', gap: 8 },
   actionHalf: { flex: 1 },
   primaryBtn: { backgroundColor: '#16a34a', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 10, alignItems: 'center' },
+  primaryBtnOff: { opacity: 0.45 },
   primaryBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  quoteGate: { fontSize: 13, color: '#92400e', fontWeight: '600', lineHeight: 18, marginBottom: 4 },
   navBtn: { backgroundColor: '#0284c7', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 10, alignItems: 'center' },
   navBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   link: { color: '#0284c7', fontWeight: '600', marginTop: 12, textAlign: 'center' },

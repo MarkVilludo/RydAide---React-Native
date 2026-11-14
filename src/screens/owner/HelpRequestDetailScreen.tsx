@@ -1,5 +1,4 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,6 +18,7 @@ import {
   cancelHelpRequest,
   fetchHelpCancellationSummary,
   fetchHelpRequest,
+  respondToHelpRequestQuote,
   submitHelpRequestReview,
   type HelpRequest,
 } from '../../api/helpRequests';
@@ -28,7 +28,10 @@ import { HelpRequestCompletionPanel } from '../../components/HelpRequestCompleti
 import { OwnerPayMechanicCard, PaymentPlanLine } from '../../components/JobPaymentCards';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
+import { ServiceQuotePanel } from '../../components/ServiceQuotePanel';
+import { useLiveHelpRequestRefresh } from '../../hooks/useLiveHelpRequestRefresh';
 import type { OwnerStackParamList } from '../../navigation/types';
+import { haversineDistanceKm } from '../../utils/distanceKm';
 import { jobWorkDurationValueOnly } from '../../utils/jobWorkDuration';
 import {
   canOwnerCancelHelpRequest,
@@ -36,7 +39,6 @@ import {
   isOwnerCompletedHelpRequest,
   jobStatusLabelOf,
   jobStatusOf,
-  vehicleTitle,
   problemNamesOf,
   vehicleWithDetails,
   cancelConfirmMessage,
@@ -48,6 +50,7 @@ export function HelpRequestDetailScreen({ route }: Props) {
   const { helpRequestId } = route.params;
   const [request, setRequest] = useState<HelpRequest | null>(null);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [quoteBusy, setQuoteBusy] = useState(false);
   const cancelLock = useRef(false);
   const reviewScrollRef = useRef<KeyboardAwareScrollViewRef>(null);
 
@@ -57,15 +60,18 @@ export function HelpRequestDetailScreen({ route }: Props) {
     });
   }, []);
 
-  const load = useCallback(() => {
-    fetchHelpRequest(helpRequestId).then(setRequest).catch(() => setRequest(null));
+  const load = useCallback(async () => {
+    try {
+      const data = await fetchHelpRequest(helpRequestId);
+      setRequest(data);
+      return data;
+    } catch {
+      setRequest((prev) => prev);
+      return null;
+    }
   }, [helpRequestId]);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
+  useLiveHelpRequestRefresh({ refresh: load, request });
 
   const confirmCancel = async () => {
     if (!request) return;
@@ -95,6 +101,21 @@ export function HelpRequestDetailScreen({ route }: Props) {
     );
   };
 
+  const respondToQuote = async (response: 'accept' | 'reject') => {
+    setQuoteBusy(true);
+    try {
+      const updated = await respondToHelpRequestQuote(helpRequestId, response);
+      setRequest(updated);
+    } catch (e) {
+      Alert.alert(
+        response === 'accept' ? 'Could not accept quote' : 'Could not decline quote',
+        getApiErrorMessage(e),
+      );
+    } finally {
+      setQuoteBusy(false);
+    }
+  };
+
   if (!request) {
     return <ActivityIndicator style={{ marginTop: 40 }} />;
   }
@@ -107,6 +128,20 @@ export function HelpRequestDetailScreen({ route }: Props) {
   const terminal = ['COMPLETED', 'CANCELLED', 'EXPIRED', 'NO_MECHANIC_FOUND'].includes(request.status);
   const showLockedHint = !canCancel && !terminal && !!request.mechanic;
   const canReview = completed && !!request.mechanic;
+  const jobStatus = jobStatusOf(request);
+  const mechanicLoc = request.tracking?.mechanic_location;
+  const liveTracking =
+    !!mechanicLoc &&
+    ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'IN_PROGRESS'].includes(jobStatus);
+  const liveDistanceKm =
+    liveTracking && mechanicLoc
+      ? haversineDistanceKm(
+          mechanicLoc.latitude,
+          mechanicLoc.longitude,
+          request.latitude,
+          request.longitude,
+        )
+      : null;
 
   return (
     <View style={styles.root}>
@@ -116,11 +151,27 @@ export function HelpRequestDetailScreen({ route }: Props) {
           longitude: request.longitude,
           title: 'Help location',
         }}
+        mechanic={
+          liveTracking && mechanicLoc
+            ? {
+                latitude: mechanicLoc.latitude,
+                longitude: mechanicLoc.longitude,
+                title:
+                  request.mechanic?.display_name ||
+                  request.mechanic?.mechanic_name ||
+                  request.mechanic?.business_name ||
+                  'Mechanic',
+              }
+            : null
+        }
         requestPinLabel="You"
-        height={200}
-        zoomPreset="detail"
+        mechanicPinLabel="Mechanic"
+        height={liveTracking ? 260 : 200}
+        zoomPreset={liveTracking ? 'live' : 'detail'}
         showMyLocation={false}
-        showLiveDistanceBadge={false}
+        showRouteLine={liveTracking}
+        liveDistanceKm={liveDistanceKm}
+        showLiveDistanceBadge={liveTracking}
       />
 
       <KeyboardAwareScrollView
@@ -188,6 +239,16 @@ export function HelpRequestDetailScreen({ route }: Props) {
                 </Pressable>
               ) : null}
             </Section>
+          ) : null}
+
+          {!completed && jobStatus !== 'COMPLETED' && request.mechanic ? (
+            <ServiceQuotePanel
+              role="owner"
+              pricing={request.job?.pricing}
+              busy={quoteBusy}
+              onAccept={() => void respondToQuote('accept')}
+              onDecline={() => void respondToQuote('reject')}
+            />
           ) : null}
 
           <Section title="Timeline">

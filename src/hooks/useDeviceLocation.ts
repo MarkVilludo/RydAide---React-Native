@@ -68,9 +68,9 @@ export function useDeviceLocation(enabled: boolean, options?: Options) {
         try {
           subscription = await Location.watchPositionAsync(
             {
-              accuracy: Location.Accuracy.Balanced,
-              distanceInterval: live ? 8 : 25,
-              timeInterval: live ? 3000 : 10000,
+              accuracy: live ? Location.Accuracy.High : Location.Accuracy.Balanced,
+              distanceInterval: live ? 4 : 25,
+              timeInterval: live ? 2000 : 10000,
             },
             (pos) => {
               if (!cancelled) {
