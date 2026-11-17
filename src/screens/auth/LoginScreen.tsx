@@ -14,6 +14,7 @@ import { useAuth } from '../../context/AuthContext';
 import { colors, radii, spacing, touch } from '../../theme/tokens';
 import { confirmBeforeDeleteAccountFlow } from '../../utils/deleteAccountConfirm';
 import { loadLastLoginEmail, saveLastLoginEmail } from '../../utils/lastLoginEmail';
+import { googleSignInAvailable, requestGoogleIdToken } from '../../services/googleSignIn';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
@@ -23,8 +24,13 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
  * Email/Mobile switch. Auth logic is unchanged: signIn(email, password) from AuthContext.
  */
 export function LoginScreen({ navigation }: Props) {
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle } = useAuth();
   const { config } = useAppConfig();
+  const googleAuth = config?.auth?.google_sign_in;
+  const showGoogleSignIn = googleSignInAvailable(googleAuth?.enabled, {
+    webClientId: googleAuth?.web_client_id,
+    iosClientId: googleAuth?.ios_client_id,
+  });
   const privacyUrl = config?.legal?.privacy_url ?? `${API_ORIGIN}/privacy`;
   const deletionUrl = config?.legal?.account_deletion_url ?? `${API_ORIGIN}/account-deletion`;
   const version = Constants.expoConfig?.version;
@@ -37,6 +43,9 @@ export function LoginScreen({ navigation }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [pendingGoogleToken, setPendingGoogleToken] = useState<string | null>(null);
+  const [pendingGoogleRole, setPendingGoogleRole] = useState<'owner' | 'mechanic'>('owner');
 
   // Prefill the last email used on this device.
   useEffect(() => {
@@ -90,6 +99,56 @@ export function LoginScreen({ navigation }: Props) {
     if (formError) setFormError(null);
   };
 
+  const completeGoogleSignIn = async (idToken: string, role?: 'owner' | 'mechanic') => {
+    try {
+      await signInWithGoogle(idToken, role);
+      setPendingGoogleToken(null);
+    } catch (error) {
+      const fields = authFieldErrors(error);
+      if (fields.role && !role) {
+        setPendingGoogleToken(idToken);
+        setFormError(fields.role);
+        return;
+      }
+      setFormError(getApiErrorMessage(error));
+      throw error;
+    }
+  };
+
+  const onGooglePress = async () => {
+    if (googleBusy || submitting) return;
+    setFormError(null);
+    setGoogleBusy(true);
+    try {
+      const result = await requestGoogleIdToken({
+        webClientId: googleAuth?.web_client_id,
+        iosClientId: googleAuth?.ios_client_id,
+      });
+      if (!result.ok) {
+        if (!result.cancelled && result.message) setFormError(result.message);
+        return;
+      }
+      await completeGoogleSignIn(result.idToken);
+    } catch {
+      // formError set in completeGoogleSignIn
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
+
+  const onGoogleRoleContinue = async () => {
+    if (!pendingGoogleToken || googleBusy) return;
+    setGoogleBusy(true);
+    setFormError(null);
+    try {
+      await completeGoogleSignIn(pendingGoogleToken, pendingGoogleRole);
+    } catch {
+      /* banner */
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
+
   return (
     <AuthLayout
       ref={scrollRef}
@@ -132,6 +191,55 @@ export function LoginScreen({ navigation }: Props) {
       }
     >
       <AuthErrorBanner message={formError} />
+
+      {showGoogleSignIn ? (
+        <>
+          <Button
+            title="Continue with Google"
+            variant="secondary"
+            size="large"
+            loading={googleBusy}
+            disabled={submitting}
+            onPress={() => void onGooglePress()}
+            style={authStyles.primary}
+          />
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+        </>
+      ) : null}
+
+      {pendingGoogleToken ? (
+        <View style={styles.googleRoleBlock}>
+          <Text style={styles.googleRoleTitle}>How will you use RydAid?</Text>
+          <View style={styles.chips}>
+            <Pressable
+              style={({ pressed }) => [styles.chip, pendingGoogleRole === 'owner' && styles.chipActive, pressed && styles.chipPressed]}
+              onPress={() => setPendingGoogleRole('owner')}
+              accessibilityRole="button"
+            >
+              <Text style={styles.chipText}>🚗 I need roadside help</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.chip, pendingGoogleRole === 'mechanic' && styles.chipActive, pressed && styles.chipPressed]}
+              onPress={() => setPendingGoogleRole('mechanic')}
+              accessibilityRole="button"
+            >
+              <Text style={styles.chipText}>🔧 I’m a mechanic</Text>
+            </Pressable>
+          </View>
+          <Button
+            title="Continue"
+            size="large"
+            loading={googleBusy}
+            onPress={() => void onGoogleRoleContinue()}
+            style={authStyles.primary}
+          />
+        </View>
+      ) : null}
+
       <View style={styles.fieldsTop}>
         <TextField
           size="large"
@@ -225,6 +333,12 @@ export function LoginScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginVertical: spacing.md },
+  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  dividerText: { fontSize: 13, fontWeight: '600', color: colors.muted },
+  googleRoleBlock: { marginBottom: spacing.md, gap: spacing.sm },
+  googleRoleTitle: { fontSize: 15, fontWeight: '700', color: colors.text, textAlign: 'center' },
+  chipActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   fieldsTop: { marginTop: 0 },
   forgot: { fontSize: 14, fontWeight: '700', color: colors.primary },
   inlineLink: { paddingHorizontal: spacing.xs + 2 },

@@ -3,7 +3,7 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { fetchPaymentMethods, type PaymentWallet } from '../api/paymentMethods';
 import { colors } from '../theme/colors';
-import { paymentIcon } from '../utils/paymentMethods';
+import { PaymentWalletChipTitle } from './PaymentWalletLogo';
 
 /** 'cash' or a saved wallet id. */
 export type HelpPaymentChoice = 'cash' | number;
@@ -77,9 +77,7 @@ export function HelpPaymentPicker({
                 accessibilityRole="radio"
                 accessibilityState={{ selected: on }}
               >
-                <Text style={[styles.chipTitle, on && styles.chipTitleOn]}>
-                  {paymentIcon(o.type)} {o.title}
-                </Text>
+                <PaymentWalletChipTitle type={o.type} label={o.title} emphasized={on} />
                 <Text style={styles.chipSub}>{o.sub}</Text>
               </Pressable>
             );

@@ -361,14 +361,6 @@ export async function extendHelpRequest(id: number): Promise<HelpRequest> {
   return data.data.help_request;
 }
 
-export async function respondToHelpRequestQuote(
-  id: number,
-  response: 'accept' | 'reject',
-): Promise<HelpRequest> {
-  const { data } = await api.post(`/help-requests/${id}/quote/respond`, { response });
-  return data.data.help_request;
-}
-
 export async function submitHelpRequestReview(
   id: number,
   rating: number,

@@ -55,6 +55,11 @@ export interface AppConfig {
   };
   auth?: {
     require_email_verification?: boolean;
+    google_sign_in?: {
+      enabled?: boolean;
+      web_client_id?: string | null;
+      ios_client_id?: string | null;
+    };
   };
   /** Contact Support options (newer servers). Null = not configured, hide it. */
   support?: {

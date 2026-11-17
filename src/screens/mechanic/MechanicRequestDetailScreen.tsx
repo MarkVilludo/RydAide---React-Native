@@ -1,29 +1,34 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   Linking,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
-import { getApiErrorMessage } from '../../api/client';
 import type { HelpRequest } from '../../api/helpRequests';
-import { fetchMechanicHelpRequest, submitServiceQuote } from '../../api/mechanicHelp';
+import { fetchMechanicHelpRequest } from '../../api/mechanicHelp';
 import { CenteredLoading } from '../../components/CenteredLoading';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { MechanicCustomerDistance } from '../../components/MechanicCustomerDistance';
-import { ServiceQuotePanel } from '../../components/ServiceQuotePanel';
 import { useLiveHelpRequestRefresh } from '../../hooks/useLiveHelpRequestRefresh';
 import { useMechanicDistanceOrigin } from '../../hooks/useMechanicDistanceOrigin';
 import { resolveMechanicToCustomerDistanceKm, resolveTrackingDistanceKm } from '../../utils/distanceKm';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { MechanicJobPaymentCard, PaymentPlanLine } from '../../components/JobPaymentCards';
-import { formatRequestDate, isActiveJobStatus, jobStatusLabelOf, jobStatusOf, problemNamesOf, vehicleWithDetails } from '../../utils/helpRequestUi';
+import {
+  formatRequestDate,
+  isActiveJobStatus,
+  jobStatusLabelOf,
+  jobStatusOf,
+  problemNamesOf,
+  vehicleWithDetails,
+} from '../../utils/helpRequestUi';
 import { jobWorkDurationLabel } from '../../utils/jobWorkDuration';
 import { MechanicDeclineOfferModal } from '../../components/MechanicDeclineOfferModal';
 import { MechanicIncomingOfferFooter } from '../../components/MechanicIncomingOfferFooter';
@@ -31,16 +36,17 @@ import { useMechanicAcceptAllowance } from '../../hooks/useMechanicAcceptAllowan
 import { useAppConfig } from '../../hooks/useAppConfig';
 import { MechanicOfferUnavailableState } from '../../components/MechanicOfferUnavailableState';
 import { useMechanicIncomingOfferActions } from '../../hooks/useMechanicIncomingOfferActions';
+import { liveSheetScrollMax } from '../../utils/mapZoom';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'MechanicRequestDetail'>;
 
-const INCOMING_FOOTER_SPACE = 132;
-
 export function MechanicRequestDetailScreen({ route, navigation }: Props) {
+  const { height: windowHeight } = useWindowDimensions();
+  const sheetScrollMax = liveSheetScrollMax(windowHeight);
+  const sheetScrollMaxAccept = Math.round(sheetScrollMax * 0.85);
   const { helpRequestId } = route.params;
   const [request, setRequest] = useState<HelpRequest | null>(null);
   const [loading, setLoading] = useState(true);
-  const [quoteBusy, setQuoteBusy] = useState(false);
   const { origin, permissionDenied, servicePinManual } = useMechanicDistanceOrigin('service_pin');
 
   const {
@@ -104,27 +110,13 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
   useEffect(() => {
     if (!request) return;
     const js = jobStatusOf(request);
-    // Keep completed / declined details here; only jump into the live job shell for active work.
-    if (isActiveJobStatus(js) && request.status !== 'SEARCHING' && js !== 'COMPLETED') {
+    if (isActiveJobStatus(js) && request.status !== 'SEARCHING') {
       navigation.replace('ActiveJob', {
         helpRequestId: request.id,
         initialRequest: request,
       });
     }
   }, [request, navigation]);
-
-  const onSubmitQuote = async (amountPhp: number, description: string) => {
-    setQuoteBusy(true);
-    try {
-      const updated = await submitServiceQuote(helpRequestId, amountPhp, description || undefined);
-      applyLoadedRequest(updated);
-    } catch (e) {
-      Alert.alert('Could not send quote', getApiErrorMessage(e));
-      void load({ silent: true });
-    } finally {
-      setQuoteBusy(false);
-    }
-  };
 
   const canAccept =
     request?.status === 'SEARCHING' && request.mechanic_dispatch?.response !== 'declined';
@@ -166,8 +158,7 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
   const workDurationLabel = job ? jobWorkDurationLabel(job) : null;
   const jobStatus = jobStatusOf(request);
   const trackingLoc = request.tracking?.mechanic_location;
-  const liveDistance =
-    resolveTrackingDistanceKm(request.tracking) ?? distanceKm;
+  const liveDistance = resolveTrackingDistanceKm(request.tracking) ?? distanceKm;
   const showLiveMap =
     !isIncomingOffer &&
     !!trackingLoc &&
@@ -175,150 +166,150 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.root}>
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[styles.content, canAccept && { paddingBottom: INCOMING_FOOTER_SPACE + (upgrade ? 56 : 0) }]}
-    >
-      {request.request_type === 'EMERGENCY' && <Text style={styles.emergency}>Emergency request</Text>}
-      {isIncomingOffer ? (
-        <>
-          <HelpRequestMap
-            request={{ latitude: request.latitude, longitude: request.longitude, title: 'Customer' }}
-            height={200}
-            zoomPreset="detail"
-            showLiveDistanceBadge={false}
-          />
-          <GrabStyleBottomSheet>
-            <MechanicCustomerDistance
-              distanceKm={distanceKm}
-              fromServicePin={servicePinManual || origin != null}
-              locationUnavailable={permissionDenied && distanceKm == null}
-            />
-            <Text style={styles.incomingTitle}>{problemNamesOf(request)}</Text>
-            <Text style={styles.created}>Offer received {formatRequestDate(request.created_at)}</Text>
-            <Text style={styles.remarks}>{request.remarks}</Text>
-            <Text style={styles.bold}>{vehicleWithDetails(request)}</Text>
-            <PaymentPlanLine request={request} />
-            <Text style={styles.muted}>Customer details unlock after you accept.</Text>
-            {request.answers?.map((a) => (
-              <View key={a.question_id} style={styles.answer}>
-                <Text style={styles.muted}>{a.question}</Text>
-                <Text>{a.answer}</Text>
-              </View>
-            ))}
-          </GrabStyleBottomSheet>
-        </>
-      ) : (
-        <>
-          <Text style={styles.status}>Status: {jobStatusLabelOf(request)}</Text>
-          <Text style={styles.created}>Created {formatRequestDate(request.created_at)}</Text>
-          <Section title="Customer">
-            <Text style={styles.bold}>{request.owner?.name ?? '—'}</Text>
-            {request.owner?.phone && <Text>{request.owner.phone}</Text>}
-            <PaymentPlanLine request={request} />
-          </Section>
-        </>
-      )}
+      <View style={styles.mapArea}>
+        <HelpRequestMap
+          request={{ latitude: request.latitude, longitude: request.longitude, title: 'Customer' }}
+          mechanic={
+            showLiveMap && trackingLoc
+              ? {
+                  latitude: trackingLoc.latitude,
+                  longitude: trackingLoc.longitude,
+                  title: 'You',
+                }
+              : null
+          }
+          requestPinLabel="Customer"
+          mechanicPinLabel="You"
+          fill
+          zoomPreset={showLiveMap || isIncomingOffer ? 'live' : 'detail'}
+          showRouteLine={showLiveMap}
+          liveDistanceKm={showLiveMap ? liveDistance : isIncomingOffer ? distanceKm : null}
+          showLiveDistanceBadge={showLiveMap || (isIncomingOffer && distanceKm != null)}
+          showMyLocation={false}
+        />
+      </View>
 
-      {!isIncomingOffer && (
-        <>
-          <Section title="Vehicle">
-            <Text style={styles.bold}>{vehicleWithDetails(request)}</Text>
-            {request.vehicle?.year != null && <Text>Year: {request.vehicle.year}</Text>}
-            {request.vehicle?.current_mileage != null && (
-              <Text>Mileage: {request.vehicle.current_mileage.toLocaleString()} km</Text>
-            )}
-          </Section>
+      <View style={styles.sheetDock} pointerEvents="box-none">
+        <GrabStyleBottomSheet compact bottomInset={canAccept ? 108 : 0}>
+          <ScrollView
+            style={[
+              styles.sheetScroll,
+              { maxHeight: canAccept ? sheetScrollMaxAccept : sheetScrollMax },
+            ]}
+            contentContainerStyle={styles.sheetScrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {request.request_type === 'EMERGENCY' ? (
+              <Text style={styles.emergency}>Emergency</Text>
+            ) : null}
 
-          <Section title="Problem">
-            <Text style={styles.bold}>{problemNamesOf(request)}</Text>
-            <Text style={styles.remarks}>{request.remarks}</Text>
-            {request.answers?.map((a) => (
-              <View key={a.question_id} style={styles.answer}>
-                <Text style={styles.muted}>{a.question}</Text>
-                <Text>{a.answer}</Text>
-              </View>
-            ))}
-          </Section>
+            <View style={styles.titleRow}>
+              <Text style={styles.headline} numberOfLines={2}>
+                {problemNamesOf(request)}
+              </Text>
+              <Text style={styles.statusPill}>{jobStatusLabelOf(request)}</Text>
+            </View>
 
-          <Section title="Location">
             <MechanicCustomerDistance
               distanceKm={liveDistance}
               compact
               fromServicePin={servicePinManual || origin != null}
               locationUnavailable={permissionDenied && liveDistance == null}
             />
-            <Text>{request.address_text ?? `${request.latitude}, ${request.longitude}`}</Text>
-            <HelpRequestMap
-              request={{ latitude: request.latitude, longitude: request.longitude, title: 'Customer' }}
-              mechanic={
-                showLiveMap && trackingLoc
-                  ? {
-                      latitude: trackingLoc.latitude,
-                      longitude: trackingLoc.longitude,
-                      title: 'You',
-                    }
-                  : null
-              }
-              height={showLiveMap ? 240 : 180}
-              zoomPreset={showLiveMap ? 'live' : 'detail'}
-              showRouteLine={showLiveMap}
-              liveDistanceKm={showLiveMap ? liveDistance : null}
-              showLiveDistanceBadge={showLiveMap}
-              showMyLocation={false}
-            />
-            <Pressable onPress={openMaps}>
-              <Text style={styles.link}>Open in maps</Text>
-            </Pressable>
-          </Section>
 
-          {['ACCEPTED', 'ON_THE_WAY', 'ARRIVED'].includes(jobStatus) ? (
-            <ServiceQuotePanel
-              role="mechanic"
-              pricing={request.job?.pricing}
-              busy={quoteBusy}
-              onSubmit={(amount, description) => void onSubmitQuote(amount, description)}
-            />
-          ) : null}
-        </>
-      )}
+            <Text style={styles.meta}>
+              {isIncomingOffer
+                ? `Offer · ${formatRequestDate(request.created_at)}`
+                : `Created · ${formatRequestDate(request.created_at)}`}
+            </Text>
 
-      {request.media && request.media.length > 0 ? (
-        <Section title="Photos">
-          <HelpRequestPhotoGallery media={request.media} title="Customer photos" />
-        </Section>
-      ) : null}
+            <Text style={styles.lead} numberOfLines={3}>
+              {request.remarks}
+            </Text>
+            <Text style={styles.vehicle} numberOfLines={1}>
+              {vehicleWithDetails(request)}
+            </Text>
+            <PaymentPlanLine request={request} />
 
-      {job && (
-        <Section title="Job timeline">
-          <Text style={styles.statusLive}>Status: {jobStatusLabelOf(request)}</Text>
-          {workDurationLabel ? <Text style={styles.workDuration}>{workDurationLabel}</Text> : null}
-          <TimelineRow label="Accepted" value={job.accepted_at} />
-          <TimelineRow label="On the way" value={job.on_the_way_at} />
-          <TimelineRow label="Arrived" value={job.arrived_at} />
-          <TimelineRow label="Started" value={job.started_at} />
-          <TimelineRow label="Completed" value={job.completed_at} />
-          {job.service_performed && <Text style={styles.remarks}>Service: {job.service_performed}</Text>}
-          {job.shop?.name && <Text>Shop: {job.shop.name}</Text>}
-        </Section>
-      )}
+            {isIncomingOffer ? (
+              <Text style={styles.unlockHint}>Customer details unlock after you accept.</Text>
+            ) : (
+              <View style={styles.compactBlock}>
+                <Text style={styles.compactLabel}>Customer</Text>
+                <Text style={styles.compactStrong}>{request.owner?.name ?? '—'}</Text>
+                {request.owner?.phone ? (
+                  <Pressable onPress={() => Linking.openURL(`tel:${request.owner!.phone}`)}>
+                    <Text style={styles.link}>{request.owner.phone}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            )}
 
-      {!isIncomingOffer && jobStatusOf(request) === 'COMPLETED' ? (
-        <MechanicJobPaymentCard request={request} onUpdated={setRequest} />
-      ) : null}
+            <View style={styles.compactBlock}>
+              <Text style={styles.compactLabel}>Location</Text>
+              <Text style={styles.compactBody} numberOfLines={2}>
+                {request.address_text ?? `${request.latitude}, ${request.longitude}`}
+              </Text>
+              <Pressable onPress={openMaps}>
+                <Text style={styles.link}>Open in maps</Text>
+              </Pressable>
+            </View>
 
-      {request.review && (
-        <Section title="Customer review">
-          <Text>★ {request.review.rating}</Text>
-          {request.review.comment && <Text>{request.review.comment}</Text>}
-        </Section>
-      )}
+            {request.answers?.length ? (
+              <View style={styles.compactBlock}>
+                <Text style={styles.compactLabel}>Details</Text>
+                {request.answers.map((a) => (
+                  <View key={a.question_id} style={styles.answer}>
+                    <Text style={styles.muted}>{a.question}</Text>
+                    <Text style={styles.answerValue}>{a.answer}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
 
-      {isDeclined && request.mechanic_dispatch?.responded_at && (
-        <Text style={styles.muted}>Declined {formatRequestDate(request.mechanic_dispatch.responded_at)}</Text>
-      )}
+            {request.media && request.media.length > 0 ? (
+              <HelpRequestPhotoGallery media={request.media} title="Customer photos" compact />
+            ) : null}
 
-    </ScrollView>
+            {job ? (
+              <View style={styles.compactBlock}>
+                <Text style={styles.compactLabel}>Job timeline</Text>
+                {workDurationLabel ? <Text style={styles.workDuration}>{workDurationLabel}</Text> : null}
+                <TimelineRow label="Accepted" value={job.accepted_at} />
+                <TimelineRow label="On the way" value={job.on_the_way_at} />
+                <TimelineRow label="Arrived" value={job.arrived_at} />
+                <TimelineRow label="Started" value={job.started_at} />
+                <TimelineRow label="Completed" value={job.completed_at} />
+                {job.service_performed ? (
+                  <Text style={styles.remarks}>Service: {job.service_performed}</Text>
+                ) : null}
+                {job.shop?.name ? <Text style={styles.remarks}>Shop: {job.shop.name}</Text> : null}
+              </View>
+            ) : null}
+
+            {!isIncomingOffer && jobStatus === 'COMPLETED' ? (
+              <MechanicJobPaymentCard request={request} onUpdated={setRequest} />
+            ) : null}
+
+            {request.review ? (
+              <View style={styles.compactBlock}>
+                <Text style={styles.compactLabel}>Customer review</Text>
+                <Text style={styles.compactStrong}>★ {request.review.rating}</Text>
+                {request.review.comment ? (
+                  <Text style={styles.remarks}>{request.review.comment}</Text>
+                ) : null}
+              </View>
+            ) : null}
+
+            {isDeclined && request.mechanic_dispatch?.responded_at ? (
+              <Text style={styles.muted}>
+                Declined {formatRequestDate(request.mechanic_dispatch.responded_at)}
+              </Text>
+            ) : null}
+          </ScrollView>
+        </GrabStyleBottomSheet>
+      </View>
 
       {canAccept ? (
         <>
@@ -340,45 +331,68 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function TimelineRow({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
-    </View>
+    <Text style={styles.timeline}>
+      {label}: {formatRequestDate(value)}
+    </Text>
   );
 }
 
-function TimelineRow({ label, value }: { label: string; value?: string | null }) {
-  if (!value) return null;
-  return <Text style={styles.timeline}>{label}: {formatRequestDate(value)}</Text>;
-}
-
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f8fafc' },
-  container: { flex: 1 },
-  content: { padding: 16, paddingBottom: 32 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  muted: { color: '#64748b' },
-  emergency: { color: '#dc2626', fontWeight: '800' },
-  status: { fontSize: 18, fontWeight: '700', marginTop: 8 },
-  created: { color: '#64748b', marginBottom: 12 },
-  section: {
-    marginTop: 14,
-    backgroundColor: '#fff',
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+  root: { flex: 1, backgroundColor: '#0f172a' },
+  mapArea: { ...StyleSheet.absoluteFill, backgroundColor: '#cbd5e1' },
+  sheetDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
-  sectionTitle: { fontWeight: '700', marginBottom: 8, color: '#64748b', textTransform: 'uppercase', fontSize: 12 },
-  bold: { fontWeight: '600', fontSize: 16 },
-  remarks: { marginTop: 6, color: '#334155' },
-  answer: { marginTop: 8 },
-  link: { color: '#0284c7', fontWeight: '600', marginTop: 8 },
-  timeline: { marginTop: 4, color: '#334155' },
-  workDuration: { fontSize: 16, fontWeight: '800', color: '#166534', marginBottom: 8 },
-  statusLive: { fontSize: 15, fontWeight: '700', color: '#0284c7', marginBottom: 6 },
-  incomingTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
-  distance: { fontSize: 16, fontWeight: '700', color: '#0284c7', marginTop: 4 },
+  sheetScroll: {},
+  sheetScrollContent: { paddingBottom: 4 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' },
+  muted: { color: '#64748b', fontSize: 13 },
+  emergency: {
+    alignSelf: 'flex-start',
+    color: '#991b1b',
+    fontWeight: '800',
+    fontSize: 11,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  headline: { flex: 1, fontSize: 18, fontWeight: '800', color: '#0f172a' },
+  statusPill: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0369a1',
+    backgroundColor: '#e0f2fe',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  meta: { marginTop: 4, color: '#64748b', fontSize: 12 },
+  lead: { marginTop: 6, color: '#334155', fontSize: 14, lineHeight: 19 },
+  vehicle: { marginTop: 4, fontWeight: '700', fontSize: 14, color: '#0f172a' },
+  unlockHint: { marginTop: 8, fontSize: 12, color: '#64748b' },
+  compactBlock: { marginTop: 12 },
+  compactLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 3,
+  },
+  compactBody: { fontSize: 14, color: '#475569', lineHeight: 19 },
+  compactStrong: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
+  remarks: { marginTop: 4, color: '#334155', fontSize: 13 },
+  answer: { marginTop: 6 },
+  answerValue: { color: '#0f172a', fontWeight: '600', marginTop: 1 },
+  link: { color: '#0284c7', fontWeight: '700', marginTop: 4, fontSize: 13 },
+  timeline: { marginTop: 2, color: '#475569', fontSize: 13 },
+  workDuration: { fontSize: 15, fontWeight: '800', color: '#166534', marginBottom: 4 },
 });

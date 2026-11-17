@@ -2,7 +2,14 @@ import * as SecureStore from 'expo-secure-store';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { fetchAppConfig } from '../api/appConfig';
-import { fetchCurrentUser, login as apiLogin, logout as apiLogout, register as apiRegister } from '../api/auth';
+import {
+  fetchCurrentUser,
+  login as apiLogin,
+  loginWithGoogle as apiLoginWithGoogle,
+  logout as apiLogout,
+  register as apiRegister,
+} from '../api/auth';
+import type { AuthPayload } from '../api/types';
 import { unregisterPushToken } from '../api/pushTokens';
 import { getCurrentPushToken, setCurrentPushToken } from '../services/pushNotifications';
 import { setApiAuthToken } from '../api/client';
@@ -55,6 +62,7 @@ type AuthContextValue = {
   /** Forget the saved session locally and go to sign-in (loading screen error state). */
   abandonSession: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: (idToken: string, role?: 'owner' | 'mechanic') => Promise<void>;
   signUp: (input: {
     name: string;
     email: string;
@@ -134,18 +142,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [bootstrap]);
 
+  const persistAuthPayload = useCallback(async (payload: AuthPayload, context: string) => {
+    await SecureStore.setItemAsync(TOKEN_KEY, payload.token);
+    setApiAuthToken(payload.token);
+    setUser(payload.user);
+    logger.info('Auth', context, { userId: payload.user.id, role: payload.user.role });
+  }, []);
+
   const signIn = useCallback(async (email: string, password: string) => {
     try {
       const payload = await apiLogin(email, password);
-      await SecureStore.setItemAsync(TOKEN_KEY, payload.token);
-      setApiAuthToken(payload.token);
-      setUser(payload.user);
-      logger.info('Auth', 'Signed in', { userId: payload.user.id, role: payload.user.role });
+      await persistAuthPayload(payload, 'Signed in');
     } catch (error) {
       logger.error('Auth', 'Sign-in failed', error, { email });
       throw error;
     }
-  }, []);
+  }, [persistAuthPayload]);
+
+  const signInWithGoogle = useCallback(
+    async (idToken: string, role?: 'owner' | 'mechanic') => {
+      try {
+        const payload = await apiLoginWithGoogle({ id_token: idToken, role });
+        await persistAuthPayload(payload, 'Signed in with Google');
+      } catch (error) {
+        logger.error('Auth', 'Google sign-in failed', error);
+        throw error;
+      }
+    },
+    [persistAuthPayload],
+  );
 
   const signUp = useCallback(
     async (input: {
@@ -209,12 +234,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       retryBootstrap,
       abandonSession,
       signIn,
+      signInWithGoogle,
       signUp,
       signOut,
       refreshUser,
       setCurrentUser: setUser,
     }),
-    [user, isLoading, bootError, retryBootstrap, abandonSession, signIn, signUp, signOut, refreshUser],
+    [user, isLoading, bootError, retryBootstrap, abandonSession, signIn, signInWithGoogle, signUp, signOut, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

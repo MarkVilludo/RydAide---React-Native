@@ -5,8 +5,10 @@ import {
   Linking,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { getApiErrorMessage } from '../../api/client';
@@ -16,7 +18,6 @@ import {
   extendHelpRequest,
   fetchHelpCancellationSummary,
   fetchHelpRequest,
-  respondToHelpRequestQuote,
   type HelpCancellationSummary,
   submitHelpRequestReview,
   type HelpRequest,
@@ -26,7 +27,6 @@ import { AndroidHideNavigationBarWhenFocused } from '../../components/AndroidHid
 import { CancelHelpRequestButton } from '../../components/CancelHelpRequestButton';
 import { HelpRequestCompletionPanel } from '../../components/HelpRequestCompletionPanel';
 import { OwnerPayMechanicCard, PaymentPlanLine } from '../../components/JobPaymentCards';
-import { ServiceQuotePanel } from '../../components/ServiceQuotePanel';
 import {
   KeyboardAwareScrollView,
   type KeyboardAwareScrollViewRef,
@@ -53,6 +53,7 @@ import {
   vehicleWithDetails,
 } from '../../utils/helpRequestUi';
 import { needHelpParamsFromHelpRequest } from '../../utils/needHelpDraft';
+import { liveSheetScrollMax } from '../../utils/mapZoom';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'ActiveHelpRequest'>;
 
@@ -76,6 +77,8 @@ function liveDistanceKmForRequest(request: HelpRequest | null): number | null {
 }
 
 export function ActiveHelpRequestScreen({ route, navigation }: Props) {
+  const { height: windowHeight } = useWindowDimensions();
+  const sheetScrollMax = liveSheetScrollMax(windowHeight);
   const { helpRequestId, initialRequest } = route.params;
   const [request, setRequest] = useState<HelpRequest | null>(() =>
     initialRequest?.id === helpRequestId ? initialRequest : null,
@@ -83,7 +86,6 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
   const [connectionLost, setConnectionLost] = useState(false);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [photosOpen, setPhotosOpen] = useState(false);
-  const [quoteBusy, setQuoteBusy] = useState(false);
   const cancelLock = useRef(false);
   const [cancelSummary, setCancelSummary] = useState<HelpCancellationSummary | null>(null);
   const extendPromptShown = useRef(false);
@@ -264,22 +266,6 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
     );
   };
 
-  const respondToQuote = async (response: 'accept' | 'reject') => {
-    setQuoteBusy(true);
-    try {
-      const updated = await respondToHelpRequestQuote(helpRequestId, response);
-      setRequest(updated);
-      setConnectionLost(false);
-    } catch (e) {
-      Alert.alert(
-        response === 'accept' ? 'Could not accept quote' : 'Could not decline quote',
-        getApiErrorMessage(e),
-      );
-    } finally {
-      setQuoteBusy(false);
-    }
-  };
-
   if (accepted && request.mechanic) {
     return (
       <View style={styles.root}>
@@ -313,79 +299,78 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
         </View>
 
         <View style={styles.sheetDock} pointerEvents="box-none">
-        <GrabStyleBottomSheet immersiveBottom={workStarted}>
-          <HelpJourneyTimeline steps={activeJobJourneySteps} compact />
+          <GrabStyleBottomSheet compact immersiveBottom={workStarted}>
+            <ScrollView
+              style={{ maxHeight: sheetScrollMax }}
+              contentContainerStyle={styles.liveSheetScrollContent}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <HelpJourneyTimeline steps={activeJobJourneySteps} compact />
 
-          <Text style={styles.sheetHeadline} numberOfLines={2}>
-            {activeJourneyHeadline(request)}
-          </Text>
-
-          <Text style={styles.plansChangeHint}>
-            {request.mechanic.phone
-              ? 'A mechanic has accepted this request. Call them if your plans change — cancellation is no longer available in the app.'
-              : 'A mechanic has accepted this request. Contact them if your plans change — cancellation is no longer available in the app.'}
-          </Text>
-
-          <View style={styles.personRow}>
-            <View style={styles.personBlock}>
-              <Text style={styles.personName} numberOfLines={1}>
-                {mechanicDisplayName(request)}
+              <Text style={styles.sheetHeadline} numberOfLines={2}>
+                {activeJourneyHeadline(request)}
               </Text>
-              <Text style={styles.vehicle} numberOfLines={1}>
-                {vehicleTitle(request)}
+
+              <Text style={styles.plansChangeHint} numberOfLines={2}>
+                {request.mechanic.phone
+                  ? 'Call your mechanic if plans change — cancel isn’t available in-app.'
+                  : 'Contact your mechanic if plans change — cancel isn’t available in-app.'}
               </Text>
-            </View>
-            {request.mechanic.phone ? (
-              <Pressable
-                style={styles.callChip}
-                onPress={() => Linking.openURL(`tel:${request.mechanic!.phone}`)}
-              >
-                <Text style={styles.callChipText}>Call</Text>
-              </Pressable>
-            ) : null}
-          </View>
 
-          <Text style={styles.problemLine} numberOfLines={workStarted ? 1 : 2}>
-            {problemNamesOf(request)}
-            {request.remarks ? ` · ${request.remarks}` : ''}
-          </Text>
+              <View style={styles.personRow}>
+                <View style={styles.personBlock}>
+                  <Text style={styles.personName} numberOfLines={1}>
+                    {mechanicDisplayName(request)}
+                  </Text>
+                  <Text style={styles.vehicle} numberOfLines={1}>
+                    {vehicleTitle(request)}
+                  </Text>
+                </View>
+                {request.mechanic.phone ? (
+                  <Pressable
+                    style={styles.callChip}
+                    onPress={() => Linking.openURL(`tel:${request.mechanic!.phone}`)}
+                  >
+                    <Text style={styles.callChipText}>Call</Text>
+                  </Pressable>
+                ) : null}
+              </View>
 
-          {!workStarted && jobStatus !== 'COMPLETED' ? (
-            <ServiceQuotePanel
-              role="owner"
-              pricing={request.job?.pricing}
-              busy={quoteBusy}
-              onAccept={() => void respondToQuote('accept')}
-              onDecline={() => void respondToQuote('reject')}
-            />
-          ) : null}
+              <Text style={styles.problemLine} numberOfLines={workStarted ? 1 : 2}>
+                {problemNamesOf(request)}
+                {request.remarks ? ` · ${request.remarks}` : ''}
+              </Text>
+              <PaymentPlanLine request={request} prefix="You'll pay with" />
 
-          {workStarted ? (
-            <JobWorkDurationText
-              job={request.job}
-              jobStatus={jobStatus}
-              style={styles.workTime}
-              liveStyle={styles.workTimeLive}
-            />
-          ) : (
-            <ActiveJobLocationSummary
-              tracking={tracking}
-              connectionLost={connectionLost}
-              viewerRole="owner"
-              compact
-            />
-          )}
+              {workStarted ? (
+                <JobWorkDurationText
+                  job={request.job}
+                  jobStatus={jobStatus}
+                  style={styles.workTime}
+                  liveStyle={styles.workTimeLive}
+                />
+              ) : (
+                <ActiveJobLocationSummary
+                  tracking={tracking}
+                  connectionLost={connectionLost}
+                  viewerRole="owner"
+                  compact
+                />
+              )}
 
-          {connectionLost ? (
-            <Text style={styles.connectionBanner}>Connection lost — map may be outdated</Text>
-          ) : null}
+              {connectionLost ? (
+                <Text style={styles.connectionBanner}>Connection lost — map may be outdated</Text>
+              ) : null}
 
-          {photoCount > 0 ? (
-            <Pressable style={styles.photosLink} onPress={() => setPhotosOpen(true)}>
-              <Text style={styles.photosLinkText}>View problem photos ({photoCount})</Text>
-            </Pressable>
-          ) : null}
-        </GrabStyleBottomSheet>
+              {photoCount > 0 ? (
+                <Pressable style={styles.photosLink} onPress={() => setPhotosOpen(true)}>
+                  <Text style={styles.photosLinkText}>View problem photos ({photoCount})</Text>
+                </Pressable>
+              ) : null}
+            </ScrollView>
+          </GrabStyleBottomSheet>
         </View>
 
         <Modal visible={photosOpen} transparent animationType="fade">
@@ -566,21 +551,17 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f8fafc' },
+  root: { flex: 1, backgroundColor: '#0f172a' },
   loadingError: { backgroundColor: '#fef2f2' },
-  mapArea: { ...StyleSheet.absoluteFillObject, backgroundColor: '#cbd5e1' },
+  mapArea: { ...StyleSheet.absoluteFill, backgroundColor: '#cbd5e1' },
   sheetDock: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  sheetHeadline: { fontSize: 18, fontWeight: '800', color: '#0284c7', marginTop: 8 },
+  liveSheetScrollContent: { paddingBottom: 4 },
+  sheetHeadline: { fontSize: 17, fontWeight: '800', color: '#0284c7', marginTop: 6 },
   plansChangeHint: {
-    marginTop: 8,
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#475569',
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 10,
-    padding: 10,
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#64748b',
   },
   workTime: { marginTop: 4 },
   workTimeLive: { color: '#b45309' },

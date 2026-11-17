@@ -13,6 +13,18 @@ function parseAuthPayload(data: ApiSuccess<AuthPayload>): AuthPayload {
   return data.data;
 }
 
+export async function loginWithGoogle(input: {
+  id_token: string;
+  role?: 'owner' | 'mechanic';
+}): Promise<AuthPayload> {
+  const { data } = await api.post<ApiSuccess<AuthPayload>>('/auth/google', {
+    id_token: input.id_token,
+    device_name: deviceName(),
+    ...(input.role ? { role: input.role } : {}),
+  });
+  return parseAuthPayload(data);
+}
+
 export async function login(email: string, password: string): Promise<AuthPayload> {
   const { data } = await api.post<ApiSuccess<AuthPayload>>('/auth/login', {
     email,

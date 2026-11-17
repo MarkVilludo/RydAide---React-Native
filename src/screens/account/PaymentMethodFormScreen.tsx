@@ -19,6 +19,7 @@ import { showAppToast } from '../../components/AppToast';
 import type { PaymentMethodsParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { protectedImageSource } from '../../utils/protectedImage';
+import { PaymentWalletLogo } from '../../components/PaymentWalletLogo';
 import {
   WALLET_TYPES,
   formatMobileInput,
@@ -172,7 +173,11 @@ export function PaymentMethodFormScreen({ navigation, route }: Props) {
               accessibilityRole="radio"
               accessibilityState={{ selected: on }}
             >
-              <Text style={styles.typeIcon}>{t.icon}</Text>
+              {t.value === 'GCASH' || t.value === 'MAYA' ? (
+                <PaymentWalletLogo type={t.value} height={18} style={styles.typeLogo} />
+              ) : (
+                <Text style={styles.typeIcon}>{t.icon}</Text>
+              )}
               <Text style={[styles.typeLabel, on && styles.typeLabelOn]}>{t.label}</Text>
             </Pressable>
           );
@@ -313,6 +318,7 @@ const styles = StyleSheet.create({
   },
   typeTileOn: { borderColor: colors.primary, borderWidth: 2, backgroundColor: colors.primarySoft },
   typeIcon: { fontSize: 22 },
+  typeLogo: { marginBottom: 2 },
   typeLabel: { fontSize: 14, fontWeight: '700', color: colors.text },
   typeLabelOn: { color: colors.primaryInk },
   input: {

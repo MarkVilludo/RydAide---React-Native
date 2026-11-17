@@ -70,16 +70,7 @@ function priceLine(request: HelpRequest): string | null {
       : null;
     return earned && jobStatusOf(request) === 'COMPLETED' ? `${final} · you earn ${earned}` : `${final} final`;
   }
-  const quoted = formatPhpAmount(p.quoted_service_amount_php ?? null);
-  if (!quoted) return null;
-  const qs = p.quote_status;
-  return qs === 'accepted'
-    ? `${quoted} quote accepted`
-    : qs === 'pending'
-      ? `${quoted} quote · waiting for owner`
-      : qs === 'rejected'
-        ? `${quoted} quote declined`
-        : `${quoted} quote`;
+  return null;
 }
 
 function MechanicRequestCardImpl({

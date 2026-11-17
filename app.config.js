@@ -1,4 +1,12 @@
 const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
+const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim();
+const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim();
+
+function googleIosUrlScheme(iosClientId) {
+  const suffix = '.apps.googleusercontent.com';
+  const prefix = iosClientId.endsWith(suffix) ? iosClientId.slice(0, -suffix.length) : iosClientId;
+  return `com.googleusercontent.apps.${prefix}`;
+}
 
 const iosBundleId = process.env.EXPO_PUBLIC_IOS_BUNDLE_ID?.trim() || 'com.rydaid.mobile';
 const androidPackage = process.env.EXPO_PUBLIC_ANDROID_PACKAGE?.trim() || 'com.rydaid.mobile';
@@ -18,7 +26,7 @@ const LAUNCH_LOGO_WIDTH = 120;
 const config = {
   name: 'RydAid',
   slug: 'rydaid-app',
-  version: '1.0.4',
+  version: '1.0.5',
   orientation: 'portrait',
   icon: './assets/icon.png',
   splash: {
@@ -44,7 +52,7 @@ const config = {
     package: androidPackage,
     // Google Play requires a unique, increasing integer per upload. EAS remote
     // + autoIncrement on store/internal profiles bumps this; keep a floor here.
-    versionCode: 7,
+    versionCode: 8,
     softwareKeyboardLayoutMode: 'resize',
     usesCleartextTraffic: true,
     adaptiveIcon: {
@@ -62,6 +70,8 @@ const config = {
     eas: {
       projectId: easProjectId,
     },
+    ...(googleWebClientId ? { googleWebClientId } : {}),
+    ...(googleIosClientId ? { googleIosClientId } : {}),
     storeBilling: {
       mechanicProProductId,
       iosBundleId,
@@ -121,6 +131,13 @@ const config = {
     'expo-iap',
   ],
 };
+
+if (googleIosClientId) {
+  config.plugins.push([
+    '@react-native-google-signin/google-signin',
+    { iosUrlScheme: googleIosUrlScheme(googleIosClientId) },
+  ]);
+}
 
 if (googleMapsApiKey) {
   // Writes com.google.android.geo.API_KEY into AndroidManifest (required by MapView / expo-maps).

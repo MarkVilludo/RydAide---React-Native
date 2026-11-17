@@ -31,7 +31,7 @@ type Options = {
 
 /**
  * While the screen is focused and the request is still live, keep re-fetching so
- * status / quote / GPS changes from the other side show on Request details.
+ * status / GPS / payment changes from the other side show on Request details.
  */
 export function useLiveHelpRequestRefresh({ refresh, request }: Options) {
   const requestRef = useRef(request);

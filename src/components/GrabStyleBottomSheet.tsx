@@ -12,6 +12,8 @@ type Props = {
   fill?: boolean;
   /** No overlap / radius / handle — sits flush under a map half. */
   flush?: boolean;
+  /** Tighter padding for map-first overlays (active job / live tracking). */
+  compact?: boolean;
 };
 
 export function GrabStyleBottomSheet({
@@ -20,6 +22,7 @@ export function GrabStyleBottomSheet({
   immersiveBottom = false,
   fill = false,
   flush = false,
+  compact = false,
 }: Props) {
   const insets = useSafeAreaInsets();
   const systemBottom = immersiveBottom
@@ -29,17 +32,19 @@ export function GrabStyleBottomSheet({
       : Platform.OS === 'android'
         ? 20
         : 0;
+  const basePad = compact ? 10 : fill || flush ? 12 : 24;
 
   return (
     <View
       style={[
         styles.sheet,
+        compact && styles.sheetCompact,
         fill && styles.sheetFill,
         flush && styles.sheetFlush,
-        { paddingBottom: (fill || flush ? 12 : 24) + systemBottom + bottomInset },
+        { paddingBottom: basePad + systemBottom + bottomInset },
       ]}
     >
-      {!flush ? <View style={styles.handle} /> : null}
+      {!flush ? <View style={[styles.handle, compact && styles.handleCompact]} /> : null}
       {children}
     </View>
   );
@@ -62,6 +67,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
+  sheetCompact: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
   sheetFill: {
     flex: 1,
   },
@@ -83,5 +94,10 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#cbd5e1',
     marginBottom: 12,
+  },
+  handleCompact: {
+    marginBottom: 8,
+    width: 36,
+    height: 3,
   },
 });

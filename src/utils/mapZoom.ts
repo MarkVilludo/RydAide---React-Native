@@ -27,15 +27,31 @@ const PRESETS: Record<
     dualZoomOut: 1.12,
     fitPadding: { top: 48, right: 36, bottom: 48, left: 36 },
   },
-  /** Active job tracking — keep both pins close with less empty map between them. */
+  /** Active job tracking — keep both pins in the visible map above the compact sheet. */
   live: {
-    singleDelta: 0.018,
-    minDualDelta: 0.008,
-    coordPad: 0.004,
-    dualZoomOut: 1.04,
-    fitPadding: { top: 72, right: 24, bottom: 220, left: 24 },
+    singleDelta: 0.016,
+    minDualDelta: 0.007,
+    coordPad: 0.003,
+    dualZoomOut: 1.03,
+    fitPadding: { top: 48, right: 24, bottom: 140, left: 24 },
   },
 };
+
+/** Bottom sheet budget so the live map stays ~65–75% of the screen. */
+export function liveSheetScrollMax(windowHeight: number): number {
+  return Math.round(Math.min(240, Math.max(140, windowHeight * 0.22)));
+}
+
+/** Camera edge padding that matches the compact overlay sheet on this device. */
+export function liveMapFitPadding(windowHeight: number): {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+} {
+  const bottom = Math.round(Math.min(180, Math.max(120, windowHeight * 0.26)));
+  return { top: 48, right: 24, bottom, left: 24 };
+}
 
 /** Reference zoom used to scale marker icons (≈ neighborhood / detail map). */
 export const MAP_MARKER_REF_LATITUDE_DELTA = 0.022;

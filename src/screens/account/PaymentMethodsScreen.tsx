@@ -25,7 +25,7 @@ import { showAppToast } from '../../components/AppToast';
 import type { PaymentMethodsParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { protectedImageSource } from '../../utils/protectedImage';
-import { paymentIcon } from '../../utils/paymentMethods';
+import { PaymentWalletLogo } from '../../components/PaymentWalletLogo';
 
 type Props = NativeStackScreenProps<PaymentMethodsParamList, 'PaymentMethods'>;
 
@@ -142,7 +142,9 @@ export function PaymentMethodsScreen({ navigation }: Props) {
 
       <Text style={styles.sectionTitle}>Preferred</Text>
       <View style={styles.preferredCard}>
-        <Text style={styles.preferredIcon}>{paymentIcon(data.preferred.type)}</Text>
+        <View style={styles.preferredIcon}>
+          <PaymentWalletLogo type={data.preferred.type} height={22} />
+        </View>
         <View style={styles.flex}>
           <Text style={styles.preferredLabel}>{data.preferred.label}</Text>
           <Text style={styles.preferredHint}>Shown first on your help requests and jobs.</Text>
@@ -191,7 +193,9 @@ export function PaymentMethodsScreen({ navigation }: Props) {
         data.wallets.map((w) => (
           <View key={w.id} style={[styles.card, w.is_preferred && styles.cardPreferred]}>
             <View style={styles.cardRow}>
-              <Text style={styles.cardIcon}>{paymentIcon(w.type)}</Text>
+              <View style={styles.cardIcon}>
+                <PaymentWalletLogo type={w.type} height={22} />
+              </View>
               <View style={styles.flex}>
                 <Text style={styles.cardTitle}>{w.label}</Text>
                 <Text style={styles.cardSub} numberOfLines={1}>
@@ -272,7 +276,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.primaryBorder,
   },
-  preferredIcon: { fontSize: 26 },
+  preferredIcon: { width: 72, alignItems: 'flex-start', justifyContent: 'center' },
   preferredLabel: { fontSize: 17, fontWeight: '800', color: colors.primaryInk },
   preferredHint: { fontSize: 13, color: colors.muted, marginTop: 2 },
   card: {
@@ -285,7 +289,7 @@ const styles = StyleSheet.create({
   },
   cardPreferred: { borderColor: colors.primary, borderWidth: 1.5 },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  cardIcon: { fontSize: 24 },
+  cardIcon: { width: 68, alignItems: 'flex-start', justifyContent: 'center' },
   cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
   cardSub: { fontSize: 14, color: colors.muted, marginTop: 2 },
   cardMeta: { fontSize: 12, color: colors.mutedSoft, marginTop: 2 },

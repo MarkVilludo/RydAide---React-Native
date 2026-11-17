@@ -22,7 +22,8 @@ import {
   type PaymentWallet,
 } from '../api/paymentMethods';
 import { colors } from '../theme/colors';
-import { formatPeso, ownerPaymentPlanLabel, paymentIcon } from '../utils/paymentMethods';
+import { PaymentWalletChipTitle, PaymentWalletLogo } from './PaymentWalletLogo';
+import { formatPeso, ownerPaymentPlanLabel } from '../utils/paymentMethods';
 import { protectedImageSource } from '../utils/protectedImage';
 import { showAppToast } from './AppToast';
 
@@ -53,7 +54,7 @@ export function PaymentPlanLine({
   if (!label) return null;
   return (
     <View style={styles.planLine}>
-      <Text style={styles.planIcon}>{paymentIcon(request.payment_preference?.type)}</Text>
+      <PaymentWalletLogo type={request.payment_preference?.type} height={16} />
       <Text style={styles.planText}>
         {prefix}: <Text style={styles.planStrong}>{label}</Text>
       </Text>
@@ -227,7 +228,7 @@ export function OwnerPayMechanicCard({
                 accessibilityState={{ selected: on }}
               >
                 <View style={[styles.radio, on && styles.radioOn]}>{on ? <View style={styles.radioDot} /> : null}</View>
-                <Text style={styles.optionIcon}>{paymentIcon(c.type)}</Text>
+                <PaymentWalletLogo type={c.type} height={22} style={styles.optionLogo} />
                 <View style={styles.flex}>
                   <Text style={styles.optionTitle}>
                     {c.label}
@@ -371,9 +372,7 @@ export function MechanicJobPaymentCard({
               accessibilityRole="radio"
               accessibilityState={{ selected: on }}
             >
-              <Text style={[styles.chipText, on && styles.chipTextOn]}>
-                {paymentIcon(c.type)} {c.label}
-              </Text>
+              <PaymentWalletChipTitle type={c.type} label={c.label} height={16} emphasized={on} />
             </Pressable>
           );
         })}
@@ -425,7 +424,7 @@ const styles = StyleSheet.create({
   },
   radioOn: { borderColor: colors.primary },
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary },
-  optionIcon: { fontSize: 20 },
+  optionLogo: { flexShrink: 0 },
   optionTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
   optionTag: { fontSize: 12, fontWeight: '600', color: colors.primaryInk },
   optionName: { fontSize: 13, color: colors.muted, marginTop: 2 },
@@ -449,7 +448,6 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.55 },
   primaryBtnText: { color: colors.onPrimary, fontSize: 16, fontWeight: '800' },
   planLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  planIcon: { fontSize: 15 },
   planText: { fontSize: 14, color: colors.muted, flexShrink: 1 },
   planStrong: { fontWeight: '800', color: colors.text },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },

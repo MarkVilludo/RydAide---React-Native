@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Platform, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
 import { MAP_MARKER_IMAGES } from '../constants/mapMarkerAssets';
 import { useMapMarkers } from '../hooks/useMapMarkers';
@@ -9,6 +9,7 @@ import { androidMapsProvider, hasGoogleMapsApiKey } from '../utils/mapsProvider'
 import { statusBarTopInset } from '../utils/screenInsets';
 import {
   buildMapRegion,
+  liveMapFitPadding,
   mapFitEdgePadding,
   mapMarkerIconSizePx,
   type MapZoomPreset,
@@ -158,14 +159,14 @@ export function HelpRequestMap({
       return;
     }
 
-    const basePadding = mapFitEdgePadding(zoomPreset);
+    const screenH = Dimensions.get('window').height;
+    const basePadding =
+      zoomPreset === 'live' && fill ? liveMapFitPadding(screenH) : mapFitEdgePadding(zoomPreset);
     const edgePadding =
       ownerBadge && fill
         ? {
             ...basePadding,
             top: Math.max(basePadding.top, badgeTop + 36),
-            // Live overlay sheet — keep pins above the dock without huge empty gutters.
-            bottom: zoomPreset === 'live' ? Math.max(basePadding.bottom, 200) : basePadding.bottom,
           }
         : basePadding;
 
@@ -241,6 +242,14 @@ export function HelpRequestMap({
         showsMyLocationButton={showMyLocation}
         mapType="standard"
         rotateEnabled={false}
+        pitchEnabled={false}
+        scrollEnabled
+        zoomEnabled
+        zoomTapEnabled
+        zoomControlEnabled={Platform.OS === 'android' && fill}
+        toolbarEnabled={false}
+        moveOnMarkerPress={false}
+        loadingEnabled
       >
         {lineCoords.length === 2 ? (
           <Polyline

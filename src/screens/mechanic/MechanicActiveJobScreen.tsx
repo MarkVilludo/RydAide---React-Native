@@ -6,14 +6,16 @@ import {
   Linking,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { getApiErrorMessage } from '../../api/client';
 import type { HelpRequest } from '../../api/helpRequests';
-import { fetchMechanicHelpRequest, submitServiceQuote, updateJobStatus } from '../../api/mechanicHelp';
+import { fetchMechanicHelpRequest, updateJobStatus } from '../../api/mechanicHelp';
 import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSummary';
 import { CenteredLoading } from '../../components/CenteredLoading';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
@@ -24,7 +26,6 @@ import { PendingJobStatusBanner } from '../../components/PendingJobStatusBanner'
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { PaymentPlanLine } from '../../components/JobPaymentCards';
-import { ServiceQuotePanel } from '../../components/ServiceQuotePanel';
 import { useAppConfig } from '../../hooks/useAppConfig';
 import { useDeviceLocation } from '../../hooks/useDeviceLocation';
 import { useLiveWorkElapsedSeconds } from '../../hooks/useLiveWorkElapsedSeconds';
@@ -44,6 +45,7 @@ import {
   vehicleWithDetails,
 } from '../../utils/helpRequestUi';
 import { formatJobWorkDuration } from '../../utils/jobWorkDuration';
+import { liveSheetScrollMax } from '../../utils/mapZoom';
 
 const STATUS_UNDO_SECONDS = 4;
 
@@ -80,6 +82,8 @@ const STATUS_CONFIRM: Record<string, { title: string; message: string; confirm: 
 };
 
 export function MechanicActiveJobScreen({ route, navigation }: Props) {
+  const { height: windowHeight } = useWindowDimensions();
+  const sheetScrollMax = liveSheetScrollMax(windowHeight);
   const { helpRequestId, justAccepted = false, initialRequest } = route.params;
   const [request, setRequest] = useState<HelpRequest | null>(initialRequest ?? null);
   const [loading, setLoading] = useState(!initialRequest);
@@ -93,7 +97,6 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
   const [statusConfirmTarget, setStatusConfirmTarget] = useState<string | null>(null);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [pendingUndoSeconds, setPendingUndoSeconds] = useState(0);
-  const [quoteBusy, setQuoteBusy] = useState(false);
   const pendingStatusRef = useRef<string | null>(null);
 
   const { config } = useAppConfig();
@@ -228,40 +231,12 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
     }
   }, [pendingStatus, pendingUndoSeconds, acting, clearPendingStatus]);
 
-  const pricing = request?.job?.pricing;
-  const quoteStatus = (pricing?.quote_status ?? 'none').toLowerCase();
-  const requireQuote = pricing?.require_quote_before_work === true;
-  const quoteBlocksStart = requireQuote && quoteStatus !== 'accepted';
-
   const requestStatusChange = (status: string) => {
-    if (status === 'IN_PROGRESS' && quoteBlocksStart) {
-      Alert.alert(
-        'Quote needed',
-        quoteStatus === 'pending'
-          ? 'Wait for the owner to accept your quote before starting work.'
-          : 'Send a service quote first. The owner must accept it before work can begin.',
-      );
-      return;
-    }
     if (emergencyOn) {
       setStatusConfirmTarget(status);
       return;
     }
     void setStatus(status);
-  };
-
-  const onSubmitQuote = async (amountPhp: number, description: string) => {
-    setQuoteBusy(true);
-    try {
-      const updated = await submitServiceQuote(helpRequestId, amountPhp, description || undefined);
-      setRequest(updated);
-      setConnectionLost(false);
-    } catch (e) {
-      Alert.alert('Could not send quote', getApiErrorMessage(e));
-      void load();
-    } finally {
-      setQuoteBusy(false);
-    }
   };
 
   const onStatusConfirmSheetConfirm = () => {
@@ -350,127 +325,121 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
       </View>
 
       <View style={styles.sheetDock} pointerEvents="box-none">
-      <GrabStyleBottomSheet>
-        <View style={styles.titleRow}>
-          <Text style={styles.headline} numberOfLines={1}>
-            {headerTitle(jobStatus, justAccepted)}
-          </Text>
-          <Text style={styles.statusPill}>{jobStatusLabelOf(request)}</Text>
-        </View>
-
-        <View style={styles.customerRow}>
-          <View style={styles.customerBlock}>
-            <Text style={styles.customerName} numberOfLines={1}>
-              {request.owner?.name ?? 'Customer'}
-            </Text>
-            <Text style={styles.vehicle} numberOfLines={1}>
-              {vehicleTitle(request)}
-            </Text>
-          </View>
-          {request.owner?.phone ? (
-            <Pressable
-              style={styles.callChip}
-              onPress={() => Linking.openURL(`tel:${request.owner!.phone}`)}
-            >
-              <Text style={styles.callChipText}>Call</Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        <Text style={styles.problem} numberOfLines={1}>
-          {problemNamesOf(request)}
-          {request.remarks ? ` · ${request.remarks}` : ''}
-        </Text>
-        <PaymentPlanLine request={request} />
-
-        {['ACCEPTED', 'ON_THE_WAY', 'ARRIVED'].includes(jobStatus) ? (
-          <ServiceQuotePanel
-            role="mechanic"
-            pricing={pricing}
-            busy={quoteBusy}
-            onSubmit={(amount, description) => void onSubmitQuote(amount, description)}
-          />
-        ) : null}
-
-        {emergencyOn && jobStatus !== 'COMPLETED' ? (
-          <JobLifecycleStepper currentStatus={jobStatus} />
-        ) : null}
-
-        {emergencyOn && pendingStatus && pendingUndoSeconds > 0 ? (
-          <PendingJobStatusBanner
-            message={`Updating to “${headerTitle(pendingStatus, false)}”`}
-            secondsLeft={pendingUndoSeconds}
-            onUndo={clearPendingStatus}
-          />
-        ) : null}
-
-        <ActiveJobLocationSummary
-          tracking={tracking}
-          mechanicPermissionDenied={permissionDenied && shareLiveWithCustomer}
-          connectionLost={connectionLost}
-          viewerRole="mechanic"
-          compact
-          fallbackDistanceKm={displayDistanceKm}
-        />
-
-        <JobWorkDurationText
-          job={request.job}
-          jobStatus={jobStatus}
-          style={styles.workTime}
-          liveStyle={styles.workTimeLive}
-        />
-
-        {photoCount > 0 ? (
-          <Pressable style={styles.photosLink} onPress={() => setPhotosOpen(true)}>
-            <Text style={styles.photosLinkText}>View customer photos ({photoCount})</Text>
-          </Pressable>
-        ) : null}
-
-        <View style={styles.actions}>
-          {jobStatus === 'ACCEPTED' && (
-            <Pressable style={styles.primaryBtn} disabled={statusChangeLocked} onPress={startJourney}>
-              <Text style={styles.primaryBtnText}>Start journey</Text>
-            </Pressable>
-          )}
-          {jobStatus === 'ON_THE_WAY' && (
-            <View style={styles.actionRow}>
-              <Pressable style={[styles.navBtn, styles.actionHalf]} onPress={startNavigation}>
-                <Text style={styles.navBtnText}>Navigate</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.primaryBtn, styles.actionHalf]}
-                disabled={statusChangeLocked}
-                onPress={() => requestStatusChange('ARRIVED')}
-              >
-                <Text style={styles.primaryBtnText}>Arrived</Text>
-              </Pressable>
+        <GrabStyleBottomSheet compact>
+          <ScrollView
+            style={{ maxHeight: sheetScrollMax }}
+            contentContainerStyle={styles.sheetScrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+          >
+            <View style={styles.titleRow}>
+              <Text style={styles.headline} numberOfLines={1}>
+                {headerTitle(jobStatus, justAccepted)}
+              </Text>
+              <Text style={styles.statusPill}>{jobStatusLabelOf(request)}</Text>
             </View>
-          )}
-          {jobStatus === 'ARRIVED' && (
-            <>
-              {quoteBlocksStart ? (
-                <Text style={styles.quoteGate}>
-                  {quoteStatus === 'pending'
-                    ? 'Waiting for the owner to accept your quote…'
-                    : 'Send a quote above, then start the job after they accept.'}
+
+            <View style={styles.customerRow}>
+              <View style={styles.customerBlock}>
+                <Text style={styles.customerName} numberOfLines={1}>
+                  {request.owner?.name ?? 'Customer'}
                 </Text>
+                <Text style={styles.vehicle} numberOfLines={1}>
+                  {vehicleTitle(request)}
+                </Text>
+              </View>
+              {request.owner?.phone ? (
+                <Pressable
+                  style={styles.callChip}
+                  onPress={() => Linking.openURL(`tel:${request.owner!.phone}`)}
+                >
+                  <Text style={styles.callChipText}>Call</Text>
+                </Pressable>
               ) : null}
+            </View>
+
+            <Text style={styles.problem} numberOfLines={1}>
+              {problemNamesOf(request)}
+              {request.remarks ? ` · ${request.remarks}` : ''}
+            </Text>
+            <PaymentPlanLine request={request} />
+
+            {emergencyOn && jobStatus !== 'COMPLETED' ? (
+              <JobLifecycleStepper currentStatus={jobStatus} />
+            ) : null}
+
+            {emergencyOn && pendingStatus && pendingUndoSeconds > 0 ? (
+              <PendingJobStatusBanner
+                message={`Updating to “${headerTitle(pendingStatus, false)}”`}
+                secondsLeft={pendingUndoSeconds}
+                onUndo={clearPendingStatus}
+              />
+            ) : null}
+
+            <ActiveJobLocationSummary
+              tracking={tracking}
+              mechanicPermissionDenied={permissionDenied && shareLiveWithCustomer}
+              connectionLost={connectionLost}
+              viewerRole="mechanic"
+              compact
+              fallbackDistanceKm={displayDistanceKm}
+            />
+
+            <JobWorkDurationText
+              job={request.job}
+              jobStatus={jobStatus}
+              style={styles.workTime}
+              liveStyle={styles.workTimeLive}
+            />
+
+            {photoCount > 0 ? (
+              <Pressable style={styles.photosLink} onPress={() => setPhotosOpen(true)}>
+                <Text style={styles.photosLinkText}>View customer photos ({photoCount})</Text>
+              </Pressable>
+            ) : null}
+          </ScrollView>
+
+          <View style={styles.actions}>
+            {jobStatus === 'ACCEPTED' && (
+              <Pressable style={styles.primaryBtn} disabled={statusChangeLocked} onPress={startJourney}>
+                <Text style={styles.primaryBtnText}>Start journey</Text>
+              </Pressable>
+            )}
+            {jobStatus === 'ON_THE_WAY' && (
+              <View style={styles.actionRow}>
+                <Pressable style={[styles.navBtn, styles.actionHalf]} onPress={startNavigation}>
+                  <Text style={styles.navBtnText}>Navigate</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.primaryBtn, styles.actionHalf]}
+                  disabled={statusChangeLocked}
+                  onPress={() => requestStatusChange('ARRIVED')}
+                >
+                  <Text style={styles.primaryBtnText}>Arrived</Text>
+                </Pressable>
+              </View>
+            )}
+            {jobStatus === 'ARRIVED' && (
               <Pressable
-                style={[styles.primaryBtn, (statusChangeLocked || quoteBlocksStart) && styles.primaryBtnOff]}
-                disabled={statusChangeLocked || quoteBlocksStart}
+                style={[styles.primaryBtn, statusChangeLocked && styles.primaryBtnOff]}
+                disabled={statusChangeLocked}
                 onPress={() => requestStatusChange('IN_PROGRESS')}
               >
                 <Text style={styles.primaryBtnText}>Start job</Text>
               </Pressable>
-            </>
-          )}
-          {jobStatus === 'IN_PROGRESS' && (
-            <Pressable style={styles.primaryBtn} disabled={statusChangeLocked} onPress={openCompleteForm}>
-              <Text style={styles.primaryBtnText}>Complete job</Text>
-            </Pressable>
-          )}
-        </View>
-      </GrabStyleBottomSheet>
+            )}
+            {jobStatus === 'IN_PROGRESS' && (
+              <Pressable
+                style={styles.primaryBtn}
+                disabled={statusChangeLocked}
+                onPress={openCompleteForm}
+              >
+                <Text style={styles.primaryBtnText}>Complete job</Text>
+              </Pressable>
+            )}
+          </View>
+        </GrabStyleBottomSheet>
       </View>
 
       <Modal visible={photosOpen} transparent animationType="fade">
@@ -585,28 +554,29 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f8fafc' },
-  mapArea: { ...StyleSheet.absoluteFillObject, backgroundColor: '#cbd5e1' },
+  root: { flex: 1, backgroundColor: '#0f172a' },
+  mapArea: { ...StyleSheet.absoluteFill, backgroundColor: '#cbd5e1' },
   sheetDock: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  sheetScrollContent: { paddingBottom: 4 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#f8fafc' },
   muted: { color: '#64748b', marginBottom: 12, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  headline: { flex: 1, fontSize: 18, fontWeight: '800', color: '#166534' },
+  headline: { flex: 1, fontSize: 17, fontWeight: '800', color: '#166534' },
   statusPill: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#0284c7',
     backgroundColor: '#e0f2fe',
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 999,
     overflow: 'hidden',
   },
-  customerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 10 },
+  customerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 10 },
   customerBlock: { flex: 1, minWidth: 0 },
-  customerName: { fontSize: 17, fontWeight: '700', color: '#0f172a' },
-  vehicle: { fontSize: 14, fontWeight: '600', color: '#475569', marginTop: 2 },
-  problem: { fontSize: 13, color: '#64748b', marginTop: 6 },
+  customerName: { fontSize: 16, fontWeight: '700', color: '#0f172a' },
+  vehicle: { fontSize: 13, fontWeight: '600', color: '#475569', marginTop: 1 },
+  problem: { fontSize: 13, color: '#64748b', marginTop: 4 },
   workTime: { marginTop: 4 },
   workTimeLive: { color: '#b45309' },
   callChip: {
@@ -618,13 +588,12 @@ const styles = StyleSheet.create({
   callChipText: { color: '#fff', fontWeight: '800', fontSize: 14 },
   photosLink: { marginTop: 6 },
   photosLinkText: { color: '#0284c7', fontWeight: '600', fontSize: 13 },
-  actions: { marginTop: 12, gap: 8 },
+  actions: { marginTop: 10, gap: 8 },
   actionRow: { flexDirection: 'row', gap: 8 },
   actionHalf: { flex: 1 },
   primaryBtn: { backgroundColor: '#16a34a', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 10, alignItems: 'center' },
   primaryBtnOff: { opacity: 0.45 },
   primaryBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
-  quoteGate: { fontSize: 13, color: '#92400e', fontWeight: '600', lineHeight: 18, marginBottom: 4 },
   navBtn: { backgroundColor: '#0284c7', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 10, alignItems: 'center' },
   navBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   link: { color: '#0284c7', fontWeight: '600', marginTop: 12, textAlign: 'center' },

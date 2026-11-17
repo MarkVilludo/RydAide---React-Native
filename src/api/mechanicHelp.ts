@@ -59,18 +59,6 @@ export async function declineHelpRequest(id: number, reason?: string): Promise<v
   await api.post(`/mechanic/help-requests/${id}/decline`, reason ? { reason } : {});
 }
 
-export async function submitServiceQuote(
-  id: number,
-  amount_php: number,
-  description?: string,
-): Promise<HelpRequest> {
-  const { data } = await api.post(`/mechanic/help-requests/${id}/quote`, {
-    amount_php,
-    description,
-  });
-  return data.data.help_request;
-}
-
 export async function updateJobStatus(
   id: number,
   status: string,
