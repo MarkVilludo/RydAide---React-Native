@@ -50,6 +50,8 @@ const config = {
     userInterfaceStyle: 'light',
     icon: './assets/icon.png',
     package: androidPackage,
+    // Android 16+ local-network prompt for Metro (emulator 10.0.2.2 / adb reverse).
+    permissions: ['android.permission.ACCESS_LOCAL_NETWORK'],
     // Google Play requires a unique, increasing integer per upload. EAS remote
     // + autoIncrement on store/internal profiles bumps this; keep a floor here.
     versionCode: 8,

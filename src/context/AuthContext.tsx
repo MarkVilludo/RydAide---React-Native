@@ -114,8 +114,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setBootError(bootErrorOf(error));
       }
     } finally {
-      // Stay "loading" on a retryable failure so nothing behind the loading screen renders.
-      if (!failed) setIsLoading(false);
+      // End bootstrap even on retryable errors — SplashGate shows the error on the branded screen.
+      setIsLoading(false);
     }
   }, []);
 

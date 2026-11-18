@@ -276,7 +276,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.primaryBorder,
   },
-  preferredIcon: { width: 72, alignItems: 'flex-start', justifyContent: 'center' },
+  /** GCash wordmark at 22px tall ≈ 91px wide — reserve full width so it isn't squashed. */
+  preferredIcon: { width: 92, flexShrink: 0, alignItems: 'flex-start', justifyContent: 'center' },
   preferredLabel: { fontSize: 17, fontWeight: '800', color: colors.primaryInk },
   preferredHint: { fontSize: 13, color: colors.muted, marginTop: 2 },
   card: {
@@ -289,7 +290,7 @@ const styles = StyleSheet.create({
   },
   cardPreferred: { borderColor: colors.primary, borderWidth: 1.5 },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  cardIcon: { width: 68, alignItems: 'flex-start', justifyContent: 'center' },
+  cardIcon: { width: 92, flexShrink: 0, alignItems: 'flex-start', justifyContent: 'center' },
   cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
   cardSub: { fontSize: 14, color: colors.muted, marginTop: 2 },
   cardMeta: { fontSize: 12, color: colors.mutedSoft, marginTop: 2 },

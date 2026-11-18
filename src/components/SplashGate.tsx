@@ -1,14 +1,16 @@
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Platform, StyleSheet, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useLaunchSteps } from '../utils/launchSteps';
 import { LAUNCH_EXIT_MS, LAUNCH_MIN_DISPLAY_MS } from '../constants/launchBrand';
 import { AppBootstrapSplash } from './AppBootstrapSplash';
 
-void SplashScreen.preventAutoHideAsync().catch(() => {
-  /* Expo Go or web may not support native splash the same way */
-});
+if (Platform.OS !== 'android') {
+  void SplashScreen.preventAutoHideAsync().catch(() => {
+    /* Expo Go or web may not support native splash the same way */
+  });
+}
 
 type Props = {
   children: React.ReactNode;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, ImageStyle, StyleProp, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleProp, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import type { PaymentType } from '../api/paymentMethods';
 import { colors } from '../theme/colors';
 import { paymentIcon } from '../utils/paymentMethods';
@@ -24,24 +24,34 @@ type Props = {
   type: PaymentType | string | null | undefined;
   /** Target height for the logo mark (wordmark scales by aspect ratio). */
   height?: number;
-  style?: StyleProp<ImageStyle>;
+  /** Keeps wide wordmarks inside narrow list columns (e.g. Digital wallets row). */
+  maxWidth?: number;
+  style?: StyleProp<ViewStyle>;
   /** When true, show emoji fallback for cash/other instead of nothing. */
   emojiFallback?: boolean;
 };
 
 /** GCash / Maya wordmarks; cash and other wallets still use emoji via `paymentIcon`. */
-export function PaymentWalletLogo({ type, height = 20, style, emojiFallback = true }: Props) {
+export function PaymentWalletLogo({ type, height = 20, maxWidth, style, emojiFallback = true }: Props) {
   const brand = normalizeWalletType(type);
   if (brand) {
     const meta = LOGOS[brand];
-    const width = height * meta.aspect;
+    let boxWidth = height * meta.aspect;
+    let boxHeight = height;
+    if (maxWidth != null && boxWidth > maxWidth) {
+      const scale = maxWidth / boxWidth;
+      boxWidth = maxWidth;
+      boxHeight = height * scale;
+    }
     return (
-      <Image
-        source={meta.source}
-        style={[{ width, height }, style]}
-        resizeMode="contain"
-        accessibilityLabel={meta.label}
-      />
+      <View style={[{ width: boxWidth, height: boxHeight }, style]} accessibilityLabel={meta.label}>
+        <Image
+          source={meta.source}
+          style={{ width: boxWidth, height: boxHeight }}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+        />
+      </View>
     );
   }
   if (!emojiFallback) return null;
