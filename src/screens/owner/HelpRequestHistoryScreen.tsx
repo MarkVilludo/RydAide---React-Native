@@ -11,6 +11,7 @@ import { logger } from '../../utils/logger';
 import type { OwnerStackParamList } from '../../navigation/types';
 import { isOwnerLiveHelpRequest, jobStatusOf, problemNamesOf } from '../../utils/helpRequestUi';
 import { jobWorkDurationLabel } from '../../utils/jobWorkDuration';
+import { ownerNeedsReview } from '../../utils/helpReview';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'HelpRequestHistory'>;
 
@@ -131,7 +132,14 @@ export function HelpRequestHistoryScreen({ navigation }: Props) {
         >
           <View style={styles.cardHead}>
             <Text style={styles.id}>Request #{item.id}</Text>
-            <Text style={[styles.status, statusTone(item.status)]}>{item.status_label ?? item.status}</Text>
+            <View style={styles.statusRow}>
+              {ownerNeedsReview(item) ? (
+                <Text style={styles.rateBadge} accessibilityLabel="Rate this job">
+                  Rate
+                </Text>
+              ) : null}
+              <Text style={[styles.status, statusTone(item.status)]}>{item.status_label ?? item.status}</Text>
+            </View>
           </View>
           <Text style={styles.type}>{item.request_type_label ?? item.request_type}</Text>
           <Text style={styles.line}>Vehicle: {vehicleLabel(item)}</Text>
@@ -162,7 +170,11 @@ export function HelpRequestHistoryScreen({ navigation }: Props) {
           ) : null}
           {item.cancelled_at && <Text style={styles.meta}>Cancelled: {formatDate(item.cancelled_at)}</Text>}
           <Text style={styles.tapHint}>
-            {isOwnerLiveHelpRequest(item) ? 'Tap to track live' : 'Tap for full details'}
+            {ownerNeedsReview(item)
+              ? 'Tap to rate your mechanic'
+              : isOwnerLiveHelpRequest(item)
+                ? 'Tap to track live'
+                : 'Tap for full details'}
           </Text>
         </Pressable>
       )}
@@ -189,6 +201,17 @@ const styles = StyleSheet.create({
   },
   cardPressed: { opacity: 0.85 },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 0 },
+  rateBadge: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.onPrimary,
+    backgroundColor: colors.busy,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    overflow: 'hidden',
+  },
   id: { ...typeScale.bodyStrong, flexShrink: 1 },
   type: { color: '#475569', marginTop: spacing.xxs, fontWeight: '600', fontSize: 14 },
   status: {

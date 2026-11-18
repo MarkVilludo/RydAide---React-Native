@@ -24,8 +24,9 @@ import {
 } from '../../api/helpRequests';
 import { CancelHelpRequestButton } from '../../components/CancelHelpRequestButton';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
-import { HelpRequestCompletionPanel } from '../../components/HelpRequestCompletionPanel';
+import { OwnerHelpCompletionSection } from '../../components/OwnerHelpCompletionSection';
 import { OwnerPayMechanicCard, PaymentPlanLine } from '../../components/JobPaymentCards';
+import { colors } from '../../theme/tokens';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { useLiveHelpRequestRefresh } from '../../hooks/useLiveHelpRequestRefresh';
@@ -46,7 +47,7 @@ import { liveSheetScrollMax } from '../../utils/mapZoom';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'HelpRequestDetail'>;
 
-export function HelpRequestDetailScreen({ route }: Props) {
+export function HelpRequestDetailScreen({ route, navigation }: Props) {
   const { height: windowHeight } = useWindowDimensions();
   const sheetScrollMax = liveSheetScrollMax(windowHeight);
   const { helpRequestId } = route.params;
@@ -132,6 +133,42 @@ export function HelpRequestDetailScreen({ route }: Props) {
     request.mechanic?.mechanic_name ||
     request.mechanic?.business_name ||
     'Mechanic';
+
+  if (canReview) {
+    return (
+      <View style={styles.completionRoot}>
+        <KeyboardAwareScrollView
+          ref={reviewScrollRef}
+          style={styles.completionScroll}
+          extraBottomPadding={120}
+          contentContainerStyle={styles.completionScrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <OwnerHelpCompletionSection
+            request={request}
+            reviewSubmitting={reviewSubmitting}
+            scrollRef={reviewScrollRef}
+            onCommentFocus={scrollReviewIntoView}
+            onUpdated={setRequest}
+            onDone={() => navigation.navigate('OwnerHome')}
+            onViewHistory={() => navigation.navigate('HelpRequestHistory')}
+            onSubmitReview={async (rating, comment) => {
+              setReviewSubmitting(true);
+              try {
+                await submitHelpRequestReview(helpRequestId, rating, comment);
+                const updated = await fetchHelpRequest(helpRequestId);
+                setRequest(updated);
+              } catch (e) {
+                Alert.alert('Review', getApiErrorMessage(e));
+              } finally {
+                setReviewSubmitting(false);
+              }
+            }}
+          />
+        </KeyboardAwareScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -258,28 +295,8 @@ export function HelpRequestDetailScreen({ route }: Props) {
               <HelpRequestPhotoGallery media={request.media} title="Problem photos" compact />
             ) : null}
 
-            {completed || ['ARRIVED', 'IN_PROGRESS'].includes(jobStatus) ? (
+            {!completed && ['ARRIVED', 'IN_PROGRESS'].includes(jobStatus) ? (
               <OwnerPayMechanicCard request={request} onUpdated={setRequest} />
-            ) : null}
-
-            {canReview ? (
-              <HelpRequestCompletionPanel
-                request={request}
-                submitting={reviewSubmitting}
-                onCommentFocus={scrollReviewIntoView}
-                onSubmitReview={async (rating, comment) => {
-                  setReviewSubmitting(true);
-                  try {
-                    await submitHelpRequestReview(helpRequestId, rating, comment);
-                    const updated = await fetchHelpRequest(helpRequestId);
-                    setRequest(updated);
-                  } catch (e) {
-                    Alert.alert('Review', getApiErrorMessage(e));
-                  } finally {
-                    setReviewSubmitting(false);
-                  }
-                }}
-              />
             ) : null}
           </KeyboardAwareScrollView>
           {canCancel ? <CancelHelpRequestButton onPress={confirmCancel} /> : null}
@@ -300,6 +317,9 @@ function TimelineRow({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0f172a' },
+  completionRoot: { flex: 1, backgroundColor: colors.bg },
+  completionScroll: { flex: 1 },
+  completionScrollContent: { padding: 16, paddingBottom: 32 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' },
   mapArea: { ...StyleSheet.absoluteFill, backgroundColor: '#cbd5e1' },
   sheetDock: {

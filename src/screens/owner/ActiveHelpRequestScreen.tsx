@@ -28,8 +28,9 @@ import { ActiveJobNotificationHint } from '../../components/ActiveJobNotificatio
 import { ActiveJobReconnectBanner } from '../../components/ActiveJobReconnectBanner';
 import { AndroidHideNavigationBarWhenFocused } from '../../components/AndroidHideNavigationBarWhenFocused';
 import { CancelHelpRequestButton } from '../../components/CancelHelpRequestButton';
-import { HelpRequestCompletionPanel } from '../../components/HelpRequestCompletionPanel';
-import { OwnerPayMechanicCard, PaymentPlanLine } from '../../components/JobPaymentCards';
+import { OwnerHelpCompletionSection } from '../../components/OwnerHelpCompletionSection';
+import { PaymentPlanLine } from '../../components/JobPaymentCards';
+import { colors } from '../../theme/tokens';
 import {
   KeyboardAwareScrollView,
   type KeyboardAwareScrollViewRef,
@@ -343,10 +344,10 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
                 {activeJourneyHeadline(request)}
               </Text>
 
-              <Text style={styles.plansChangeHint} numberOfLines={2}>
+              <Text style={styles.plansChangeHint} numberOfLines={1}>
                 {request.mechanic.phone
-                  ? 'Call your mechanic if plans change — cancel isn’t available in-app.'
-                  : 'Contact your mechanic if plans change — cancel isn’t available in-app.'}
+                  ? 'Call your mechanic if plans change.'
+                  : 'Contact your mechanic if plans change.'}
               </Text>
 
               <View style={styles.personRow}>
@@ -390,9 +391,11 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
                 />
               )}
 
-              {connectionLost ? <ActiveJobReconnectBanner onRetry={refreshNow} retrying={refreshing} /> : null}
-
-              <ActiveJobNotificationHint />
+              {connectionLost ? (
+                <ActiveJobReconnectBanner onRetry={refreshNow} retrying={refreshing} />
+              ) : (
+                <ActiveJobNotificationHint />
+              )}
 
               {photoCount > 0 ? (
                 <Pressable style={styles.photosLink} onPress={() => setPhotosOpen(true)}>
@@ -465,25 +468,63 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
     );
   }
 
+  if (completed && !failedMatch && !cancelled && request.mechanic) {
+    return (
+    <View style={styles.completionRoot}>
+      <KeyboardAwareScrollView
+        ref={reviewScrollRef}
+        style={styles.completionScroll}
+        extraBottomPadding={120}
+        contentContainerStyle={styles.completionScrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <OwnerHelpCompletionSection
+          request={request}
+          reviewSubmitting={reviewSubmitting}
+          scrollRef={reviewScrollRef}
+          onCommentFocus={scrollReviewIntoView}
+          onUpdated={setRequest}
+          onDone={() => navigation.navigate('OwnerHome')}
+          onViewHistory={() => navigation.navigate('HelpRequestHistory')}
+          onSubmitReview={async (rating, comment) => {
+            setReviewSubmitting(true);
+            try {
+              await submitHelpRequestReview(helpRequestId, rating, comment);
+              const updated = await fetchHelpRequest(helpRequestId);
+              setRequest(updated);
+            } catch (e) {
+              Alert.alert('Review', getApiErrorMessage(e));
+            } finally {
+              setReviewSubmitting(false);
+            }
+          }}
+        />
+      </KeyboardAwareScrollView>
+    </View>
+    );
+  }
+
   return (
     <View style={styles.root}>
-      <View style={styles.mapWrap}>
-        <View style={styles.mapPlaceholder}>
-          <HelpRequestMap
-            request={{
-              latitude: request.latitude,
-              longitude: request.longitude,
-              title: 'You',
-            }}
-            requestPinLabel="You"
-            height={280}
-          />
+      {!completed ? (
+        <View style={styles.mapWrap}>
+          <View style={styles.mapPlaceholder}>
+            <HelpRequestMap
+              request={{
+                latitude: request.latitude,
+                longitude: request.longitude,
+                title: 'You',
+              }}
+              requestPinLabel="You"
+              height={280}
+            />
+          </View>
         </View>
-      </View>
+      ) : null}
 
       <KeyboardAwareScrollView
         ref={reviewScrollRef}
-        style={styles.sheetScroll}
+        style={[styles.sheetScroll, completed && styles.sheetScrollFull]}
         extraBottomPadding={completed ? 160 : 0}
         contentContainerStyle={styles.sheetScrollContent}
       >
@@ -493,7 +534,7 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
             <Text style={styles.problem}>{problemNamesOf(request)}</Text>
           ) : null}
 
-          <HelpJourneyTimeline steps={journeySteps} compact />
+          {!completed ? <HelpJourneyTimeline steps={journeySteps} compact /> : null}
 
           {(failedMatch || cancelled) && (
             <View style={styles.terminalCard}>
@@ -548,28 +589,6 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
             </View>
           )}
 
-          {completed && <OwnerPayMechanicCard request={request} onUpdated={setRequest} />}
-
-          {completed && (
-            <HelpRequestCompletionPanel
-              request={request}
-              submitting={reviewSubmitting}
-              onCommentFocus={scrollReviewIntoView}
-              onSubmitReview={async (rating, comment) => {
-                setReviewSubmitting(true);
-                try {
-                  await submitHelpRequestReview(helpRequestId, rating, comment);
-                  const updated = await fetchHelpRequest(helpRequestId);
-                  setRequest(updated);
-                } catch (e) {
-                  Alert.alert('Review', getApiErrorMessage(e));
-                } finally {
-                  setReviewSubmitting(false);
-                }
-              }}
-            />
-          )}
-
           {!completed && (
             <>
               <Text style={styles.summaryText}>{vehicleWithDetails(request)}</Text>
@@ -587,6 +606,10 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0f172a' },
+  completionRoot: { flex: 1, backgroundColor: colors.bg },
+  completionScroll: { flex: 1 },
+  completionScrollContent: { padding: 16, paddingBottom: 32 },
+  sheetScrollFull: { flex: 1, backgroundColor: colors.bg },
   loadingRoot: { flex: 1 },
   loadingReconnect: { paddingHorizontal: 16, paddingBottom: 24 },
   loadingError: { backgroundColor: '#fef2f2' },

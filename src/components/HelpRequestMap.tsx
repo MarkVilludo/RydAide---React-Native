@@ -82,12 +82,26 @@ export function HelpRequestMap({
   const mechanicMarkerCoord = overlapLayout?.mechanicDisplay ?? mechanicCoord;
 
   const fallbackRegion = useMemo(
-    () => buildMapRegion(zoomPreset, request, requestCoord, mechanicMarkerCoord),
-    [zoomPreset, request, requestCoord, mechanicMarkerCoord],
+    () => buildMapRegion(zoomPreset, requestCoord, requestCoord, mechanicMarkerCoord),
+    [zoomPreset, requestCoord.latitude, requestCoord.longitude, mechanicMarkerCoord],
   );
+
+  const regionKey = useMemo(() => {
+    const m = mechanicMarkerCoord;
+    return [
+      zoomPreset,
+      requestCoord.latitude.toFixed(5),
+      requestCoord.longitude.toFixed(5),
+      m ? `${m.latitude.toFixed(5)},${m.longitude.toFixed(5)}` : 'solo',
+    ].join('|');
+  }, [zoomPreset, requestCoord.latitude, requestCoord.longitude, mechanicMarkerCoord]);
 
   const [latitudeDelta, setLatitudeDelta] = useState(fallbackRegion.latitudeDelta);
   const [tracksMarkers, setTracksMarkers] = useState(true);
+  /** User pinched/panned — do not snap the camera back until pins move or preset changes. */
+  const userAdjustedViewRef = useRef(false);
+  const ignoreUserGestureUntilRef = useRef(0);
+  const lastRegionDeltaRef = useRef(fallbackRegion.latitudeDelta);
 
   // Detail screens (Request details) use a tighter zoom — keep pins smaller so they don't dominate.
   const iconSize = useMemo(
@@ -107,9 +121,11 @@ export function HelpRequestMap({
   }, []);
 
   useEffect(() => {
+    userAdjustedViewRef.current = false;
     setLatitudeDelta(fallbackRegion.latitudeDelta);
+    lastRegionDeltaRef.current = fallbackRegion.latitudeDelta;
     scheduleTrackReset();
-  }, [fallbackRegion.latitudeDelta, scheduleTrackReset]);
+  }, [regionKey, fallbackRegion.latitudeDelta, scheduleTrackReset]);
 
   useEffect(() => {
     scheduleTrackReset();
@@ -128,9 +144,25 @@ export function HelpRequestMap({
     (region: Region) => {
       setLatitudeDelta(region.latitudeDelta);
       scheduleTrackReset();
+      if (Date.now() < ignoreUserGestureUntilRef.current) {
+        lastRegionDeltaRef.current = region.latitudeDelta;
+        return;
+      }
+      const prev = lastRegionDeltaRef.current;
+      const zoomChanged = Math.abs(region.latitudeDelta - prev) / Math.max(prev, 0.0001) > 0.04;
+      lastRegionDeltaRef.current = region.latitudeDelta;
+      if (zoomChanged) {
+        userAdjustedViewRef.current = true;
+      }
     },
     [scheduleTrackReset],
   );
+
+  const onPanDrag = useCallback(() => {
+    if (Date.now() >= ignoreUserGestureUntilRef.current) {
+      userAdjustedViewRef.current = true;
+    }
+  }, []);
 
   const computedDistanceKm = useMemo(() => {
     if (liveDistanceKm != null && Number.isFinite(liveDistanceKm)) {
@@ -152,6 +184,7 @@ export function HelpRequestMap({
   const badgeTop = ownerBadge ? statusBarTopInset() + 48 : 10;
 
   const lastFitKey = useRef<string | null>(null);
+  const lastSoloFitKey = useRef<string | null>(null);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -179,11 +212,17 @@ export function HelpRequestMap({
         mechanicMarkerCoord.longitude.toFixed(4),
         zoomPreset,
       ].join('|');
-      const shouldAnimate = lastFitKey.current == null || zoomPreset !== 'live';
       if (fitKey === lastFitKey.current) {
         return;
       }
+      if (userAdjustedViewRef.current && zoomPreset !== 'live') {
+        lastFitKey.current = fitKey;
+        return;
+      }
+      const shouldAnimate = lastFitKey.current == null || zoomPreset !== 'live';
       lastFitKey.current = fitKey;
+      userAdjustedViewRef.current = false;
+      ignoreUserGestureUntilRef.current = Date.now() + 900;
       map.fitToCoordinates([requestCoord, mechanicMarkerCoord], {
         edgePadding,
         animated: shouldAnimate,
@@ -192,12 +231,26 @@ export function HelpRequestMap({
     }
 
     lastFitKey.current = null;
+    if (lastSoloFitKey.current === regionKey) {
+      return;
+    }
+    if (userAdjustedViewRef.current) {
+      lastSoloFitKey.current = regionKey;
+      return;
+    }
+    lastSoloFitKey.current = regionKey;
+    ignoreUserGestureUntilRef.current = Date.now() + 600;
     map.animateToRegion(fallbackRegion, 280);
   }, [
-    requestCoord,
+    regionKey,
+    requestCoord.latitude,
+    requestCoord.longitude,
     mechanicCoord,
     mechanicMarkerCoord,
-    fallbackRegion,
+    fallbackRegion.latitude,
+    fallbackRegion.longitude,
+    fallbackRegion.latitudeDelta,
+    fallbackRegion.longitudeDelta,
     zoomPreset,
     ownerBadge,
     fill,
@@ -238,6 +291,7 @@ export function HelpRequestMap({
         provider={androidMapsProvider()}
         initialRegion={fallbackRegion}
         onRegionChangeComplete={onRegionChangeComplete}
+        onPanDrag={onPanDrag}
         showsUserLocation={showMyLocation}
         showsMyLocationButton={showMyLocation}
         mapType="standard"

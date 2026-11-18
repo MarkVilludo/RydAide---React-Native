@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -52,6 +52,7 @@ import { showAppToast } from '../../components/AppToast';
 import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 import { needHelpInitialStep } from '../../utils/needHelpDraft';
 import { ServiceAreaCallout } from '../../components/ServiceAreaCallout';
+import { colors } from '../../theme/tokens';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'NeedHelp'>;
 
@@ -468,6 +469,9 @@ export function NeedHelpScreen({ navigation, route }: Props) {
             );
         }
       }
+      showAppToast(
+        emergency ? 'Emergency help request sent — finding a mechanic.' : 'Help request sent — finding a mechanic.',
+      );
       navigation.replace('ActiveHelpRequest', {
         helpRequestId: helpRequest.id,
         initialRequest: helpRequest,
@@ -499,6 +503,21 @@ export function NeedHelpScreen({ navigation, route }: Props) {
     [landmark.trim(), address].filter(Boolean).join(' · ') ||
     (lat != null && lng != null ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : '');
 
+  const reviewExtraLine = useMemo(() => {
+    const parts: string[] = [];
+    const answered = questions.filter((q) => answers[q.id]).length;
+    if (questions.length > 0) {
+      parts.push(`${answered}/${questions.length} answers`);
+    }
+    if (photoUris.length > 0) {
+      parts.push(`${photoUris.length} photo${photoUris.length > 1 ? 's' : ''}`);
+    }
+    if (remarks.trim()) {
+      parts.push(remarks.trim().length >= remarksMin ? 'Notes added' : 'Notes (add a bit more on Problem step)');
+    }
+    return parts.length > 0 ? parts.join(' · ') : 'None';
+  }, [questions, answers, photoUris.length, remarks, remarksMin]);
+
   return (
     <View style={styles.root}>
       <View style={styles.progressHeader}>
@@ -512,6 +531,17 @@ export function NeedHelpScreen({ navigation, route }: Props) {
               style={[styles.progressDot, i <= stepIndex && styles.progressDotOn]}
               accessibilityLabel={`${STEP_TITLES[s]}${i === stepIndex ? ', current' : i < stepIndex ? ', completed' : ''}`}
             />
+          ))}
+        </View>
+        <View style={styles.progressLabels}>
+          {STEPS.map((s, i) => (
+            <Text
+              key={`${s}-label`}
+              style={[styles.progressLabel, i === stepIndex && styles.progressLabelOn]}
+              numberOfLines={1}
+            >
+              {STEP_TITLES[s]}
+            </Text>
           ))}
         </View>
       </View>
@@ -535,7 +565,7 @@ export function NeedHelpScreen({ navigation, route }: Props) {
           </View>
         ) : null}
 
-        {step === 'vehicle' ? <ServiceAreaCallout compact /> : null}
+        {step === 'vehicle' || step === 'review' ? <ServiceAreaCallout compact /> : null}
 
         {step === 'vehicle' && (
           <NeedHelpVehicleStep
@@ -630,7 +660,7 @@ export function NeedHelpScreen({ navigation, route }: Props) {
               style={styles.input}
               multiline
               placeholder={`Describe the problem (${remarksMin}+ characters)…`}
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={colors.mutedSoft}
               value={remarks}
               onChangeText={setRemarks}
             />
@@ -660,7 +690,7 @@ export function NeedHelpScreen({ navigation, route }: Props) {
             <TextInput
               style={styles.singleLineInput}
               placeholder="e.g. beside 7-Eleven, northbound lane"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={colors.mutedSoft}
               value={landmark}
               onChangeText={setLandmark}
             />
@@ -688,28 +718,7 @@ export function NeedHelpScreen({ navigation, route }: Props) {
                 value={selectedNames || '—'}
                 onEdit={() => setStep('problem')}
               />
-              <ReviewRow label="Details" value={remarks || '—'} onEdit={() => setStep('problem')} />
-              {questions.length > 0 ? (
-                <View style={styles.reviewAnswersBlock}>
-                  <Text style={styles.reviewLabel}>Your answers</Text>
-                  {questions.map((q) => (
-                    <Pressable key={q.id} onPress={() => setStep('problem')} accessibilityRole="button">
-                      <Text style={styles.reviewAnswerQ}>{q.question_text}</Text>
-                      <Text style={styles.reviewAnswerA}>
-                        {answers[q.id] ? formatAnswerLabel(answers[q.id]) : '—'}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              ) : null}
-              {photoUris.length > 0 ? (
-                <View style={styles.reviewPhotosBlock}>
-                  <Pressable onPress={() => setStep('problem')} accessibilityRole="button">
-                    <Text style={styles.reviewLabel}>Photos</Text>
-                  </Pressable>
-                  <HelpRequestPhotoGallery localUris={photoUris} compact />
-                </View>
-              ) : null}
+              <ReviewRow label="Extra details" value={reviewExtraLine} onEdit={() => setStep('problem')} />
               <HelpPaymentPicker
                 value={paymentChoice}
                 onChange={setPaymentChoice}
@@ -821,6 +830,15 @@ const styles = StyleSheet.create({
   progressRow: { flexDirection: 'row', gap: 6 },
   progressDot: { flex: 1, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0' },
   progressDotOn: { backgroundColor: '#0284c7' },
+  progressLabels: { flexDirection: 'row', marginTop: 6, gap: 4 },
+  progressLabel: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.mutedSoft,
+    textAlign: 'center',
+  },
+  progressLabelOn: { color: colors.primaryInk, fontWeight: '800' },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 32 },
   title: { fontSize: 22, fontWeight: '800', color: '#0f172a', marginBottom: 16 },
