@@ -38,6 +38,8 @@ import {
 } from '../../services/mechanicProStore';
 import { useMechanicProStorePrices } from '../../hooks/useMechanicProStorePrices';
 import { MECHANIC_PRO_SUBSCRIPTION_ID } from '../../constants/storeBilling';
+import { MechanicFreePlanExplainer } from '../../components/MechanicFreePlanExplainer';
+import { SupportHelpFooter } from '../../components/SupportHelpFooter';
 import {
   MECHANIC_PRO_MONTHLY_PRICE_PHP,
   MECHANIC_PRO_YEARLY_PRICE_PHP,
@@ -474,6 +476,9 @@ export function MechanicSubscriptionScreen(_props: Props) {
               </Pressable>
             ) : null}
           </View>
+          {!sessionExpired ? (
+            <SupportHelpFooter problemCategory="Payment" problemHint="Mechanic Pro / subscription screen failed to load." />
+          ) : null}
         </View>
       ) : (
         <View
@@ -504,6 +509,12 @@ export function MechanicSubscriptionScreen(_props: Props) {
           ) : null}
         </View>
       )}
+
+      {!isPro ? (
+        <View style={styles.card}>
+          <MechanicFreePlanExplainer freeTotal={freeTotal} freeLeft={freeLeft} limitsOff={limitsOff} />
+        </View>
+      ) : null}
 
       {/* Free vs Pro */}
       <View style={styles.card}>

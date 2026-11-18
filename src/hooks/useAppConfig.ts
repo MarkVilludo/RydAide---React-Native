@@ -5,13 +5,22 @@ export function useAppConfig() {
   // Start from the launch-preloaded config so dashboards don't paint once with every feature off.
   const [config, setConfig] = useState<AppConfig | null>(() => getCachedAppConfig());
   const [loading, setLoading] = useState(() => getCachedAppConfig() == null);
+  const [refreshFailed, setRefreshFailed] = useState(false);
 
   const reload = useCallback(() => {
     if (getCachedAppConfig() == null) setLoading(true);
     return fetchAppConfig(true)
-      .then(setConfig)
+      .then((next) => {
+        setConfig(next);
+        setRefreshFailed(false);
+        return next;
+      })
       // Keep the last good config on a failed refresh instead of switching every feature off.
-      .catch(() => setConfig(getCachedAppConfig()))
+      .catch(() => {
+        setRefreshFailed(true);
+        setConfig(getCachedAppConfig());
+        return getCachedAppConfig();
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -19,5 +28,5 @@ export function useAppConfig() {
     reload();
   }, [reload]);
 
-  return { config, loading, reload };
+  return { config, loading, reload, refreshFailed };
 }

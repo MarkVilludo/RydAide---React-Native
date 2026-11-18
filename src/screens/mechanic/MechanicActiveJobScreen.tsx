@@ -3,6 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  AppState,
   Linking,
   Modal,
   Pressable,
@@ -17,6 +18,8 @@ import { getApiErrorMessage } from '../../api/client';
 import type { HelpRequest } from '../../api/helpRequests';
 import { fetchMechanicHelpRequest, updateJobStatus } from '../../api/mechanicHelp';
 import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSummary';
+import { ActiveJobNotificationHint } from '../../components/ActiveJobNotificationHint';
+import { ActiveJobReconnectBanner } from '../../components/ActiveJobReconnectBanner';
 import { CenteredLoading } from '../../components/CenteredLoading';
 import { GrabStyleBottomSheet } from '../../components/GrabStyleBottomSheet';
 import { JobLifecycleStepper } from '../../components/JobLifecycleStepper';
@@ -45,6 +48,7 @@ import {
   vehicleWithDetails,
 } from '../../utils/helpRequestUi';
 import { formatJobWorkDuration } from '../../utils/jobWorkDuration';
+import { useActiveJobForegroundNotifications } from '../../hooks/useActiveJobForegroundNotifications';
 import { liveSheetScrollMax } from '../../utils/mapZoom';
 
 const STATUS_UNDO_SECONDS = 4;
@@ -88,6 +92,7 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
   const [request, setRequest] = useState<HelpRequest | null>(initialRequest ?? null);
   const [loading, setLoading] = useState(!initialRequest);
   const [connectionLost, setConnectionLost] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [acting, setActing] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
   const [completeStep, setCompleteStep] = useState<'form' | 'summary'>('form');
@@ -124,6 +129,13 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
         ? 2000
         : 5000;
 
+  const refreshNow = useCallback(() => {
+    setRefreshing(true);
+    void load().finally(() => setRefreshing(false));
+  }, [load]);
+
+  useActiveJobForegroundNotifications(helpRequestId, refreshNow);
+
   useFocusEffect(
     useCallback(() => {
       load();
@@ -131,6 +143,15 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
       return () => clearInterval(timer);
     }, [load, refreshMs]),
   );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void load();
+      }
+    });
+    return () => sub.remove();
+  }, [load]);
   const shareLiveWithCustomer = ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED'].includes(jobStatus);
   const mapEnabled = !!request && jobStatus !== 'COMPLETED';
 
@@ -293,8 +314,14 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
   if (!request) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.muted}>{connectionLost ? 'Connection lost' : 'Job not found'}</Text>
-        <Pressable style={styles.primaryBtn} onPress={() => load()}>
+        {connectionLost ? (
+          <View style={styles.reconnectWrap}>
+            <ActiveJobReconnectBanner onRetry={refreshNow} retrying={refreshing} />
+          </View>
+        ) : (
+          <Text style={styles.muted}>Job not found</Text>
+        )}
+        <Pressable style={styles.primaryBtn} onPress={() => refreshNow()}>
           <Text style={styles.primaryBtnText}>Retry</Text>
         </Pressable>
         <Pressable onPress={() => navigation.navigate('MechanicHome')}>
@@ -385,6 +412,10 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
               compact
               fallbackDistanceKm={displayDistanceKm}
             />
+
+            {connectionLost ? <ActiveJobReconnectBanner onRetry={refreshNow} retrying={refreshing} /> : null}
+
+            <ActiveJobNotificationHint />
 
             <JobWorkDurationText
               job={request.job}
@@ -559,6 +590,7 @@ const styles = StyleSheet.create({
   sheetDock: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   sheetScrollContent: { paddingBottom: 4 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#f8fafc' },
+  reconnectWrap: { width: '100%', maxWidth: 420, marginBottom: 16 },
   muted: { color: '#64748b', marginBottom: 12, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   headline: { flex: 1, fontSize: 17, fontWeight: '800', color: '#166534' },

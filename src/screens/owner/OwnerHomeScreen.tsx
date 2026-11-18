@@ -21,6 +21,7 @@ import { jobStatusLabelOf, vehicleTitle } from '../../utils/helpRequestUi';
 import { DrawerIcon } from '../../components/DrawerIcons';
 import { colors, touch } from '../../theme/tokens';
 import { BrandLogo } from '../../components/BrandLogo';
+import { ServiceAreaCallout } from '../../components/ServiceAreaCallout';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'OwnerHome'>;
 
@@ -770,8 +771,13 @@ export function OwnerHomeScreen({ navigation }: Props) {
               </View>
 
               <View style={[styles.ctaBlock, { gap: layout.ctaGap }]}>
-                {!hasActiveBanner && config?.rollout.area_label && !layout.dense ? (
-                  <Text style={styles.rolloutLineOnDark}>Live in {config.rollout.area_label}</Text>
+                {!hasActiveBanner && !layout.dense ? (
+                  <View style={styles.rolloutCallout}>
+                    <ServiceAreaCallout compact hideWhenOnlyArea />
+                    {!config?.rollout.note?.trim() && config?.rollout.area_label ? (
+                      <Text style={styles.rolloutLineOnDark}>Live in {config.rollout.area_label}</Text>
+                    ) : null}
+                  </View>
                 ) : null}
 
                 {hasActiveBanner && activeRequest ? (
@@ -834,7 +840,8 @@ export function OwnerHomeScreen({ navigation }: Props) {
           <FadeIn delay={80} style={styles.heroQuiet}>
             <View style={styles.quietInner}>
               <Text style={[styles.quietTitle, { fontSize: layout.titleSize + 2 }]}>Find nearby</Text>
-              {config?.rollout.area_label ? (
+              <ServiceAreaCallout compact />
+              {config?.rollout.area_label && !config?.rollout.note?.trim() ? (
                 <Text style={styles.quietArea}>{config.rollout.area_label}</Text>
               ) : null}
               <View style={[styles.quietActions, { marginTop: layout.sectionGap + 8 }]}>
@@ -1000,6 +1007,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   ctaBlock: { width: '100%', flexShrink: 0 },
+  rolloutCallout: { width: '100%', gap: 6, marginBottom: 4 },
   rolloutLineOnDark: {
     textAlign: 'center',
     fontSize: 12,

@@ -4,7 +4,7 @@ import type { JobPaymentRecord, PaymentType, WalletType } from '../api/paymentMe
 export const WALLET_TYPES: Array<{ value: WalletType; label: string; icon: string; numberLabel: string; numberPlaceholder: string }> = [
   { value: 'GCASH', label: 'GCash', icon: '🔵', numberLabel: 'GCash mobile number', numberPlaceholder: '0917 123 4567' },
   { value: 'MAYA', label: 'Maya', icon: '🟢', numberLabel: 'Maya mobile number', numberPlaceholder: '0917 123 4567' },
-  { value: 'OTHER', label: 'Other', icon: '👛', numberLabel: 'Account number', numberPlaceholder: 'Account or mobile number' },
+  { value: 'OTHER', label: 'Other', icon: '💳', numberLabel: 'Account number', numberPlaceholder: 'Account or mobile number' },
 ];
 
 export function paymentIcon(type: PaymentType | string | null | undefined): string {
@@ -15,8 +15,10 @@ export function paymentIcon(type: PaymentType | string | null | undefined): stri
       return '🔵';
     case 'MAYA':
       return '🟢';
+    case 'OTHER':
+      return '💳';
     default:
-      return '👛';
+      return '💳';
   }
 }
 

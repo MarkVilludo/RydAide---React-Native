@@ -51,6 +51,7 @@ import { createVehicle, isVehicleApiMissing } from '../../api/vehicles';
 import { showAppToast } from '../../components/AppToast';
 import { RydAidRefreshControl } from '../../components/RydAidRefreshControl';
 import { needHelpInitialStep } from '../../utils/needHelpDraft';
+import { ServiceAreaCallout } from '../../components/ServiceAreaCallout';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'NeedHelp'>;
 
@@ -533,6 +534,8 @@ export function NeedHelpScreen({ navigation, route }: Props) {
             </Text>
           </View>
         ) : null}
+
+        {step === 'vehicle' ? <ServiceAreaCallout compact /> : null}
 
         {step === 'vehicle' && (
           <NeedHelpVehicleStep

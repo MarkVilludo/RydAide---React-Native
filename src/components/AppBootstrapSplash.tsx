@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import type { BootError } from '../context/AuthContext';
 import { LAUNCH_BACKGROUND, LAUNCH_LOGO, LAUNCH_LOGO_SIZE, LAUNCH_RIPPLE_MS } from '../constants/launchBrand';
+import { SupportHelpFooter } from './SupportHelpFooter';
 
 const { width: W, height: H } = Dimensions.get('window');
 /** Logo sits exactly where the native splash draws it: centred in the window. */
@@ -181,6 +182,11 @@ export function AppBootstrapSplash({ onLogoReady, error, retrying, onRetry, onSi
                 <Text style={styles.linkText}>Sign in with a different account</Text>
               </Pressable>
             ) : null}
+            <SupportHelpFooter
+              variant="onDark"
+              problemCategory="Account / login"
+              problemHint="RydAid could not restore my session on launch."
+            />
           </View>
         ) : (
           <>

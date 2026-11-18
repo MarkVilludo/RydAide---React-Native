@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Dimensions, Keyboard, Platform, Pressable, StyleSheet, Text, View, type TextInputInstance } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { getApiErrorMessage } from '../../api/client';
+import { getApiErrorMessage, getNetworkReachabilityMessage, isApiNetworkError } from '../../api/client';
+import { AuthConnectivityBanner } from '../../components/auth/AuthConnectivityBanner';
 import { AuthErrorBanner } from '../../components/auth/AuthErrorBanner';
 import { AuthLayout, authStyles } from '../../components/auth/AuthLayout';
 import { authFieldErrors } from '../../components/auth/authErrors';
@@ -36,7 +37,8 @@ const ROLES = [
 
 export function RegisterScreen({ navigation, route }: Props) {
   const { signUp } = useAuth();
-  const { config } = useAppConfig();
+  const { config, loading: configLoading, reload: reloadConfig, refreshFailed: configUnreachable } = useAppConfig();
+  const [configRetrying, setConfigRetrying] = useState(false);
   const requireVerification = config?.auth?.require_email_verification !== false;
   const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const emailRef = useRef<TextInputInstance>(null);
@@ -102,7 +104,8 @@ export function RegisterScreen({ navigation, route }: Props) {
     } catch (error) {
       const fields = authFieldErrors(error);
       setFieldErrors(fields);
-      setFormError(Object.keys(fields).length ? 'Please fix the highlighted fields.' : getApiErrorMessage(error));
+      const fallback = isApiNetworkError(error) ? getNetworkReachabilityMessage() : getApiErrorMessage(error);
+      setFormError(Object.keys(fields).length ? 'Please fix the highlighted fields.' : fallback);
     } finally {
       setSubmitting(false);
     }
@@ -137,6 +140,15 @@ export function RegisterScreen({ navigation, route }: Props) {
       }}
       extraBottomPadding={KEYBOARD_SCROLL_PAD}
     >
+      <AuthConnectivityBanner
+        visible={configUnreachable && !configLoading}
+        retrying={configRetrying}
+        onRetry={() => {
+          setConfigRetrying(true);
+          void reloadConfig().finally(() => setConfigRetrying(false));
+        }}
+      />
+
       <AuthErrorBanner message={formError} />
 
       <View style={authStyles.fields}>

@@ -2,7 +2,8 @@ import Constants from 'expo-constants';
 import React, { useEffect, useRef, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View, type TextInputInstance } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { getApiErrorMessage } from '../../api/client';
+import { getApiErrorMessage, getNetworkReachabilityMessage, isApiNetworkError } from '../../api/client';
+import { AuthConnectivityBanner } from '../../components/auth/AuthConnectivityBanner';
 import { AuthErrorBanner } from '../../components/auth/AuthErrorBanner';
 import { AuthLayout, authStyles } from '../../components/auth/AuthLayout';
 import { authFieldErrors } from '../../components/auth/authErrors';
@@ -25,7 +26,8 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
  */
 export function LoginScreen({ navigation }: Props) {
   const { signIn, signInWithGoogle } = useAuth();
-  const { config } = useAppConfig();
+  const { config, loading: configLoading, reload: reloadConfig, refreshFailed: configUnreachable } = useAppConfig();
+  const [configRetrying, setConfigRetrying] = useState(false);
   const googleAuth = config?.auth?.google_sign_in;
   const showGoogleSignIn = googleSignInAvailable(googleAuth?.enabled, {
     webClientId: googleAuth?.web_client_id,
@@ -83,7 +85,7 @@ export function LoginScreen({ navigation }: Props) {
       await signIn(email.trim(), password);
       void saveLastLoginEmail(email);
     } catch (error) {
-      const message = getApiErrorMessage(error);
+      const message = isApiNetworkError(error) ? getNetworkReachabilityMessage() : getApiErrorMessage(error);
       const fields = authFieldErrors(error);
       // Wrong credentials come back on "email" with the same text as the banner — show it once.
       if (fields.email === message) delete fields.email;
@@ -110,7 +112,7 @@ export function LoginScreen({ navigation }: Props) {
         setFormError(fields.role);
         return;
       }
-      setFormError(getApiErrorMessage(error));
+      setFormError(isApiNetworkError(error) ? getNetworkReachabilityMessage() : getApiErrorMessage(error));
       throw error;
     }
   };
@@ -190,7 +192,20 @@ export function LoginScreen({ navigation }: Props) {
         </>
       }
     >
+      <AuthConnectivityBanner
+        visible={configUnreachable && !configLoading}
+        retrying={configRetrying}
+        onRetry={() => {
+          setConfigRetrying(true);
+          void reloadConfig().finally(() => setConfigRetrying(false));
+        }}
+      />
+
       <AuthErrorBanner message={formError} />
+
+      {configUnreachable && !showGoogleSignIn ? (
+        <Text style={styles.offlineHint}>Google sign-in needs a server connection — use email and password if you can reach the API.</Text>
+      ) : null}
 
       {showGoogleSignIn ? (
         <>
@@ -357,4 +372,11 @@ const styles = StyleSheet.create({
   chipPressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
   chipText: { fontSize: 13, fontWeight: '700', color: colors.primaryInk },
   version: { paddingHorizontal: spacing.xs },
+  offlineHint: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
 });

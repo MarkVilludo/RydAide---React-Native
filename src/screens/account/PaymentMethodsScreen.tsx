@@ -25,7 +25,14 @@ import { showAppToast } from '../../components/AppToast';
 import type { PaymentMethodsParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { protectedImageSource } from '../../utils/protectedImage';
-import { PaymentWalletLogo } from '../../components/PaymentWalletLogo';
+import { PaymentQrViewerModal } from '../../components/PaymentQrViewerModal';
+import { SupportHelpFooter } from '../../components/SupportHelpFooter';
+import {
+  isBrandedWallet,
+  PAYMENT_METHOD_ROW_LOGO_HEIGHT,
+  PaymentMethodLogoSlot,
+  PaymentWalletLogo,
+} from '../../components/PaymentWalletLogo';
 
 type Props = NativeStackScreenProps<PaymentMethodsParamList, 'PaymentMethods'>;
 
@@ -37,6 +44,7 @@ export function PaymentMethodsScreen({ navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<PaymentMethodsSummary | null>(null);
   const [busyId, setBusyId] = useState<number | 'cash' | null>(null);
+  const [qrPreview, setQrPreview] = useState<{ source: ReturnType<typeof protectedImageSource>; title: string } | null>(null);
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setState('loading');
@@ -127,6 +135,7 @@ export function PaymentMethodsScreen({ navigation }: Props) {
         <Pressable style={styles.primaryBtn} onPress={() => void load()}>
           <Text style={styles.primaryBtnText}>Try again</Text>
         </Pressable>
+        <SupportHelpFooter problemCategory="Payment" problemHint="Payment methods screen failed to load from the API." />
       </View>
     );
   }
@@ -142,8 +151,8 @@ export function PaymentMethodsScreen({ navigation }: Props) {
 
       <Text style={styles.sectionTitle}>Preferred</Text>
       <View style={styles.preferredCard}>
-        <View style={styles.preferredIcon}>
-          <PaymentWalletLogo type={data.preferred.type} height={22} />
+        <View style={styles.preferredLogo}>
+          <PaymentMethodLogoSlot type={data.preferred.type} />
         </View>
         <View style={styles.flex}>
           <Text style={styles.preferredLabel}>{data.preferred.label}</Text>
@@ -154,7 +163,7 @@ export function PaymentMethodsScreen({ navigation }: Props) {
       <Text style={styles.sectionTitle}>Cash</Text>
       <View style={[styles.card, data.cash.is_preferred && styles.cardPreferred]}>
         <View style={styles.cardRow}>
-          <Text style={styles.cardIcon}>💵</Text>
+          <PaymentMethodLogoSlot type="CASH" />
           <View style={styles.flex}>
             <Text style={styles.cardTitle}>Cash</Text>
             <Text style={styles.cardSub}>Always available · pay in person</Text>
@@ -183,28 +192,54 @@ export function PaymentMethodsScreen({ navigation }: Props) {
 
       {data.wallets.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>👛</Text>
+          <View style={styles.emptyIcon}>
+            <PaymentWalletLogo type="OTHER" height={PAYMENT_METHOD_ROW_LOGO_HEIGHT + 8} emojiFallback={false} />
+          </View>
           <Text style={styles.emptyTitle}>No wallets yet</Text>
           <Text style={styles.emptyBody}>
             Add GCash, Maya or another wallet with its QR code so the other person can pay you or see how you'll pay.
           </Text>
         </View>
       ) : (
-        data.wallets.map((w) => (
+        data.wallets.map((w) => {
+          const branded = isBrandedWallet(w.type);
+          const qrSource = w.qr_url ? protectedImageSource(w.qr_url) : null;
+          return (
           <View key={w.id} style={[styles.card, w.is_preferred && styles.cardPreferred]}>
             <View style={styles.cardRow}>
-              <View style={styles.cardIcon}>
-                <PaymentWalletLogo type={w.type} height={22} />
-              </View>
+              <PaymentMethodLogoSlot type={w.type} />
               <View style={styles.flex}>
-                <Text style={styles.cardTitle}>{w.label}</Text>
-                <Text style={styles.cardSub} numberOfLines={1}>
-                  {w.account_name} · {w.account_number_masked}
-                </Text>
-                <Text style={styles.cardMeta}>{w.qr_url ? 'QR code added' : 'No QR code'}</Text>
+                {branded ? (
+                  <>
+                    <Text style={styles.cardTitle} numberOfLines={1}>
+                      {w.account_name}
+                    </Text>
+                    <Text style={styles.cardSub} numberOfLines={1}>
+                      {w.account_number_masked}
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.cardTitle}>{w.label}</Text>
+                    <Text style={styles.cardSub} numberOfLines={1}>
+                      {w.account_name} · {w.account_number_masked}
+                    </Text>
+                  </>
+                )}
+                {qrSource ? (
+                  <Text style={styles.cardMeta}>Tap QR to view full size</Text>
+                ) : (
+                  <Text style={styles.cardMeta}>No QR code</Text>
+                )}
               </View>
-              {w.qr_url ? (
-                <Image source={protectedImageSource(w.qr_url)!} style={styles.qrThumb} accessibilityLabel={`${w.label} QR code`} />
+              {qrSource ? (
+                <Pressable
+                  onPress={() => setQrPreview({ source: qrSource, title: `${w.label} QR` })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View ${w.label} QR code full screen`}
+                >
+                  <Image source={qrSource} style={styles.qrThumb} />
+                </Pressable>
               ) : null}
             </View>
             <View style={styles.actionsRow}>
@@ -228,8 +263,16 @@ export function PaymentMethodsScreen({ navigation }: Props) {
               </Pressable>
             </View>
           </View>
-        ))
+        );
+        })
       )}
+
+      <PaymentQrViewerModal
+        visible={qrPreview != null}
+        source={qrPreview?.source ?? null}
+        title={qrPreview?.title ?? 'Wallet QR'}
+        onClose={() => setQrPreview(null)}
+      />
 
       <Pressable
         style={[styles.primaryBtn, atLimit && styles.btnDisabled]}
@@ -266,6 +309,7 @@ const styles = StyleSheet.create({
   },
   sectionRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   sectionCount: { fontSize: 12, fontWeight: '700', color: colors.muted },
+  preferredLogo: { flexShrink: 0 },
   preferredCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -276,8 +320,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.primaryBorder,
   },
-  /** GCash wordmark at 22px tall ≈ 91px wide — reserve full width so it isn't squashed. */
-  preferredIcon: { width: 92, flexShrink: 0, alignItems: 'flex-start', justifyContent: 'center' },
   preferredLabel: { fontSize: 17, fontWeight: '800', color: colors.primaryInk },
   preferredHint: { fontSize: 13, color: colors.muted, marginTop: 2 },
   card: {
@@ -290,7 +332,6 @@ const styles = StyleSheet.create({
   },
   cardPreferred: { borderColor: colors.primary, borderWidth: 1.5 },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  cardIcon: { width: 92, flexShrink: 0, alignItems: 'flex-start', justifyContent: 'center' },
   cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
   cardSub: { fontSize: 14, color: colors.muted, marginTop: 2 },
   cardMeta: { fontSize: 12, color: colors.mutedSoft, marginTop: 2 },
@@ -339,7 +380,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  emptyIcon: { fontSize: 30 },
+  emptyIcon: { alignItems: 'center', marginBottom: 4 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginTop: 6 },
   emptyBody: { fontSize: 14, color: colors.muted, textAlign: 'center', marginTop: 4, lineHeight: 20 },
   primaryBtn: {

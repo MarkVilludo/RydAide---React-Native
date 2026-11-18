@@ -866,12 +866,25 @@ export function MechanicHomeScreen({ navigation }: Props) {
                   ? `You’ve used your ${acceptLimit} free requests`
                   : 'You’ve used all your free requests',
               detail: subscriptionsOn
-                ? 'You can still see nearby requests. Get Mechanic Pro to accept them.'
+                ? 'Free accepts don’t reset — each accept used 1 of your one-time credits. You can still view and decline offers; Mechanic Pro unlocks unlimited accepts.'
                 : 'You can still see requests. Mechanic Pro isn’t available in the app yet.',
               cta: subscriptionsOn ? 'Get Pro' : undefined,
               onPress: () =>
                 subscriptionsOn ? navigation.navigate('MechanicSubscription') : openRequests('completed'),
             }
+          : lowCredits && subscriptionsOn && !isPro
+            ? {
+                key: 'credits-low',
+                tone: 'warn',
+                eyebrow: 'Free plan',
+                title:
+                  freeLeftShown != null && acceptLimit != null
+                    ? `${freeLeftShown} of ${acceptLimit} free accepts left`
+                    : 'Running low on free accepts',
+                detail: 'Each accepted job uses one free credit (they don’t reset). Pro removes the limit when you’re ready.',
+                cta: 'View plans',
+                onPress: () => navigation.navigate('MechanicSubscription'),
+              }
           : permissionDenied
             ? {
                 key: 'gps',

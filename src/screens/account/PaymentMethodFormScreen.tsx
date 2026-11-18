@@ -173,11 +173,7 @@ export function PaymentMethodFormScreen({ navigation, route }: Props) {
               accessibilityRole="radio"
               accessibilityState={{ selected: on }}
             >
-              {t.value === 'GCASH' || t.value === 'MAYA' ? (
-                <PaymentWalletLogo type={t.value} height={18} style={styles.typeLogo} />
-              ) : (
-                <Text style={styles.typeIcon}>{t.icon}</Text>
-              )}
+              <PaymentWalletLogo type={t.value} height={18} style={styles.typeLogo} emojiFallback={false} />
               <Text style={[styles.typeLabel, on && styles.typeLabelOn]}>{t.label}</Text>
             </Pressable>
           );

@@ -98,6 +98,17 @@ export function isUnauthenticatedError(error: unknown): boolean {
   return axios.isAxiosError(error) && error.response?.status === 401;
 }
 
+/** Request never reached the server (offline, DNS, TLS, wrong host). */
+export function isApiNetworkError(error: unknown): boolean {
+  return axios.isAxiosError(error) && !error.response;
+}
+
+/** Short copy for auth / recovery UI when the API is unreachable. */
+export function getNetworkReachabilityMessage(): string {
+  const short = API_URL.replace(/^https?:\/\//, '').replace(/\/api\/v1\/?$/, '');
+  return `Can't reach RydAid (${short}). Check Wi‑Fi or mobile data and try again.`;
+}
+
 export function getApiErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message && !axios.isAxiosError(error)) {
     return error.message;

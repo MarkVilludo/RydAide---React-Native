@@ -2,6 +2,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  AppState,
   Linking,
   Modal,
   Pressable,
@@ -23,6 +24,8 @@ import {
   type HelpRequest,
 } from '../../api/helpRequests';
 import { ActiveJobLocationSummary } from '../../components/ActiveJobLocationSummary';
+import { ActiveJobNotificationHint } from '../../components/ActiveJobNotificationHint';
+import { ActiveJobReconnectBanner } from '../../components/ActiveJobReconnectBanner';
 import { AndroidHideNavigationBarWhenFocused } from '../../components/AndroidHideNavigationBarWhenFocused';
 import { CancelHelpRequestButton } from '../../components/CancelHelpRequestButton';
 import { HelpRequestCompletionPanel } from '../../components/HelpRequestCompletionPanel';
@@ -53,6 +56,7 @@ import {
   vehicleWithDetails,
 } from '../../utils/helpRequestUi';
 import { needHelpParamsFromHelpRequest } from '../../utils/needHelpDraft';
+import { useActiveJobForegroundNotifications } from '../../hooks/useActiveJobForegroundNotifications';
 import { liveSheetScrollMax } from '../../utils/mapZoom';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'ActiveHelpRequest'>;
@@ -84,6 +88,8 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
     initialRequest?.id === helpRequestId ? initialRequest : null,
   );
   const [connectionLost, setConnectionLost] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [photosOpen, setPhotosOpen] = useState(false);
   const cancelLock = useRef(false);
@@ -117,34 +123,51 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: helpRequestId is the reset signal
   }, [helpRequestId]);
 
+  const loadRequest = useCallback(async () => {
+    try {
+      const data = await fetchHelpRequest(helpRequestId);
+      setRequest(data);
+      setConnectionLost(false);
+      const job = data.job_status ?? data.job?.status ?? data.status;
+      const terminal =
+        ['COMPLETED', 'CANCELLED', 'EXPIRED', 'NO_MECHANIC_FOUND'].includes(data.status) || job === 'COMPLETED';
+      if (terminal && pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      return data;
+    } catch {
+      setConnectionLost(true);
+      return null;
+    }
+  }, [helpRequestId]);
+
+  const refreshNow = useCallback(() => {
+    setRefreshing(true);
+    void loadRequest().finally(() => setRefreshing(false));
+  }, [loadRequest]);
+
+  useActiveJobForegroundNotifications(helpRequestId, refreshNow);
+
   useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
-    const load = () =>
-      fetchHelpRequest(helpRequestId)
-        .then((data) => {
-          if (cancelled) return;
-          setRequest(data);
-          setConnectionLost(false);
-          const job = data.job_status ?? data.job?.status ?? data.status;
-          const terminal =
-            ['COMPLETED', 'CANCELLED', 'EXPIRED', 'NO_MECHANIC_FOUND'].includes(data.status) ||
-            job === 'COMPLETED';
-          if (terminal && timer) {
-            clearInterval(timer);
-            timer = undefined;
-          }
-        })
-        .catch(() => {
-          if (!cancelled) setConnectionLost(true);
-        });
-    load();
-    timer = setInterval(load, pollMs);
+    void loadRequest();
+    pollTimerRef.current = setInterval(() => void loadRequest(), pollMs);
     return () => {
-      cancelled = true;
-      if (timer) clearInterval(timer);
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
     };
-  }, [helpRequestId, pollMs]);
+  }, [loadRequest, pollMs]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void loadRequest();
+      }
+    });
+    return () => sub.remove();
+  }, [loadRequest]);
 
   useEffect(() => {
     if (!request || request.status !== 'SEARCHING') {
@@ -212,10 +235,17 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
 
   if (!request) {
     return (
-      <CenteredLoading
-        message={connectionLost ? 'Connection lost — retrying…' : 'Loading your request…'}
-        style={connectionLost ? styles.loadingError : undefined}
-      />
+      <View style={styles.loadingRoot}>
+        <CenteredLoading
+          message={connectionLost ? 'Connection lost' : 'Loading your request…'}
+          style={connectionLost ? styles.loadingError : undefined}
+        />
+        {connectionLost ? (
+          <View style={styles.loadingReconnect}>
+            <ActiveJobReconnectBanner onRetry={refreshNow} retrying={refreshing} />
+          </View>
+        ) : null}
+      </View>
     );
   }
 
@@ -360,9 +390,9 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
                 />
               )}
 
-              {connectionLost ? (
-                <Text style={styles.connectionBanner}>Connection lost — map may be outdated</Text>
-              ) : null}
+              {connectionLost ? <ActiveJobReconnectBanner onRetry={refreshNow} retrying={refreshing} /> : null}
+
+              <ActiveJobNotificationHint />
 
               {photoCount > 0 ? (
                 <Pressable style={styles.photosLink} onPress={() => setPhotosOpen(true)}>
@@ -411,6 +441,11 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
               <Text style={styles.problemSearching} numberOfLines={1}>
                 {problemNamesOf(request)}
               </Text>
+            ) : null}
+            {connectionLost ? (
+              <View style={styles.searchingReconnect}>
+                <ActiveJobReconnectBanner onRetry={refreshNow} retrying={refreshing} />
+              </View>
             ) : null}
             <View style={styles.searchingHeroWrap}>
               <HelpRequestSearchingHero
@@ -552,6 +587,8 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0f172a' },
+  loadingRoot: { flex: 1 },
+  loadingReconnect: { paddingHorizontal: 16, paddingBottom: 24 },
   loadingError: { backgroundColor: '#fef2f2' },
   mapArea: { ...StyleSheet.absoluteFill, backgroundColor: '#cbd5e1' },
   sheetDock: { position: 'absolute', left: 0, right: 0, bottom: 0 },
@@ -580,6 +617,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginTop: 0,
   },
+  searchingReconnect: { marginTop: 8, marginBottom: 4 },
   searchingHeroWrap: { flex: 1, marginTop: 4, minHeight: 0 },
   headlineSearching: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
   problemSearching: { fontSize: 14, color: '#64748b', marginTop: 2, marginBottom: 4 },

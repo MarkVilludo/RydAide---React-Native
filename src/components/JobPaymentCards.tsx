@@ -22,7 +22,12 @@ import {
   type PaymentWallet,
 } from '../api/paymentMethods';
 import { colors } from '../theme/colors';
-import { PaymentWalletChipTitle, PaymentWalletLogo } from './PaymentWalletLogo';
+import {
+  PAYMENT_METHOD_ROW_LOGO_HEIGHT,
+  PAYMENT_METHOD_ROW_LOGO_MAX_WIDTH,
+  PaymentWalletChipTitle,
+  PaymentWalletLogo,
+} from './PaymentWalletLogo';
 import { formatPeso, ownerPaymentPlanLabel } from '../utils/paymentMethods';
 import { protectedImageSource } from '../utils/protectedImage';
 import { showAppToast } from './AppToast';
@@ -54,7 +59,12 @@ export function PaymentPlanLine({
   if (!label) return null;
   return (
     <View style={styles.planLine}>
-      <PaymentWalletLogo type={request.payment_preference?.type} height={16} />
+      <PaymentWalletLogo
+        type={request.payment_preference?.type}
+        height={PAYMENT_METHOD_ROW_LOGO_HEIGHT}
+        maxWidth={PAYMENT_METHOD_ROW_LOGO_MAX_WIDTH}
+        emojiFallback={false}
+      />
       <Text style={styles.planText}>
         {prefix}: <Text style={styles.planStrong}>{label}</Text>
       </Text>
@@ -228,7 +238,13 @@ export function OwnerPayMechanicCard({
                 accessibilityState={{ selected: on }}
               >
                 <View style={[styles.radio, on && styles.radioOn]}>{on ? <View style={styles.radioDot} /> : null}</View>
-                <PaymentWalletLogo type={c.type} height={22} style={styles.optionLogo} />
+                <PaymentWalletLogo
+                  type={c.type}
+                  height={PAYMENT_METHOD_ROW_LOGO_HEIGHT}
+                  maxWidth={PAYMENT_METHOD_ROW_LOGO_MAX_WIDTH}
+                  emojiFallback={false}
+                  style={styles.optionLogo}
+                />
                 <View style={styles.flex}>
                   <Text style={styles.optionTitle}>
                     {c.label}
