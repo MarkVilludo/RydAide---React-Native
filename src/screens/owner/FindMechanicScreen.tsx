@@ -25,7 +25,7 @@ import {
   mapPinSnippetForMechanic,
   mechanicListingMetaLine,
 } from '../../utils/directoryListing';
-import { openDirections } from '../../utils/mapsLinks';
+import { useInAppDirections } from '../../hooks/useInAppDirections';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'FindMechanic'>;
 
@@ -41,6 +41,7 @@ export function FindMechanicScreen({ navigation }: Props) {
     Math.max(minRadius, config?.directory.default_radius_km ?? 5),
   );
   const [radiusKm, setRadiusKm] = useState(defaultRadius);
+  const { openInAppDirections, directionsModal } = useInAppDirections();
 
   const performSearch = useCallback(
     async (center: { latitude: number; longitude: number }, radius_km: number) => {
@@ -210,7 +211,7 @@ export function FindMechanicScreen({ navigation }: Props) {
               style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
               onPress={() => {
                 if (canDirections) {
-                  openDirections(item.latitude!, item.longitude!);
+                  openInAppDirections(item.latitude!, item.longitude!, 'Verified mobile mechanic');
                 }
               }}
               disabled={!canDirections}
@@ -231,6 +232,7 @@ export function FindMechanicScreen({ navigation }: Props) {
           );
         }}
       />
+      {directionsModal}
     </View>
   );
 }

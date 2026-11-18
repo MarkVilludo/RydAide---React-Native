@@ -123,13 +123,6 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
   const isDeclined = request?.mechanic_dispatch?.response === 'declined';
   const isIncomingOffer = canAccept;
 
-  const openMaps = () => {
-    if (!request) return;
-    Linking.openURL(
-      `https://www.google.com/maps/search/?api=1&query=${request.latitude},${request.longitude}`,
-    ).catch(() => {});
-  };
-
   const goBackIncoming = () => {
     if (navigation.canGoBack()) {
       navigation.goBack();
@@ -251,9 +244,11 @@ export function MechanicRequestDetailScreen({ route, navigation }: Props) {
               <Text style={styles.compactBody} numberOfLines={2}>
                 {request.address_text ?? `${request.latitude}, ${request.longitude}`}
               </Text>
-              <Pressable onPress={openMaps}>
-                <Text style={styles.link}>Open in maps</Text>
-              </Pressable>
+              <Text style={styles.mapHint}>
+                {showLiveMap || isIncomingOffer
+                  ? 'Customer location is on the map above.'
+                  : 'Location is shown on the map when the job is active.'}
+              </Text>
             </View>
 
             {request.answers?.length ? (
@@ -393,6 +388,7 @@ const styles = StyleSheet.create({
   answer: { marginTop: 6 },
   answerValue: { color: '#0f172a', fontWeight: '600', marginTop: 1 },
   link: { color: '#0284c7', fontWeight: '700', marginTop: 4, fontSize: 13 },
+  mapHint: { color: '#64748b', fontWeight: '600', marginTop: 6, fontSize: 13, lineHeight: 18 },
   timeline: { marginTop: 2, color: '#475569', fontSize: 13 },
   workDuration: { fontSize: 15, fontWeight: '800', color: '#166534', marginBottom: 4 },
 });

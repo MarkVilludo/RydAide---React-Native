@@ -24,7 +24,7 @@ import {
   joinMetaParts,
   mapPinSnippetForShop,
 } from '../../utils/directoryListing';
-import { openDirections } from '../../utils/mapsLinks';
+import { useInAppDirections } from '../../hooks/useInAppDirections';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'FindShop'>;
 
@@ -37,6 +37,7 @@ export function FindShopScreen(_props: Props) {
     Math.max(minRadius, config?.directory.default_radius_km ?? 5),
   );
   const [radiusKm, setRadiusKm] = useState(defaultRadius);
+  const { openInAppDirections, directionsModal } = useInAppDirections();
 
   const performSearch = useCallback(async (center: { latitude: number; longitude: number }, radius_km: number) => {
     const { shops, search } = await searchShops({
@@ -161,7 +162,7 @@ export function FindShopScreen(_props: Props) {
               style={({ pressed }) => [pressed && styles.cardPressed]}
               onPress={() => {
                 if (canDirections) {
-                  openDirections(item.latitude!, item.longitude!);
+                  openInAppDirections(item.latitude!, item.longitude!, item.name);
                 }
               }}
               disabled={!canDirections}
@@ -181,11 +182,18 @@ export function FindShopScreen(_props: Props) {
               {item.mobile_service ? <Text style={styles.badge}>Mobile service</Text> : null}
               {canDirections ? <Text style={styles.tapHint}>Tap for directions</Text> : null}
             </Pressable>
-            <DirectoryListingActions phone={item.phone} latitude={item.latitude} longitude={item.longitude} />
+            <DirectoryListingActions
+              phone={item.phone}
+              latitude={item.latitude}
+              longitude={item.longitude}
+              destinationLabel={item.name}
+              onDirections={openInAppDirections}
+            />
           </View>
         );
       }}
       />
+      {directionsModal}
     </View>
   );
 }

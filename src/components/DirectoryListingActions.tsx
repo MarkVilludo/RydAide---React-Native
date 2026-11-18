@@ -1,16 +1,24 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { openDirections, openPhoneCall } from '../utils/mapsLinks';
+import { openPhoneCall } from '../utils/mapsLinks';
 
 type Props = {
   phone?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  destinationLabel?: string;
+  onDirections?: (latitude: number, longitude: number, label?: string) => void;
 };
 
-export function DirectoryListingActions({ phone, latitude, longitude }: Props) {
+export function DirectoryListingActions({
+  phone,
+  latitude,
+  longitude,
+  destinationLabel,
+  onDirections,
+}: Props) {
   const canCall = Boolean(phone?.trim());
-  const canDirections = latitude != null && longitude != null;
+  const canDirections = latitude != null && longitude != null && !!onDirections;
   if (!canCall && !canDirections) return null;
 
   return (
@@ -28,11 +36,11 @@ export function DirectoryListingActions({ phone, latitude, longitude }: Props) {
       {canDirections ? (
         <Pressable
           style={styles.secondaryBtn}
-          onPress={() => openDirections(latitude!, longitude!)}
+          onPress={() => onDirections!(latitude!, longitude!, destinationLabel)}
           accessibilityRole="button"
-          accessibilityLabel="Get directions"
+          accessibilityLabel="Navigate in app"
         >
-          <Text style={styles.secondaryText}>Directions</Text>
+          <Text style={styles.secondaryText}>Navigate</Text>
         </Pressable>
       ) : null}
     </View>

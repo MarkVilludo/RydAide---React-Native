@@ -48,8 +48,12 @@ export function ActiveJobLocationSummary({
     if (viewerRole === 'mechanic' && eta) {
       parts.push(`ETA ${eta}`);
     }
-    if (viewerRole === 'owner' && locStatus?.is_stale) {
+    if (viewerRole === 'owner' && tracking?.live_tracking_enabled && !tracking?.mechanic_location) {
+      parts.push('Waiting for live GPS on map…');
+    } else if (viewerRole === 'owner' && locStatus?.is_stale) {
       parts.push('Location updating…');
+    } else if (viewerRole === 'owner' && tracking?.live_tracking_enabled && locStatus?.label) {
+      parts.push(locStatus.label.replace(/^Live • /, ''));
     }
     if (viewerRole === 'mechanic' && mechanicPermissionDenied) {
       parts.push('Turn on location to share live position');

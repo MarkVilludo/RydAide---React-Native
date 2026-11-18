@@ -1,7 +1,8 @@
-import React, { memo, useEffect, useMemo, useRef } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, type Region } from 'react-native-maps';
 import { androidMapsProvider, hasGoogleMapsApiKey } from '../utils/mapsProvider';
+import { MapZoomControls } from './MapZoomControls';
 
 export type PickLocation = {
   latitude: number;
@@ -26,6 +27,11 @@ type Props = {
 };
 
 const DEFAULT_CENTER = { latitude: 14.5995, longitude: 120.9842 };
+
+const ZOOM_IN_FACTOR = 0.58;
+const ZOOM_OUT_FACTOR = 1.55;
+const MIN_VIEW_DELTA = 0.0025;
+const MAX_VIEW_DELTA = 0.42;
 
 function regionFor(
   center: PickLocation,
@@ -68,6 +74,8 @@ function LocationPickMapInner({
     return regionFor(DEFAULT_CENTER, 0.04, 0.04);
   }, []);
 
+  const viewRegionRef = useRef<Region>(initialRegion);
+
   const emitCenter = (location: PickLocation) => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -100,7 +108,35 @@ function LocationPickMapInner({
     return () => clearTimeout(t);
   }, [recenterKey]);
 
+  const adjustZoom = useCallback((factor: number) => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+    const current = viewRegionRef.current;
+    const nextDelta = Math.min(
+      MAX_VIEW_DELTA,
+      Math.max(MIN_VIEW_DELTA, current.latitudeDelta * factor),
+    );
+    const next: Region = {
+      latitude: current.latitude,
+      longitude: current.longitude,
+      latitudeDelta: nextDelta,
+      longitudeDelta: nextDelta,
+    };
+    skipNextRegionEmit.current = true;
+    viewRegionRef.current = next;
+    map.animateToRegion(next, 220);
+    setTimeout(() => {
+      skipNextRegionEmit.current = false;
+    }, 280);
+  }, []);
+
+  const zoomIn = useCallback(() => adjustZoom(ZOOM_IN_FACTOR), [adjustZoom]);
+  const zoomOut = useCallback(() => adjustZoom(ZOOM_OUT_FACTOR), [adjustZoom]);
+
   const onRegionChangeComplete = (region: Region) => {
+    viewRegionRef.current = region;
     if (pickMode !== 'map-center' || skipNextRegionEmit.current) {
       return;
     }
@@ -179,6 +215,8 @@ function LocationPickMapInner({
           <Text style={styles.gpsBtnText}>{locating ? 'Locating…' : 'Pin my location'}</Text>
         </Pressable>
       ) : null}
+
+      <MapZoomControls onZoomIn={zoomIn} onZoomOut={zoomOut} bottomInset={44} />
 
       <View style={styles.zoomHint} pointerEvents="none">
         <Text style={styles.zoomHintText}>

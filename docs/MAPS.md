@@ -6,7 +6,7 @@ Uses **`expo-maps` → Google Maps**. It does **not** load OpenStreetMap volunte
 
 If the map is **gray or empty** on Android — or a **release APK crashes after login** when opening an active job / mechanic map — add a Google Maps API key (free tier):
 
-1. [Google Cloud Console](https://console.cloud.google.com/) → APIs → enable **Maps SDK for Android** (and iOS if needed)  
+1. [Google Cloud Console](https://console.cloud.google.com/) → APIs → enable **Maps SDK for Android** (and iOS if needed) and **Directions API** (in-app driving routes for mechanics on active jobs)  
 2. Create an API key restricted to your app (package + SHA-1) and to that API  
 3. Local `.env`:
    ```env

@@ -14,7 +14,14 @@ import {
   mapMarkerIconSizePx,
   type MapZoomPreset,
 } from '../utils/mapZoom';
+import { MapZoomControls } from './MapZoomControls';
 import { ScaledMapMarkerImage } from './ScaledMapMarkerImage';
+import type { MapCoord } from '../utils/drivingDirections';
+import {
+  NAV_MAX_DUAL_FIT_KM,
+  navigationDistanceKm,
+  planNavigationCamera,
+} from '../utils/mapNavigationCamera';
 
 export type MapPoint = {
   latitude: number;
@@ -31,13 +38,24 @@ type Props = {
   requestPinLabel?: string;
   mechanicPinLabel?: string;
   showRouteLine?: boolean;
+  /** Road-following route (in-app navigation). */
+  drivingRouteCoords?: MapCoord[] | null;
+  /** Bump to re-center the camera on the customer + mechanic pins. */
+  navigationRefitPulse?: number;
   liveDistanceKm?: number | null;
   showLiveDistanceBadge?: boolean;
   /** Tighter default zoom for request / job detail screens. */
   zoomPreset?: MapZoomPreset;
   /** Owner active map uses a transparent nav header — badge sits lower and larger. */
   liveDistanceBadgeVariant?: 'default' | 'owner';
+  showZoomControls?: boolean;
+  zoomControlsBottomInset?: number;
 };
+
+const ZOOM_IN_FACTOR = 0.58;
+const ZOOM_OUT_FACTOR = 1.55;
+const MIN_VIEW_DELTA = 0.0025;
+const MAX_VIEW_DELTA = 0.42;
 
 export function HelpRequestMap({
   request,
@@ -48,10 +66,14 @@ export function HelpRequestMap({
   requestPinLabel = 'Customer',
   mechanicPinLabel = 'Mechanic',
   showRouteLine = true,
+  drivingRouteCoords = null,
+  navigationRefitPulse = 0,
   liveDistanceKm,
   showLiveDistanceBadge = true,
   zoomPreset = 'default',
   liveDistanceBadgeVariant = 'default',
+  showZoomControls,
+  zoomControlsBottomInset,
 }: Props) {
   const mapRef = useRef<MapView>(null);
   const trackResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -102,6 +124,19 @@ export function HelpRequestMap({
   const userAdjustedViewRef = useRef(false);
   const ignoreUserGestureUntilRef = useRef(0);
   const lastRegionDeltaRef = useRef(fallbackRegion.latitudeDelta);
+  const viewRegionRef = useRef<Region>(fallbackRegion);
+
+  const showZoom = showZoomControls ?? (fill || height >= 140);
+  const zoomBottom = useMemo(() => {
+    if (zoomControlsBottomInset != null) {
+      return zoomControlsBottomInset;
+    }
+    if (fill && zoomPreset === 'live') {
+      const h = Dimensions.get('window').height;
+      return Math.round(Math.min(168, Math.max(104, h * 0.24)));
+    }
+    return fill ? 16 : 10;
+  }, [zoomControlsBottomInset, fill, zoomPreset]);
 
   // Detail screens (Request details) use a tighter zoom — keep pins smaller so they don't dominate.
   const iconSize = useMemo(
@@ -124,6 +159,7 @@ export function HelpRequestMap({
     userAdjustedViewRef.current = false;
     setLatitudeDelta(fallbackRegion.latitudeDelta);
     lastRegionDeltaRef.current = fallbackRegion.latitudeDelta;
+    viewRegionRef.current = fallbackRegion;
     scheduleTrackReset();
   }, [regionKey, fallbackRegion.latitudeDelta, scheduleTrackReset]);
 
@@ -140,8 +176,40 @@ export function HelpRequestMap({
     [],
   );
 
+  const adjustZoom = useCallback(
+    (factor: number) => {
+      const map = mapRef.current;
+      if (!map) {
+        return;
+      }
+      const current = viewRegionRef.current;
+      const nextDelta = Math.min(
+        MAX_VIEW_DELTA,
+        Math.max(MIN_VIEW_DELTA, current.latitudeDelta * factor),
+      );
+      const next: Region = {
+        latitude: current.latitude,
+        longitude: current.longitude,
+        latitudeDelta: nextDelta,
+        longitudeDelta: nextDelta,
+      };
+      userAdjustedViewRef.current = true;
+      ignoreUserGestureUntilRef.current = Date.now() + 500;
+      lastRegionDeltaRef.current = nextDelta;
+      viewRegionRef.current = next;
+      setLatitudeDelta(nextDelta);
+      map.animateToRegion(next, 220);
+      scheduleTrackReset();
+    },
+    [scheduleTrackReset],
+  );
+
+  const zoomIn = useCallback(() => adjustZoom(ZOOM_IN_FACTOR), [adjustZoom]);
+  const zoomOut = useCallback(() => adjustZoom(ZOOM_OUT_FACTOR), [adjustZoom]);
+
   const onRegionChangeComplete = useCallback(
     (region: Region) => {
+      viewRegionRef.current = region;
       setLatitudeDelta(region.latitudeDelta);
       scheduleTrackReset();
       if (Date.now() < ignoreUserGestureUntilRef.current) {
@@ -185,6 +253,7 @@ export function HelpRequestMap({
 
   const lastFitKey = useRef<string | null>(null);
   const lastSoloFitKey = useRef<string | null>(null);
+  const lastNavigationPulse = useRef(0);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -203,6 +272,25 @@ export function HelpRequestMap({
           }
         : basePadding;
 
+    const forceNav =
+      navigationRefitPulse > 0 && navigationRefitPulse !== lastNavigationPulse.current;
+    if (forceNav) {
+      lastNavigationPulse.current = navigationRefitPulse;
+      userAdjustedViewRef.current = false;
+      lastFitKey.current = null;
+    }
+
+    const applyNavigationCamera = (animated: boolean) => {
+      const plan = planNavigationCamera(requestCoord, mechanicMarkerCoord, drivingRouteCoords);
+      userAdjustedViewRef.current = false;
+      ignoreUserGestureUntilRef.current = Date.now() + 900;
+      if (plan.kind === 'fit') {
+        map.fitToCoordinates(plan.coords, { edgePadding, animated });
+      } else {
+        map.animateToRegion(plan.region, animated ? 450 : 280);
+      }
+    };
+
     if (mechanicCoord && mechanicMarkerCoord) {
       // Avoid re-animating the camera on every GPS tick — only when the pair moves enough.
       const fitKey = [
@@ -212,14 +300,31 @@ export function HelpRequestMap({
         mechanicMarkerCoord.longitude.toFixed(4),
         zoomPreset,
       ].join('|');
-      if (fitKey === lastFitKey.current) {
-        return;
-      }
-      if (userAdjustedViewRef.current && zoomPreset !== 'live') {
+      const pinDistanceKm = navigationDistanceKm(mechanicMarkerCoord, requestCoord);
+      const farApart = pinDistanceKm > NAV_MAX_DUAL_FIT_KM;
+
+      if (forceNav) {
+        applyNavigationCamera(true);
         lastFitKey.current = fitKey;
         return;
       }
-      const shouldAnimate = lastFitKey.current == null || zoomPreset !== 'live';
+
+      if (fitKey === lastFitKey.current && !forceNav) {
+        return;
+      }
+      if (userAdjustedViewRef.current && zoomPreset !== 'live' && !forceNav) {
+        lastFitKey.current = fitKey;
+        return;
+      }
+
+      if (farApart) {
+        const firstFit = lastFitKey.current == null;
+        applyNavigationCamera(firstFit || zoomPreset === 'live');
+        lastFitKey.current = fitKey;
+        return;
+      }
+
+      const shouldAnimate = lastFitKey.current == null || zoomPreset !== 'live' || forceNav;
       lastFitKey.current = fitKey;
       userAdjustedViewRef.current = false;
       ignoreUserGestureUntilRef.current = Date.now() + 900;
@@ -255,10 +360,22 @@ export function HelpRequestMap({
     ownerBadge,
     fill,
     badgeTop,
+    navigationRefitPulse,
+    drivingRouteCoords,
   ]);
+
+  const hasDrivingRoute = (drivingRouteCoords?.length ?? 0) > 1;
+
+  const pinDistanceKm =
+    mechanicCoord != null
+      ? navigationDistanceKm(mechanicCoord, requestCoord)
+      : null;
+  const pinsTooFarForLine = pinDistanceKm != null && pinDistanceKm > NAV_MAX_DUAL_FIT_KM;
 
   const showRoute =
     showRouteLine &&
+    !hasDrivingRoute &&
+    !pinsTooFarForLine &&
     mechanicCoord &&
     !overlapLayout?.pinsOverlapped &&
     !overlapLayout?.showOverlapConnector;
@@ -300,11 +417,19 @@ export function HelpRequestMap({
         scrollEnabled
         zoomEnabled
         zoomTapEnabled
-        zoomControlEnabled={Platform.OS === 'android' && fill}
+        zoomControlEnabled={false}
         toolbarEnabled={false}
         moveOnMarkerPress={false}
         loadingEnabled
       >
+        {hasDrivingRoute ? (
+          <Polyline
+            coordinates={drivingRouteCoords!}
+            strokeColor="#0284c7"
+            strokeWidth={5}
+          />
+        ) : null}
+
         {lineCoords.length === 2 ? (
           <Polyline
             coordinates={lineCoords}
@@ -349,6 +474,10 @@ export function HelpRequestMap({
           </Marker>
         ) : null}
       </MapView>
+
+      {showZoom ? (
+        <MapZoomControls onZoomIn={zoomIn} onZoomOut={zoomOut} bottomInset={zoomBottom} />
+      ) : null}
 
       {showLiveDistanceBadge && distanceBadge && mechanicCoord ? (
         <View

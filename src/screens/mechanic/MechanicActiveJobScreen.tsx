@@ -26,7 +26,11 @@ import { JobLifecycleStepper } from '../../components/JobLifecycleStepper';
 import { JobStatusConfirmSheet } from '../../components/JobStatusConfirmSheet';
 import { JobWorkDurationText } from '../../components/JobWorkDurationText';
 import { PendingJobStatusBanner } from '../../components/PendingJobStatusBanner';
+import { showAppToast } from '../../components/AppToast';
 import { HelpRequestMap } from '../../components/HelpRequestMap';
+import { MechanicInAppNavigateHint } from '../../components/MechanicInAppNavigateHint';
+import { fetchDrivingRoute, type MapCoord } from '../../utils/drivingDirections';
+import { isImplausibleNavigationDistance } from '../../utils/mapNavigationCamera';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { PaymentPlanLine } from '../../components/JobPaymentCards';
 import { useAppConfig } from '../../hooks/useAppConfig';
@@ -102,6 +106,9 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
   const [statusConfirmTarget, setStatusConfirmTarget] = useState<string | null>(null);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [pendingUndoSeconds, setPendingUndoSeconds] = useState(0);
+  const [navigationActive, setNavigationActive] = useState(false);
+  const [navigationRefitPulse, setNavigationRefitPulse] = useState(0);
+  const [drivingRoute, setDrivingRoute] = useState<MapCoord[]>([]);
   const pendingStatusRef = useRef<string | null>(null);
 
   const { config } = useAppConfig();
@@ -166,15 +173,40 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
   });
 
   const mechanicMapPoint = useMemo(() => {
-    if (deviceCoords) {
+    const server = request?.tracking?.mechanic_location;
+    if (deviceCoords && request) {
+      const deviceKm = haversineDistanceKm(
+        deviceCoords.latitude,
+        deviceCoords.longitude,
+        request.latitude,
+        request.longitude,
+      );
+      if (isImplausibleNavigationDistance(deviceKm) && server) {
+        return {
+          latitude: server.latitude,
+          longitude: server.longitude,
+          title: 'You (last job GPS)',
+        };
+      }
       return { latitude: deviceCoords.latitude, longitude: deviceCoords.longitude, title: 'You' };
     }
-    const server = request?.tracking?.mechanic_location;
     if (server) {
       return { latitude: server.latitude, longitude: server.longitude, title: 'You' };
     }
     return null;
-  }, [deviceCoords, request?.tracking?.mechanic_location]);
+  }, [deviceCoords, request?.latitude, request?.longitude, request?.tracking?.mechanic_location]);
+
+  const deviceToCustomerKm = useMemo(() => {
+    if (!deviceCoords || !request) {
+      return null;
+    }
+    return haversineDistanceKm(
+      deviceCoords.latitude,
+      deviceCoords.longitude,
+      request.latitude,
+      request.longitude,
+    );
+  }, [deviceCoords, request?.latitude, request?.longitude]);
 
   const displayDistanceKm = useMemo(() => {
     if (!request) {
@@ -194,6 +226,50 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
     }
     return resolveMechanicToCustomerDistanceKm(request, origin);
   }, [request, deviceCoords, origin]);
+
+  const customerCoord = useMemo(
+    () =>
+      request
+        ? { latitude: request.latitude, longitude: request.longitude }
+        : null,
+    [request?.latitude, request?.longitude],
+  );
+
+  const gpsMismatch = isImplausibleNavigationDistance(deviceToCustomerKm);
+
+  const shouldLoadDrivingRoute =
+    !!mechanicMapPoint &&
+    !!customerCoord &&
+    !gpsMismatch &&
+    (navigationActive || jobStatus === 'ON_THE_WAY');
+
+  useEffect(() => {
+    if (!shouldLoadDrivingRoute) {
+      setDrivingRoute([]);
+      return;
+    }
+    let cancelled = false;
+    void fetchDrivingRoute(mechanicMapPoint, customerCoord).then((path) => {
+      if (!cancelled) {
+        setDrivingRoute(path ?? []);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    shouldLoadDrivingRoute,
+    mechanicMapPoint?.latitude,
+    mechanicMapPoint?.longitude,
+    customerCoord?.latitude,
+    customerCoord?.longitude,
+  ]);
+
+  useEffect(() => {
+    if (!['ACCEPTED', 'ON_THE_WAY'].includes(jobStatus)) {
+      setNavigationActive(false);
+    }
+  }, [jobStatus]);
 
   const setStatus = async (
     status: string,
@@ -292,9 +368,20 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
 
   const startNavigation = () => {
     if (!request) return;
-    Linking.openURL(
-      `https://www.google.com/maps/dir/?api=1&destination=${request.latitude},${request.longitude}`,
-    ).catch(() => {});
+    setNavigationActive(true);
+    setNavigationRefitPulse((n) => n + 1);
+    if (mechanicMapPoint && customerCoord) {
+      void fetchDrivingRoute(mechanicMapPoint, customerCoord).then((path) => {
+        if (path?.length) {
+          setDrivingRoute(path);
+        }
+      });
+    }
+    showAppToast(
+      gpsMismatch
+        ? 'Zoomed to customer — set emulator GPS near the job to test routes.'
+        : 'Map zoomed for navigation — head to the customer pin in RydAid.',
+    );
   };
 
   const submitCompletion = () => {
@@ -345,9 +432,18 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
           fill
           showMyLocation={false}
           showRouteLine={!!mechanicMapPoint}
-          liveDistanceKm={displayDistanceKm}
-          showLiveDistanceBadge={shareLiveWithCustomer}
+          drivingRouteCoords={drivingRoute}
+          navigationRefitPulse={navigationRefitPulse}
+          liveDistanceKm={gpsMismatch ? resolveTrackingDistanceKm(tracking) : displayDistanceKm}
+          showLiveDistanceBadge={shareLiveWithCustomer && !gpsMismatch}
           zoomPreset="live"
+        />
+        <MechanicInAppNavigateHint
+          visible={
+            navigationActive && (jobStatus === 'ON_THE_WAY' || jobStatus === 'ACCEPTED')
+          }
+          hasDrivingRoute={drivingRoute.length > 1}
+          distanceKm={deviceToCustomerKm ?? displayDistanceKm}
         />
       </View>
 
@@ -433,13 +529,30 @@ export function MechanicActiveJobScreen({ route, navigation }: Props) {
 
           <View style={styles.actions}>
             {jobStatus === 'ACCEPTED' && (
-              <Pressable style={styles.primaryBtn} disabled={statusChangeLocked} onPress={startJourney}>
-                <Text style={styles.primaryBtnText}>Start journey</Text>
-              </Pressable>
+              <View style={styles.actionRow}>
+                <Pressable
+                  style={[styles.navBtn, styles.actionHalf]}
+                  onPress={startNavigation}
+                  accessibilityLabel="Navigate to customer on map"
+                >
+                  <Text style={styles.navBtnText}>Navigate</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.primaryBtn, styles.actionHalf]}
+                  disabled={statusChangeLocked}
+                  onPress={startJourney}
+                >
+                  <Text style={styles.primaryBtnText}>Start journey</Text>
+                </Pressable>
+              </View>
             )}
             {jobStatus === 'ON_THE_WAY' && (
               <View style={styles.actionRow}>
-                <Pressable style={[styles.navBtn, styles.actionHalf]} onPress={startNavigation}>
+                <Pressable
+                  style={[styles.navBtn, styles.actionHalf]}
+                  onPress={startNavigation}
+                  accessibilityLabel="Navigate to customer on map"
+                >
                   <Text style={styles.navBtnText}>Navigate</Text>
                 </Pressable>
                 <Pressable

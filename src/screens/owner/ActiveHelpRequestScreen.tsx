@@ -59,6 +59,13 @@ import {
 import { needHelpParamsFromHelpRequest } from '../../utils/needHelpDraft';
 import { useActiveJobForegroundNotifications } from '../../hooks/useActiveJobForegroundNotifications';
 import { liveSheetScrollMax } from '../../utils/mapZoom';
+import { OwnerLiveMechanicMapHint } from '../../components/OwnerLiveMechanicMapHint';
+import {
+  mechanicMapPointForOwner,
+  ownerExpectsMechanicGps,
+  ownerShowsLiveMechanicMap,
+} from '../../utils/ownerLiveMap';
+import { resolveTrackingDistanceKm } from '../../utils/distanceKm';
 
 type Props = NativeStackScreenProps<OwnerStackParamList, 'ActiveHelpRequest'>;
 
@@ -106,7 +113,7 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
 
   const jobPollStatus = request?.job_status ?? request?.job?.status ?? request?.status;
   const pollMs =
-    jobPollStatus === 'IN_PROGRESS'
+    jobPollStatus === 'IN_PROGRESS' || jobPollStatus === 'ON_THE_WAY'
       ? 1000
       : ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED'].includes(String(jobPollStatus))
         ? 1500
@@ -263,6 +270,10 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
       ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'IN_PROGRESS'].includes(jobStatus));
   const tracking = request.tracking;
   const mechanicLoc = tracking?.mechanic_location;
+  const mechanicOnMap = mechanicMapPointForOwner(request, mechanicDisplayName(request));
+  const showLiveMechanicMap = ownerShowsLiveMechanicMap(request);
+  const waitingMechanicGps = ownerExpectsMechanicGps(request);
+  const trackingDistanceKm = resolveTrackingDistanceKm(tracking);
   const workStarted = jobStatus === 'IN_PROGRESS';
   const photoCount = request.media?.length ?? 0;
 
@@ -308,24 +319,21 @@ export function ActiveHelpRequestScreen({ route, navigation }: Props) {
               longitude: request.longitude,
               title: 'Your help location',
             }}
-            mechanic={
-              mechanicLoc
-                ? {
-                    latitude: mechanicLoc.latitude,
-                    longitude: mechanicLoc.longitude,
-                    title: mechanicDisplayName(request),
-                  }
-                : null
-            }
+            mechanic={mechanicOnMap}
             requestPinLabel="You"
             mechanicPinLabel="Mechanic"
             fill
             showMyLocation={false}
-            showRouteLine={!!mechanicLoc}
-            liveDistanceKm={liveDistanceKm}
-            showLiveDistanceBadge={!!mechanicLoc && !workStarted}
+            showRouteLine={!!mechanicOnMap && showLiveMechanicMap}
+            liveDistanceKm={trackingDistanceKm ?? liveDistanceKm}
+            showLiveDistanceBadge={!!mechanicOnMap && showLiveMechanicMap && !workStarted}
             liveDistanceBadgeVariant="owner"
             zoomPreset="live"
+          />
+          <OwnerLiveMechanicMapHint
+            waitingForGps={waitingMechanicGps}
+            liveOnMap={!!mechanicOnMap && showLiveMechanicMap && !workStarted}
+            locationStatusLabel={tracking?.mechanic_location_status?.label}
           />
         </View>
 

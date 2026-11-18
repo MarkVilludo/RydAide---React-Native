@@ -1,13 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { HelpRequest } from '../../api/helpRequests';
 import { fetchMechanicHelpRequest } from '../../api/mechanicHelp';
@@ -26,6 +19,7 @@ import { formatElapsedSeconds } from '../../utils/formatElapsed';
 import type { MechanicStackParamList } from '../../navigation/types';
 import { vehicleTitle, problemNamesOf, vehicleWithDetails } from '../../utils/helpRequestUi';
 import { PaymentPlanLine } from '../../components/JobPaymentCards';
+import { HelpRequestMap } from '../../components/HelpRequestMap';
 
 type Props = NativeStackScreenProps<MechanicStackParamList, 'IncomingRequestDetail'>;
 
@@ -86,11 +80,13 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
     }, [load]),
   );
 
-  const openMaps = () => {
-    if (!request) return;
-    const url = `https://www.google.com/maps/search/?api=1&query=${request.latitude},${request.longitude}`;
-    Linking.openURL(url).catch(() => {});
-  };
+  const previewMechanicPoint = useMemo(
+    () =>
+      origin
+        ? { latitude: origin.latitude, longitude: origin.longitude, title: 'You' }
+        : null,
+    [origin?.latitude, origin?.longitude],
+  );
 
   const goBackIncoming = () => {
     if (navigation.canGoBack()) {
@@ -196,9 +192,25 @@ export function MechanicIncomingRequestDetailScreen({ route, navigation }: Props
           <Text style={styles.address}>
             {request.address_text ?? `${request.latitude.toFixed(5)}, ${request.longitude.toFixed(5)}`}
           </Text>
-          <Pressable style={styles.mapBtn} onPress={openMaps}>
-            <Text style={styles.mapBtnText}>Open in maps</Text>
-          </Pressable>
+          <View style={styles.mapPreview}>
+            <HelpRequestMap
+              request={{
+                latitude: request.latitude,
+                longitude: request.longitude,
+                title: 'Customer',
+              }}
+              mechanic={previewMechanicPoint}
+              requestPinLabel="Customer"
+              mechanicPinLabel="You"
+              height={200}
+              zoomPreset="detail"
+              showMyLocation={false}
+              showRouteLine={!!previewMechanicPoint}
+              liveDistanceKm={distanceKm}
+              showLiveDistanceBadge={distanceKm != null}
+            />
+          </View>
+          <Text style={styles.mapHint}>Customer location in RydAid — full live navigation opens after you accept.</Text>
         </View>
 
         {request.media && request.media.length > 0 ? (
@@ -267,6 +279,6 @@ const styles = StyleSheet.create({
   question: { fontSize: 13, color: '#64748b' },
   answer: { fontWeight: '600', marginTop: 2, textTransform: 'capitalize' },
   address: { color: '#475569', marginTop: 4 },
-  mapBtn: { marginTop: 10, alignSelf: 'flex-start' },
-  mapBtnText: { color: '#0284c7', fontWeight: '600' },
+  mapPreview: { marginTop: 10, borderRadius: 12, overflow: 'hidden' },
+  mapHint: { marginTop: 8, fontSize: 13, color: '#64748b', lineHeight: 18 },
 });

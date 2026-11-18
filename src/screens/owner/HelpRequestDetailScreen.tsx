@@ -1,4 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -31,7 +32,13 @@ import { HelpRequestMap } from '../../components/HelpRequestMap';
 import { HelpRequestPhotoGallery } from '../../components/HelpRequestPhotoGallery';
 import { useLiveHelpRequestRefresh } from '../../hooks/useLiveHelpRequestRefresh';
 import type { OwnerStackParamList } from '../../navigation/types';
-import { haversineDistanceKm } from '../../utils/distanceKm';
+import { haversineDistanceKm, resolveTrackingDistanceKm } from '../../utils/distanceKm';
+import {
+  mechanicMapPointForOwner,
+  ownerShowsLiveMechanicMap,
+} from '../../utils/ownerLiveMap';
+import { isOwnerLiveHelpRequest } from '../../utils/helpRequestStatus';
+import { OwnerLiveMechanicMapHint } from '../../components/OwnerLiveMechanicMapHint';
 import { jobWorkDurationValueOnly } from '../../utils/jobWorkDuration';
 import {
   canOwnerCancelHelpRequest,
@@ -75,6 +82,18 @@ export function HelpRequestDetailScreen({ route, navigation }: Props) {
 
   useLiveHelpRequestRefresh({ refresh: load, request });
 
+  useFocusEffect(
+    useCallback(() => {
+      const r = request;
+      if (!r || isOwnerCompletedHelpRequest(r)) {
+        return;
+      }
+      if (isOwnerLiveHelpRequest(r)) {
+        navigation.replace('ActiveHelpRequest', { helpRequestId: r.id, initialRequest: r });
+      }
+    }, [request, navigation]),
+  );
+
   const confirmCancel = async () => {
     if (!request) return;
     const summary = await fetchHelpCancellationSummary();
@@ -116,23 +135,34 @@ export function HelpRequestDetailScreen({ route, navigation }: Props) {
   const showLockedHint = !canCancel && !terminal && !!request.mechanic;
   const canReview = completed && !!request.mechanic;
   const jobStatus = jobStatusOf(request);
-  const mechanicLoc = request.tracking?.mechanic_location;
-  const liveTracking =
-    !!mechanicLoc && ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'IN_PROGRESS'].includes(jobStatus);
+  const showLiveMechanicMap = ownerShowsLiveMechanicMap(request);
+  const mechanicOnMap = mechanicMapPointForOwner(
+    request,
+    request.mechanic?.display_name ||
+      request.mechanic?.mechanic_name ||
+      request.mechanic?.business_name ||
+      'Mechanic',
+  );
+  const liveTracking = showLiveMechanicMap;
   const liveDistanceKm =
-    liveTracking && mechanicLoc
+    resolveTrackingDistanceKm(request.tracking) ??
+    (mechanicOnMap
       ? haversineDistanceKm(
-          mechanicLoc.latitude,
-          mechanicLoc.longitude,
+          mechanicOnMap.latitude,
+          mechanicOnMap.longitude,
           request.latitude,
           request.longitude,
         )
-      : null;
+      : null);
   const mechanicName =
     request.mechanic?.display_name ||
     request.mechanic?.mechanic_name ||
     request.mechanic?.business_name ||
     'Mechanic';
+  const waitingMechanicGps =
+    !!request.tracking?.live_tracking_enabled &&
+    !request.tracking?.mechanic_location &&
+    ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED'].includes(jobStatus);
 
   if (canReview) {
     return (
@@ -179,23 +209,20 @@ export function HelpRequestDetailScreen({ route, navigation }: Props) {
             longitude: request.longitude,
             title: 'Help location',
           }}
-          mechanic={
-            liveTracking && mechanicLoc
-              ? {
-                  latitude: mechanicLoc.latitude,
-                  longitude: mechanicLoc.longitude,
-                  title: mechanicName,
-                }
-              : null
-          }
+          mechanic={liveTracking ? mechanicOnMap : null}
           requestPinLabel="You"
           mechanicPinLabel="Mechanic"
           fill
           zoomPreset={liveTracking ? 'live' : 'detail'}
           showMyLocation={false}
-          showRouteLine={liveTracking}
+          showRouteLine={liveTracking && !!mechanicOnMap}
           liveDistanceKm={liveDistanceKm}
-          showLiveDistanceBadge={liveTracking}
+          showLiveDistanceBadge={liveTracking && !!mechanicOnMap}
+        />
+        <OwnerLiveMechanicMapHint
+          waitingForGps={waitingMechanicGps}
+          liveOnMap={liveTracking && !!mechanicOnMap}
+          locationStatusLabel={request.tracking?.mechanic_location_status?.label}
         />
       </View>
 
@@ -236,15 +263,21 @@ export function HelpRequestDetailScreen({ route, navigation }: Props) {
               <Text style={styles.compactBody} numberOfLines={2}>
                 {location}
               </Text>
-              <Pressable
-                onPress={() =>
-                  Linking.openURL(
-                    `https://www.google.com/maps/search/?api=1&query=${request.latitude},${request.longitude}`,
-                  )
-                }
-              >
-                <Text style={styles.link}>Open in maps</Text>
-              </Pressable>
+              {liveTracking ? (
+                <Text style={styles.liveMapNote}>
+                  Track your mechanic on the map above while they’re on the way.
+                </Text>
+              ) : (
+                <Pressable
+                  onPress={() =>
+                    Linking.openURL(
+                      `https://www.google.com/maps/search/?api=1&query=${request.latitude},${request.longitude}`,
+                    )
+                  }
+                >
+                  <Text style={styles.link}>Open in Google Maps</Text>
+                </Pressable>
+              )}
             </View>
 
             {request.payment_preference ? (
@@ -376,6 +409,7 @@ const styles = StyleSheet.create({
   compactBody: { fontSize: 14, color: '#475569', lineHeight: 19 },
   compactStrong: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
   link: { color: '#0284c7', fontWeight: '700', marginTop: 4, fontSize: 13 },
+  liveMapNote: { color: '#0369a1', fontWeight: '600', marginTop: 6, fontSize: 13, lineHeight: 18 },
   timeline: { marginTop: 2, color: '#475569', fontSize: 13 },
   workTime: { marginTop: 6, fontWeight: '800', color: '#166534', fontSize: 14 },
   answer: { color: '#475569', marginTop: 3, fontSize: 13, lineHeight: 18 },

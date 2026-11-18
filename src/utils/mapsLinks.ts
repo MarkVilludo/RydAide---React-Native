@@ -4,6 +4,7 @@ export function mapsDirectionsUrl(latitude: number, longitude: number): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`;
 }
 
+/** @deprecated Prefer `openInAppDirections` from `useInAppDirections`. */
 export function openDirections(latitude: number, longitude: number): void {
   Linking.openURL(mapsDirectionsUrl(latitude, longitude)).catch(() => {
     Alert.alert('Maps', 'Could not open directions.');

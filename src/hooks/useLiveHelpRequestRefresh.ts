@@ -15,7 +15,7 @@ function isLiveHelpRequest(request: HelpRequest | null): boolean {
 
 function pollIntervalMs(request: HelpRequest | null): number {
   const job = request ? jobStatusOf(request) : '';
-  if (job === 'IN_PROGRESS') return 1000;
+  if (job === 'IN_PROGRESS' || job === 'ON_THE_WAY') return 1000;
   if (['ACCEPTED', 'ON_THE_WAY', 'ARRIVED'].includes(job) || request?.status === 'ACCEPTED') {
     return 1500;
   }
